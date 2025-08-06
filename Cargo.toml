@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 ufmt = { version = "0.2.0", default-features = false }
+sh1107g-rs = { path = "../sh1107g-rs" }
+heapless = "0.8.0"
