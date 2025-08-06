@@ -1,3 +1,8 @@
+#![no_std]
+extern crate alloc;
+
+use heapless::boxed::Box;
+
 use ufmt::uWrite;
 use ufmt::uwriteln;
 
