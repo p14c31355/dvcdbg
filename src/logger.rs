@@ -1,7 +1,6 @@
 // logger.rs
 
-use ufmt::uWrite;
-use ufmt::uwriteln;
+use heapless::{Vec, String};
 
 /// ログ出力インタフェース（任意の出力先に対応）
 pub trait Logger {
@@ -9,23 +8,27 @@ pub trait Logger {
 }
 
 /// UARTなどに出力するロガー
-pub struct SerialLogger<W: uWrite> {
-    writer: W,
+pub struct SerialLogger<const N: usize> {
+    buf: Vec<u8, N>,
+    writer: String<N>,
 }
 
-impl<W: uWrite> SerialLogger<W> {
-    pub fn new(writer: W) -> Self {
-        Self { writer }
+impl<const N: usize> SerialLogger<N> {
+    pub fn new(writer: String<N>) -> Self {
+        Self {
+            buf: Vec::new(),
+            writer,
+        }
     }
 
-    pub fn writer_mut(&mut self) -> &mut W {
+    pub fn writer_mut(&mut self) -> &mut String<N> {
         &mut self.writer
     }
 }
 
-impl<W: uWrite> Logger for SerialLogger<W> {
+impl<const N: usize> Logger for SerialLogger<N> {
     fn log(&mut self, msg: &str) {
-        let _ = uwriteln!(self.writer, "{}", msg);
+        let _ = self.buf.extend_from_slice(msg.as_bytes());
     }
 }
 

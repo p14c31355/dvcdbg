@@ -1,3 +1,4 @@
+use heapless::String;
 use crate::logger::Logger;
 
 #[cfg(test)]
@@ -40,9 +41,9 @@ fn log_cmd<L: Logger>(logger: &mut L, cmd: u8) {
 }
 
 /// u8 を `"0xXX"` 形式の16進文字列に変換
-fn byte_to_hex(byte: u8) -> heapless::String<6> {
+fn byte_to_hex(byte: u8) -> String<6> {
     use core::fmt::Write;
-    let mut s = heapless::String::<6>::new();
+    let mut s = String::<6>::new();
     let _ = write!(s, "0x{:02X}", byte);
     s
 }
