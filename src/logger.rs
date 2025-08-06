@@ -1,4 +1,5 @@
 use ufmt::uWrite;
+use ufmt::uwriteln;
 
 pub trait Logger {
     fn log(&mut self, msg: &str);
