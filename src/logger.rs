@@ -1,16 +1,3 @@
-use core::fmt::{self, Write};
-use heapless::String;
-
-/// ログ出力インターフェース（任意の出力先に対応）
-pub trait Logger {
-    fn log(&mut self, msg: &str);
-    fn log_fmt(&mut self, args: fmt::Arguments) {
-        let mut buf: String<128> = String::new();
-        let _ = buf.write_fmt(args);
-        self.log(&buf);
-    }
-}
-
 /// フォーマット付きログ用マクロ
 #[macro_export]
 macro_rules! log {
@@ -19,11 +6,27 @@ macro_rules! log {
     };
 }
 
-/// UARTなどに出力するロガー（write_str() を実装する対象に書き込む）
+// logger.rs
+
+#[cfg(feature = "debug_log")]
+use core::fmt::Write;
+
+#[cfg(feature = "debug_log")]
+use heapless::String;
+
+/// 共通の Logger トレイト（debug_log 有効時のみ）
+#[cfg(feature = "debug_log")]
+pub trait Logger {
+    fn log(&mut self, msg: &str);
+}
+
+/// シリアル出力用ロガー（fmt::Write 対応機器向け）
+#[cfg(feature = "debug_log")]
 pub struct SerialLogger<'a, W: Write> {
     writer: &'a mut W,
 }
 
+#[cfg(feature = "debug_log")]
 impl<'a, W: Write> SerialLogger<'a, W> {
     pub fn new(writer: &'a mut W) -> Self {
         Self { writer }
@@ -34,15 +37,57 @@ impl<'a, W: Write> SerialLogger<'a, W> {
     }
 }
 
+#[cfg(feature = "debug_log")]
 impl<'a, W: Write> Logger for SerialLogger<'a, W> {
     fn log(&mut self, msg: &str) {
-        let _ = writeln!(self.writer, "{}", msg);
+        let _ = writeln!(self.writer, "{msg}");
     }
 }
 
-/// ログ出力を無効化するダミーロガー
+/// バッファにログを蓄積するロガー（heapless::String）
+#[cfg(feature = "debug_log")]
+pub struct BufferedLogger<const N: usize> {
+    buffer: String<N>,
+}
+
+#[cfg(feature = "debug_log")]
+impl<const N: usize> Default for BufferedLogger<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "debug_log")]
+impl<const N: usize> BufferedLogger<N> {
+    pub fn new() -> Self {
+        Self {
+            buffer: String::new(),
+        }
+    }
+
+    pub fn buffer(&self) -> &str {
+        &self.buffer
+    }
+
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+    }
+}
+
+#[cfg(feature = "debug_log")]
+impl<const N: usize> Logger for BufferedLogger<N> {
+    fn log(&mut self, msg: &str) {
+        let _ = writeln!(self.buffer, "{msg}");
+    }
+}
+
+/// 何も出力しないダミーロガー（debug_log 無効時）
+#[cfg(not(feature = "debug_log"))]
 pub struct NoopLogger;
 
-impl Logger for NoopLogger {
-    fn log(&mut self, _: &str) {}
+#[cfg(not(feature = "debug_log"))]
+impl NoopLogger {
+    pub fn new() -> Self {
+        Self
+    }
 }

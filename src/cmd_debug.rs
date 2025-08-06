@@ -1,5 +1,7 @@
 use heapless::String;
+#[cfg(feature = "debug_log")]
 use crate::logger::Logger;
+
 
 #[cfg(test)]
 use sh1107g_rs::cmds::*;
@@ -35,6 +37,7 @@ pub fn log_init_sequence<L: Logger>(logger: &mut L) {
 }
 
 /// 任意のコマンド値をログ出力する
+#[cfg(feature = "debug_log")]
 fn log_cmd<L: Logger>(logger: &mut L, cmd: u8) {
     let hex = byte_to_hex(cmd);
     logger.log(&hex);
@@ -44,7 +47,7 @@ fn log_cmd<L: Logger>(logger: &mut L, cmd: u8) {
 fn byte_to_hex(byte: u8) -> String<6> {
     use core::fmt::Write;
     let mut s = String::<6>::new();
-    let _ = write!(s, "0x{:02X}", byte);
+    let _ = write!(s, "0x{byte:02X}");
     s
 }
 
