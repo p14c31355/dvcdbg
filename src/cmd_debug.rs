@@ -3,10 +3,10 @@ use heapless::String;
 use crate::logger::Logger;
 
 
-#[cfg(test)]
+#[cfg(feature = "debug_log")]
 use sh1107g_rs::cmds::*;
 
-#[cfg(test)]
+#[cfg(feature = "debug_log")]
 /// デバッグ用の初期化コマンド列をログ出力する
 pub fn log_init_sequence<L: Logger>(logger: &mut L) {
     log_cmd(logger, DISPLAY_OFF);
