@@ -1,18 +1,20 @@
-use heapless::boxed::Box;
+// logger.rs
 
 use ufmt::uWrite;
 use ufmt::uwriteln;
 
+/// ログ出力インタフェース（任意の出力先に対応）
 pub trait Logger {
     fn log(&mut self, msg: &str);
 }
 
-pub struct SerialLogger<'a, W: uWrite> {
-    writer: &'a mut W,
+/// UARTなどに出力するロガー
+pub struct SerialLogger<W: uWrite> {
+    writer: W,
 }
 
-impl<'a, W: uWrite> SerialLogger<'a, W> {
-    pub fn new(writer: &mut W) -> Self {
+impl<W: uWrite> SerialLogger<W> {
+    pub fn new(writer: W) -> Self {
         Self { writer }
     }
 
@@ -21,12 +23,13 @@ impl<'a, W: uWrite> SerialLogger<'a, W> {
     }
 }
 
-impl<'a, W: uWrite> Logger for SerialLogger<W> {
+impl<W: uWrite> Logger for SerialLogger<W> {
     fn log(&mut self, msg: &str) {
         let _ = uwriteln!(self.writer, "{}", msg);
     }
 }
 
+/// ログ出力を無効化するダミーロガー
 pub struct NoopLogger;
 
 impl Logger for NoopLogger {

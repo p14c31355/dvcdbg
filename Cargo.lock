@@ -127,6 +127,9 @@ dependencies = [
  "embedded-graphics-core",
  "embedded-hal",
  "heapless",
+ "ufmt",
+ "ufmt-macros",
+ "ufmt-write",
 ]
 
 [[package]]
