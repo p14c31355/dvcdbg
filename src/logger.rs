@@ -10,12 +10,16 @@ pub struct SerialLogger<'a, W: uWrite> {
 }
 
 impl<'a, W: uWrite> SerialLogger<'a, W> {
-    pub fn new(writer: &'a mut W) -> Self {
+    pub fn new(writer: &mut W) -> Self {
         Self { writer }
+    }
+
+    pub fn writer_mut(&mut self) -> &mut W {
+        &mut self.writer
     }
 }
 
-impl<'a, W: uWrite> Logger for SerialLogger<'a, W> {
+impl<'a, W: uWrite> Logger for SerialLogger<W> {
     fn log(&mut self, msg: &str) {
         let _ = uwriteln!(self.writer, "{}", msg);
     }
