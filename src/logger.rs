@@ -1,34 +1,42 @@
-// logger.rs
+use core::fmt::{self, Write};
+use heapless::String;
 
-use heapless::{Vec, String};
-
-/// ログ出力インタフェース（任意の出力先に対応）
+/// ログ出力インターフェース（任意の出力先に対応）
 pub trait Logger {
     fn log(&mut self, msg: &str);
-}
-
-/// UARTなどに出力するロガー
-pub struct SerialLogger<const N: usize> {
-    buf: Vec<u8, N>,
-    writer: String<N>,
-}
-
-impl<const N: usize> SerialLogger<N> {
-    pub fn new(writer: String<N>) -> Self {
-        Self {
-            buf: Vec::new(),
-            writer,
-        }
-    }
-
-    pub fn writer_mut(&mut self) -> &mut String<N> {
-        &mut self.writer
+    fn log_fmt(&mut self, args: fmt::Arguments) {
+        let mut buf: String<128> = String::new();
+        let _ = buf.write_fmt(args);
+        self.log(&buf);
     }
 }
 
-impl<const N: usize> Logger for SerialLogger<N> {
+/// フォーマット付きログ用マクロ
+#[macro_export]
+macro_rules! log {
+    ($logger:expr, $($arg:tt)*) => {
+        $logger.log_fmt(core::format_args!($($arg)*))
+    };
+}
+
+/// UARTなどに出力するロガー（write_str() を実装する対象に書き込む）
+pub struct SerialLogger<'a, W: Write> {
+    writer: &'a mut W,
+}
+
+impl<'a, W: Write> SerialLogger<'a, W> {
+    pub fn new(writer: &'a mut W) -> Self {
+        Self { writer }
+    }
+
+    pub fn writer_mut(&mut self) -> &mut W {
+        self.writer
+    }
+}
+
+impl<'a, W: Write> Logger for SerialLogger<'a, W> {
     fn log(&mut self, msg: &str) {
-        let _ = self.buf.extend_from_slice(msg.as_bytes());
+        let _ = writeln!(self.writer, "{}", msg);
     }
 }
 
