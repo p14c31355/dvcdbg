@@ -1,0 +1,16 @@
+use embedded_hal::i2c::Write;
+use crate::logger::*;
+
+/// Scan the I2C bus for connected devices (0x03 to 0x77).
+pub fn scan_i2c<I2C, E>(i2c: &mut I2C)
+where
+    I2C: Write<Error = E>,
+{
+    log_cmd("🔍 Scanning I2C bus...");
+    for addr in 0x03..=0x77 {
+        if i2c.write(addr, &[]).is_ok() {
+            log_cmd("✅ Found device at 0x{:02X}", addr);
+        }
+    }
+    log_cmd("🛑 I2C scan complete.");
+}
