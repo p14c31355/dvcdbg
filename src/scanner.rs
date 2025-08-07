@@ -3,9 +3,9 @@ use crate::log;
 use crate::logger::Logger;
 
 /// Scan the I2C bus for connected devices (0x03 to 0x77).
-pub fn scan_i2c<I2C, E, L>(i2c: &mut I2C, logger: &mut L)
+pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
 where
-    I2C: I2c<Error = E>,
+    I2C: I2c,
     L: Logger,
 {
     log!(logger, "🔍 Scanning I2C bus...");

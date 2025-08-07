@@ -5,12 +5,7 @@
 #[macro_export]
 macro_rules! log {
     ($logger:expr, $($arg:tt)*) => {
-        {
-            use core::fmt::Write;
-            let mut s = heapless::String::<128>::new();
-            let _ = write!(s, $($arg)*);
-            $logger.log(&s);
-        }
+        $logger.log_fmt(format_args!($($arg)*))
     };
 }
 
@@ -32,6 +27,7 @@ use heapless::String;
 #[cfg(feature = "debug_log")]
 pub trait Logger {
     fn log(&mut self, msg: &str);
+    fn log_fmt(&mut self, args: core::fmt::Arguments);
 }
 
 /// シリアル出力用ロガー（fmt::Write 対応機器向け）
@@ -55,6 +51,11 @@ impl<'a, W: Write> SerialLogger<'a, W> {
 impl<'a, W: Write> Logger for SerialLogger<'a, W> {
     fn log(&mut self, msg: &str) {
         let _ = writeln!(self.writer, "{msg}");
+    }
+
+    fn log_fmt(&mut self, args: core::fmt::Arguments) {
+        let _ = self.writer.write_fmt(args);
+        let _ = writeln!(self.writer);
     }
 }
 
@@ -92,6 +93,11 @@ impl<const N: usize> BufferedLogger<N> {
 impl<const N: usize> Logger for BufferedLogger<N> {
     fn log(&mut self, msg: &str) {
         let _ = writeln!(self.buffer, "{msg}");
+    }
+
+    fn log_fmt(&mut self, args: core::fmt::Arguments) {
+        let _ = self.buffer.write_fmt(args);
+        let _ = writeln!(self.buffer);
     }
 }
 
