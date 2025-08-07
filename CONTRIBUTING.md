@@ -1,8 +1,5 @@
 ---
 
-### 📄 `CONTRIBUTING.md`
-
-````md
 # コントリビューションガイドライン
 
 ようこそ！このリポジトリへの貢献を歓迎します 🙌  
@@ -78,14 +75,13 @@ cargo check
 * `rustfmt` 準拠
 * `clippy` 警告なしを推奨
 * `std` / `no_std` 両対応の場合、`#[cfg(feature = "std")]` を利用
-* ログ出力には `ufmt` / `defmt` など軽量ロガーを使用（`std` 非依存）
 
 ---
 
 ## 🤝 ライセンス
 
-このプロジェクトは MIT ライセンスです。
-貢献されたコードも同様に MIT ライセンスの下で公開されます。
+This project is licensed under the MIT License and the Apache 2.0 License.
+Contributed code will also be released under the MIT License and the Apache 2.0 License.
 
 ---
 

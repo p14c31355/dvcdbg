@@ -110,15 +110,19 @@ impl<const N: usize> Logger for BufferedLogger<N> {
     }
 }
 
-/// 何も出力しないダミーロガー（debug_log 無効時）
-#[cfg(not(feature = "debug_log"))]
+/// 何も出力しないダミーロガー
 pub struct NoopLogger;
 
-#[cfg(not(feature = "debug_log"))]
 impl NoopLogger {
     pub fn new() -> Self {
         Self
     }
+}
+
+#[cfg(feature = "debug_log")]
+impl Logger for NoopLogger {
+    fn log(&mut self, _: &str) {}
+    fn log_fmt(&mut self, _: core::fmt::Arguments) {}
 }
 
 /// 任意のコマンド値をログ出力する
@@ -129,8 +133,8 @@ pub fn log_cmd<L: Logger>(logger: &mut L, cmd: u8) {
 }
 
 /// u8 を `"0xXX"` 形式の16進文字列に変換
+#[cfg(feature = "debug_log")]
 fn byte_to_hex(byte: u8) -> String<6> {
-    use core::fmt::Write;
     let mut s = String::<6>::new();
     let _ = write!(s, "0x{byte:02X}");
     s
