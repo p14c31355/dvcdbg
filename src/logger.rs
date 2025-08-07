@@ -14,6 +14,9 @@ use core::fmt::Write;
 #[cfg(feature = "debug_log")]
 use heapless::String;
 
+#[cfg(feature = "debug_log")]
+use crate::logger::Logger;
+
 /// 共通の Logger トレイト（debug_log 有効時のみ）
 #[cfg(feature = "debug_log")]
 pub trait Logger {
@@ -90,4 +93,19 @@ impl NoopLogger {
     pub fn new() -> Self {
         Self
     }
+}
+
+/// 任意のコマンド値をログ出力する
+#[cfg(feature = "debug_log")]
+fn log_cmd<L: Logger>(logger: &mut L, cmd: u8) {
+    let hex = byte_to_hex(cmd);
+    logger.log(&hex);
+}
+
+/// u8 を `"0xXX"` 形式の16進文字列に変換
+fn byte_to_hex(byte: u8) -> String<6> {
+    use core::fmt::Write;
+    let mut s = String::<6>::new();
+    let _ = write!(s, "0x{byte:02X}");
+    s
 }

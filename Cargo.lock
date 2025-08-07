@@ -122,6 +122,7 @@ dependencies = [
 name = "sh1107g-rs"
 version = "0.1.0"
 dependencies = [
+ "dvcdbg",
  "embedded-graphics",
  "embedded-graphics-core",
  "embedded-hal",
