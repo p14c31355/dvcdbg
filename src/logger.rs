@@ -14,9 +14,6 @@ use core::fmt::Write;
 #[cfg(feature = "debug_log")]
 use heapless::String;
 
-#[cfg(feature = "debug_log")]
-use crate::logger::Logger;
-
 /// 共通の Logger トレイト（debug_log 有効時のみ）
 #[cfg(feature = "debug_log")]
 pub trait Logger {
