@@ -10,6 +10,3 @@ heapless = "0.8"
 [features]
 default = []
 debug_log = []
-
-[dev-dependencies]
-sh1107g-rs = { path = "../sh1107g-rs", features = ["debug_log"] }

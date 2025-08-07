@@ -114,7 +114,7 @@ impl<const N: usize> Logger for BufferedLogger<N> {
 pub struct NoopLogger;
 
 impl NoopLogger {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -134,8 +134,8 @@ pub fn log_cmd<L: Logger>(logger: &mut L, cmd: u8) {
 
 /// u8 を `"0xXX"` 形式の16進文字列に変換
 #[cfg(feature = "debug_log")]
-fn byte_to_hex(byte: u8) -> String<6> {
-    let mut s = String::<6>::new();
+fn byte_to_hex(byte: u8) -> String<4> {
+    let mut s = String::<4>::new();
     let _ = write!(s, "0x{byte:02X}");
     s
 }
