@@ -28,6 +28,17 @@ use heapless::String;
 pub trait Logger {
     fn log(&mut self, msg: &str);
     fn log_fmt(&mut self, args: core::fmt::Arguments);
+
+    fn log_i2c(&mut self, context: &str, result: Result<(), impl core::fmt::Debug>) {
+        match result {
+            Ok(_) => {
+                let _ = self.log_fmt(format_args!("✅ {context} OK"));
+            }
+            Err(e) => {
+                let _ = self.log_fmt(format_args!("❌ {context} FAILED: {:?}", e));
+            }
+        }
+    }
 }
 
 /// シリアル出力用ロガー（fmt::Write 対応機器向け）
@@ -44,17 +55,6 @@ impl<'a, W: Write> SerialLogger<'a, W> {
 
     pub fn writer_mut(&mut self) -> &mut W {
         self.writer
-    }
-
-    pub fn log_i2c(&mut self, context: &str, result: Result<(), impl core::fmt::Debug>) {
-        match result {
-            Ok(_) => {
-                let _ = self.log_fmt(format_args!("✅ {context} OK"));
-            }
-            Err(e) => {
-                let _ = self.log_fmt(format_args!("❌ {context} FAILED: {:?}", e));
-            }
-        }
     }
 }
 
