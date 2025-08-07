@@ -5,7 +5,7 @@
 #[macro_export]
 macro_rules! log {
     ($logger:expr, $($arg:tt)*) => {
-        $logger.log_fmt(format_args!($($arg)*))
+        $logger.log_fmt(core::format_args!($($arg)*))
     };
 }
 
@@ -54,8 +54,7 @@ impl<'a, W: Write> Logger for SerialLogger<'a, W> {
     }
 
     fn log_fmt(&mut self, args: core::fmt::Arguments) {
-        let _ = self.writer.write_fmt(args);
-        let _ = writeln!(self.writer);
+        let _ = writeln!(self.writer, "{}", args);
     }
 }
 
@@ -96,8 +95,7 @@ impl<const N: usize> Logger for BufferedLogger<N> {
     }
 
     fn log_fmt(&mut self, args: core::fmt::Arguments) {
-        let _ = self.buffer.write_fmt(args);
-        let _ = writeln!(self.buffer);
+        let _ = writeln!(self.buffer, "{}", args);
     }
 }
 
