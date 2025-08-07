@@ -1,4 +1,7 @@
+/// logger.rs
 /// フォーマット付きログ用マクロ
+// debug_log 有効時のみマクロ定義
+#[cfg(feature = "debug_log")]
 #[macro_export]
 macro_rules! log {
     ($logger:expr, $($arg:tt)*) => {
@@ -6,7 +9,13 @@ macro_rules! log {
     };
 }
 
-// logger.rs
+// 無効時は空にする
+#[cfg(not(feature = "debug_log"))]
+#[macro_export]
+macro_rules! log {
+    ($logger:expr, $($arg:tt)*) => {};
+}
+
 
 #[cfg(feature = "debug_log")]
 use core::fmt::Write;
@@ -18,6 +27,18 @@ use heapless::String;
 #[cfg(feature = "debug_log")]
 pub trait Logger {
     fn log(&mut self, msg: &str);
+    fn log_fmt(&mut self, args: core::fmt::Arguments);
+
+    fn log_i2c(&mut self, context: &str, result: Result<(), impl core::fmt::Debug>) {
+        match result {
+            Ok(_) => {
+                let _ = self.log_fmt(format_args!("✅ {context} OK"));
+            }
+            Err(e) => {
+                let _ = self.log_fmt(format_args!("❌ {context} FAILED: {:?}", e));
+            }
+        }
+    }
 }
 
 /// シリアル出力用ロガー（fmt::Write 対応機器向け）
@@ -41,6 +62,10 @@ impl<'a, W: Write> SerialLogger<'a, W> {
 impl<'a, W: Write> Logger for SerialLogger<'a, W> {
     fn log(&mut self, msg: &str) {
         let _ = writeln!(self.writer, "{msg}");
+    }
+
+    fn log_fmt(&mut self, args: core::fmt::Arguments) {
+        let _ = writeln!(self.writer, "{}", args);
     }
 }
 
@@ -78,6 +103,10 @@ impl<const N: usize> BufferedLogger<N> {
 impl<const N: usize> Logger for BufferedLogger<N> {
     fn log(&mut self, msg: &str) {
         let _ = writeln!(self.buffer, "{msg}");
+    }
+
+    fn log_fmt(&mut self, args: core::fmt::Arguments) {
+        let _ = writeln!(self.buffer, "{}", args);
     }
 }
 
