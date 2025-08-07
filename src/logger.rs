@@ -1,12 +1,26 @@
+/// logger.rs
 /// フォーマット付きログ用マクロ
+// debug_log 有効時のみマクロ定義
+#[cfg(feature = "debug_log")]
 #[macro_export]
 macro_rules! log {
     ($logger:expr, $($arg:tt)*) => {
-        $logger.log_fmt(core::format_args!($($arg)*))
+        {
+            use core::fmt::Write;
+            let mut s = heapless::String::<128>::new();
+            let _ = write!(s, $($arg)*);
+            $logger.log(&s);
+        }
     };
 }
 
-// logger.rs
+// 無効時は空にする
+#[cfg(not(feature = "debug_log"))]
+#[macro_export]
+macro_rules! log {
+    ($logger:expr, $($arg:tt)*) => {};
+}
+
 
 #[cfg(feature = "debug_log")]
 use core::fmt::Write;

@@ -6,11 +6,11 @@ pub fn scan_i2c<I2C, E>(i2c: &mut I2C)
 where
     I2C: I2c<Error = E>,
 {
-    log_cmd("🔍 Scanning I2C bus...");
+    log!("🔍 Scanning I2C bus...");
     for addr in 0x03..=0x77 {
         if i2c.write(addr, &[]).is_ok() {
-            log_cmd("✅ Found device at 0x{:02X}", addr);
+            log!("✅ Found device at 0x{:02X}", addr);
         }
     }
-    log_cmd("🛑 I2C scan complete.");
+    log!("🛑 I2C scan complete.");
 }
