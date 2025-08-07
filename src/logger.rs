@@ -35,7 +35,7 @@ pub trait Logger {
                 let _ = self.log_fmt(format_args!("✅ {context} OK"));
             }
             Err(e) => {
-                let _ = self.log_fmt(format_args!("❌ {context} FAILED: {:?}", e));
+                let _ = self.log_fmt(format_args!("❌ {context} FAILED: {e:?}"));
             }
         }
     }
@@ -65,7 +65,7 @@ impl<'a, W: Write> Logger for SerialLogger<'a, W> {
     }
 
     fn log_fmt(&mut self, args: core::fmt::Arguments) {
-        let _ = writeln!(self.writer, "{}", args);
+        let _ = writeln!(self.writer, "{args}");
     }
 }
 
@@ -106,7 +106,7 @@ impl<const N: usize> Logger for BufferedLogger<N> {
     }
 
     fn log_fmt(&mut self, args: core::fmt::Arguments) {
-        let _ = writeln!(self.buffer, "{}", args);
+        let _ = writeln!(self.buffer, "{args}");
     }
 }
 
@@ -128,14 +128,5 @@ impl Logger for NoopLogger {
 /// 任意のコマンド値をログ出力する
 #[cfg(feature = "debug_log")]
 pub fn log_cmd<L: Logger>(logger: &mut L, cmd: u8) {
-    let hex = byte_to_hex(cmd);
-    logger.log(&hex);
-}
-
-/// u8 を `"0xXX"` 形式の16進文字列に変換
-#[cfg(feature = "debug_log")]
-fn byte_to_hex(byte: u8) -> String<4> {
-    let mut s = String::<4>::new();
-    let _ = write!(s, "0x{byte:02X}");
-    s
+    logger.log_fmt(format_args!("0x{cmd:02X}"));
 }
