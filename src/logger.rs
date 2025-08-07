@@ -94,7 +94,7 @@ impl NoopLogger {
 
 /// 任意のコマンド値をログ出力する
 #[cfg(feature = "debug_log")]
-fn log_cmd<L: Logger>(logger: &mut L, cmd: u8) {
+pub fn log_cmd<L: Logger>(logger: &mut L, cmd: u8) {
     let hex = byte_to_hex(cmd);
     logger.log(&hex);
 }
