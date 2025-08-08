@@ -30,7 +30,7 @@ logger.log("Init I2C");
 
 ## 📚 Documentation
 
-* [APIドキュメント（cargo doc）](https://docs.rs/dvcdbg) ※ 公開後に有効になります
+* [API Documentation (docs.rs)](https://docs.rs/dvcdbg) (Link will be active after publishing)
 
 ## 🛠️ Supported environments
 
