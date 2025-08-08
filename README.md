@@ -23,7 +23,7 @@ dvcdbg = { git = "https://github.com/p14c31355/dvcdbg" }
 ```rust
 use dvcdbg::logger::SerialLogger;
 let mut logger = SerialLogger::new(serial);
-logger.info("Init I2C");
+logger.log("Init I2C");
 ```
 
 ---
