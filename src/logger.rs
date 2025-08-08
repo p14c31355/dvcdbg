@@ -31,9 +31,9 @@ pub trait Logger {
     /// バイト列を安全に 0xXX 表記でログ出力
     fn log_bytes(&mut self, label: &str, bytes: &[u8]) {
         let mut out = String::<128>::new();
-        if write!(&mut out, "{}: ", label).is_ok() {
+        if write!(&mut out, "{label}: ").is_ok() {
             for b in bytes {
-                if write!(&mut out, "0x{:02X} ", b).is_err() {
+                if write!(&mut out, "0x{b:02X} ").is_err() {
                     // Buffer is full, append "..." to indicate truncation and stop.
                     let _ = out.push_str("...");
                     break;
