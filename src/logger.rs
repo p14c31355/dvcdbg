@@ -31,9 +31,9 @@ pub trait Logger {
     /// バイト列を安全に 0xXX 表記でログ出力
     fn log_bytes(&mut self, label: &str, bytes: &[u8]) {
         let mut out = String::<128>::new();
-        let _ = write!(&mut out, "{}: ", label);
+        let _ = write!(&mut out, "{label}: ");
         for b in bytes {
-            let _ = write!(&mut out, "0x{:02X} ", b);
+            let _ = write!(&mut out, "0x{b:02X} ");
         }
         self.log(out.as_str());
     }
