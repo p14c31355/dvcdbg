@@ -39,7 +39,7 @@ logger.info("Init I2C");
 
 ## 🤝 Contributions welcome!
 
-Bug reports, feature suggestions, and PR are welcome!
+Bug reports, feature suggestions, and pull requests are welcome! Please see our [contribution guidelines](CONTRIBUTING.md).
 
 ## 📄 Licenses
 
