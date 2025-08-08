@@ -1,5 +1,6 @@
 /// logger.rs
 /// フォーマット付きログ用マクロ
+
 // debug_log 有効時のみマクロ定義
 #[cfg(feature = "debug_log")]
 #[macro_export]
@@ -16,10 +17,8 @@ macro_rules! log {
     ($logger:expr, $($arg:tt)*) => {};
 }
 
-
 #[cfg(feature = "debug_log")]
 use core::fmt::Write;
-
 #[cfg(feature = "debug_log")]
 use heapless::String;
 
@@ -28,6 +27,24 @@ use heapless::String;
 pub trait Logger {
     fn log(&mut self, msg: &str);
     fn log_fmt(&mut self, args: core::fmt::Arguments);
+
+    /// バイト列を安全に 0xXX 表記でログ出力
+    fn log_bytes(&mut self, label: &str, bytes: &[u8]) {
+        let mut out = String::<128>::new();
+        if write!(&mut out, "{label}: ").is_ok() {
+            for b in bytes {
+                if write!(&mut out, "0x{b:02X} ").is_err() {
+                    // Buffer is full, append "..." to indicate truncation and stop.
+                    let _ = out.push_str("...");
+                    break;
+                }
+            }
+        } else {
+            // Label and/or separator was too long. Add ellipsis to what was written.
+            let _ = out.push_str("...");
+        }
+        self.log(out.as_str());
+    }
 
     fn log_i2c(&mut self, context: &str, result: Result<(), impl core::fmt::Debug>) {
         match result {
@@ -125,7 +142,7 @@ impl Logger for NoopLogger {
     fn log_fmt(&mut self, _: core::fmt::Arguments) {}
 }
 
-/// 任意のコマンド値をログ出力する
+/// 単一のコマンド値をログ出力（0xXX 表記）
 #[cfg(feature = "debug_log")]
 pub fn log_cmd<L: Logger>(logger: &mut L, cmd: u8) {
     logger.log_fmt(format_args!("0x{cmd:02X}"));
