@@ -43,4 +43,4 @@ Bug reports, feature suggestions, and pull requests are welcome! Please see our 
 
 ## 📄 Licenses
 
-MIT or Apache-2.0
+[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)
