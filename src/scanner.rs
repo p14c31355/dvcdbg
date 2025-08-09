@@ -7,10 +7,10 @@
 /// # Examples
 ///
 /// ```no_run
-/// use embedded_hal::blocking::i2c::Write;
+/// use embedded_hal::i2c::I2c;
 /// use dvcdbg::{scan_i2c, Logger, SerialLogger};
 ///
-/// // `i2c` must implement embedded_hal::blocking::i2c::Write
+/// // `i2c` must implement `embedded_hal::i2c::I2c`
 /// // `logger` must implement `Logger` trait from dvcdbg
 /// let mut i2c = /* your i2c interface */;
 /// let mut logger = /* your logger */;
