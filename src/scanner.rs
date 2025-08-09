@@ -1,8 +1,38 @@
+/// Scanner utilities for I2C bus device discovery and analysis.
+/// 
+/// This module provides functions to scan the I2C bus for connected devices,
+/// optionally testing with control bytes or initialization command sequences,
+/// with detailed logging support.
+///
+/// # Examples
+///
+/// ```no_run
+/// use embedded_hal::blocking::i2c::Write;
+/// use dvcdbg::{scan_i2c, Logger, SerialLogger};
+///
+/// // `i2c` must implement embedded_hal::blocking::i2c::Write
+/// // `logger` must implement `Logger` trait from dvcdbg
+/// let mut i2c = /* your i2c interface */;
+/// let mut logger = /* your logger */;
+///
+/// scan_i2c(&mut i2c, &mut logger);
+/// scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
+/// scan_init_sequence(&mut i2c, &mut logger, &[0xAE, 0xAF]);
+/// ```
 use crate::log;
 use crate::logger::Logger;
 use embedded_hal::i2c::I2c;
+use heapless::Vec;
 
-/// Scan the I2C bus for connected devices (0x03 to 0x77).
+/// Scan the I2C bus for connected devices (addresses 0x03 to 0x77).
+///
+/// # Arguments
+///
+/// * `i2c` - Mutable reference to the I2C interface implementing `embedded_hal::i2c::I2c`.
+/// * `logger` - Mutable reference to a logger implementing the `Logger` trait.
+///
+/// This function attempts to write zero bytes to each possible device address on the I2C bus,
+/// logging addresses that respond successfully.
 pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
 where
     I2C: I2c,
@@ -17,7 +47,16 @@ where
     log!(logger, "🛑 I2C scan complete.");
 }
 
-/// Scan the I2C bus for devices, testing write with optional control bytes.
+/// Scan the I2C bus for devices by sending specified control bytes.
+///
+/// # Arguments
+///
+/// * `i2c` - Mutable reference to the I2C interface implementing `embedded_hal::i2c::I2c`.
+/// * `logger` - Mutable reference to a logger implementing the `Logger` trait.
+/// * `control_bytes` - Byte slice to send as control bytes during the scan.
+///
+/// This function attempts to write the provided control bytes to each device address,
+/// logging those that respond successfully.
 pub fn scan_i2c_with_ctrl<I2C, L>(i2c: &mut I2C, logger: &mut L, control_bytes: &[u8])
 where
     I2C: I2c,
@@ -41,8 +80,17 @@ where
     log!(logger, "🛑 I2C scan complete.");
 }
 
-use heapless::Vec;
-
+/// Scan the I2C bus by testing each command in an initialization sequence.
+///
+/// # Arguments
+///
+/// * `i2c` - Mutable reference to the I2C interface implementing `embedded_hal::i2c::I2c`.
+/// * `logger` - Mutable reference to a logger implementing the `Logger` trait.
+/// * `init_sequence` - Byte slice of initialization commands to test.
+///
+/// This function tries to send each command in `init_sequence` with a control byte (0x00)
+/// to all possible device addresses, logging which addresses respond to which commands.
+/// It also logs differences between expected and responding commands.
 pub fn scan_init_sequence<I2C, L>(i2c: &mut I2C, logger: &mut L, init_sequence: &[u8])
 where
     I2C: I2c,
@@ -79,7 +127,7 @@ where
         }
     }
 
-    // 差分表示
+    // Show differences
     log!(logger, "Expected sequence: {:02X?}", init_sequence);
     log!(
         logger,
