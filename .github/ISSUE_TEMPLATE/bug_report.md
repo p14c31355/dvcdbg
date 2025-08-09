@@ -15,7 +15,7 @@ assignees:
 
 - Target: `___`
 - HAL or MCU: `___`
-- OS/Build Tool: `cargo build` / `trunk` / `avr-hal` など
+- OS/Build Tool: `cargo build` / `trunk` / `avr-hal` etc.
 - `no_std`: true / false
 - Feature Flags: `sync` / `async` / `std`
 
