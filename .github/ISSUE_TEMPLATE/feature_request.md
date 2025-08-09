@@ -1,10 +1,10 @@
 ---
-name: ✨ Proposed new features
-description: Proposals for new features and ideas for improvement
+name: "✨ Proposed new features"
+about: Proposed new features
 title: "[FEAT] "
-labels: ["enhancement"]
-assignees:
-  - p14c31355
+labels: enhancement
+assignees: p14c31355
+
 ---
 
 ## Purpose

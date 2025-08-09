@@ -1,10 +1,10 @@
 ---
-name: 🐛 Bug Report
-description: Reporting bugs encountered during implementation
+name: "\U0001F41B Bug Report"
+about: Bug Report
 title: "[BUG] "
-labels: ["bug"]
-assignees:
-  - p14c31355
+labels: bug
+assignees: p14c31355
+
 ---
 
 ## Overview
