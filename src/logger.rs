@@ -14,7 +14,7 @@
 ///
 /// # Example
 /// ```no_run
-/// use dvcdbg::logger::{log, Logger, SerialLogger};
+/// use dvcdbg::{log, logger::{Logger, SerialLogger}};
 ///
 /// struct DummyWriter(String);
 /// impl core::fmt::Write for DummyWriter {
