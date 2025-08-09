@@ -27,7 +27,7 @@
 //! let mut dw = DummyWriter(String::new());
 //! let mut logger = SerialLogger::new(&mut dw);
 //! log!(logger, "Hello {}!", "world");
-//! ``` 
+//! ```
 
 #[macro_export]
 macro_rules! log {
@@ -58,7 +58,7 @@ pub trait Logger {
         let _ = write!(&mut out, "{label}: ");
         for b in bytes {
             if write!(&mut out, "0x{b:02X} ").is_err() {
-                                let cap = out.capacity();
+                let cap = out.capacity();
                 if out.len() > cap.saturating_sub(3) {
                     out.truncate(cap.saturating_sub(3));
                 }
