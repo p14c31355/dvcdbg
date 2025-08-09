@@ -1,12 +1,10 @@
 ---
-
 name: ✨ Proposed new features
 description: Proposals for new features and ideas for improvement
 title: "[FEAT] "
 labels: ["enhancement"]
 assignees:
   - p14c31355
-
 ---
 
 ## Purpose

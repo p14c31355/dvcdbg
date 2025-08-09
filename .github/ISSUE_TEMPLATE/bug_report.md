@@ -1,12 +1,10 @@
 ---
-
 name: 🐛 Bug Report
 description: Reporting bugs encountered during implementation
 title: "[BUG] "
 labels: ["bug"]
 assignees:
   - p14c31355
-
 ---
 
 ## Overview
