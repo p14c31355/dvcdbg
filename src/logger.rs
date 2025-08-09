@@ -58,6 +58,10 @@ pub trait Logger {
         let _ = write!(&mut out, "{}: ", label);
         for b in bytes {
             if write!(&mut out, "0x{:02X} ", b).is_err() {
+                                let cap = out.capacity();
+                if out.len() > cap.saturating_sub(3) {
+                    out.truncate(cap.saturating_sub(3));
+                }
                 let _ = out.push_str("...");
                 break;
             }
