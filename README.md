@@ -48,6 +48,8 @@ log!(logger, "Formatted number: {}", 42);
 
 * [API Documentation (docs.rs)](https://docs.rs/dvcdbg) (Link will be active after publishing)
 
+* [API Documentation (GitHub Pages)](https://p14c31355.github.io/dvcdbg/)
+
 ## 🛠️ Supported environments
 
 * Rust `no_std`
