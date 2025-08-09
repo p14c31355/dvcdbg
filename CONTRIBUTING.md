@@ -66,7 +66,7 @@ Please use the [Feature Request Template](.github/ISSUE_TEMPLATE/feature_request
 
 * The basic requirement is that `cargo test` passes.
 * Compilation passes on the `no_std` target.
-* Actual machine testing (I2C/SPI) is not subject to CI depending on the environment (visual confirmation is OK).
+* Testing on physical hardware (I2C/SPI) is not subject to CI depending on the environment (visual confirmation is OK).
 
 ---
 
