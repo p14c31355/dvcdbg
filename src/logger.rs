@@ -1,33 +1,33 @@
-/// logger.rs
-/// Lightweight, feature-gated logger implementation for embedded environments.
-///
-/// This module provides:
-/// - A `Logger` trait for uniform logging
-/// - A `log!` macro with `debug_log` feature gating
-/// - Multiple logger implementations:
-///   - `SerialLogger`: For serial output (`core::fmt::Write`)
-///   - `BufferedLogger`: Keeps logs in memory (`heapless::String`)
-///   - `NoopLogger`: Discards all log output
-///
-/// When the `debug_log` feature is **disabled**, the `log!` macro expands to nothing,
-/// and all logging calls are removed at compile time.
-///
-/// # Example
-/// ```no_run
-/// use dvcdbg::{log, logger::{Logger, SerialLogger}};
-///
-/// struct DummyWriter(String);
-/// impl core::fmt::Write for DummyWriter {
-///     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-///         self.0.push_str(s);
-///         Ok(())
-///     }
-/// }
-///
-/// let mut dw = DummyWriter(String::new());
-/// let mut logger = SerialLogger::new(&mut dw);
-/// log!(logger, "Hello {}!", "world");
-/// ``` 
+//! logger.rs
+//! Lightweight, feature-gated logger implementation for embedded environments.
+//!
+//! This module provides:
+//! - A `Logger` trait for uniform logging
+//! - A `log!` macro with `debug_log` feature gating
+//! - Multiple logger implementations:
+//!   - `SerialLogger`: For serial output (`core::fmt::Write`)
+//!   - `BufferedLogger`: Keeps logs in memory (`heapless::String`)
+//!   - `NoopLogger`: Discards all log output
+//!
+//! When the `debug_log` feature is **disabled**, the `log!` macro expands to nothing,
+//! and all logging calls are removed at compile time.
+//!
+//! # Example
+//! ```no_run
+//! use dvcdbg::{log, logger::{Logger, SerialLogger}};
+//!
+//! struct DummyWriter(String);
+//! impl core::fmt::Write for DummyWriter {
+//!     fn write_str(&mut self, s: &str) -> core::fmt::Result {
+//!         self.0.push_str(s);
+//!         Ok(())
+//!     }
+//! }
+//!
+//! let mut dw = DummyWriter(String::new());
+//! let mut logger = SerialLogger::new(&mut dw);
+//! log!(logger, "Hello {}!", "world");
+//! ``` 
 
 #[macro_export]
 macro_rules! log {
@@ -55,9 +55,9 @@ pub trait Logger {
     fn log_bytes(&mut self, label: &str, bytes: &[u8]) {
         use core::fmt::Write;
         let mut out: heapless::String<128> = heapless::String::new();
-        let _ = write!(&mut out, "{}: ", label);
+        let _ = write!(&mut out, "{label}: ");
         for b in bytes {
-            if write!(&mut out, "0x{:02X} ", b).is_err() {
+            if write!(&mut out, "0x{b:02X} ").is_err() {
                                 let cap = out.capacity();
                 if out.len() > cap.saturating_sub(3) {
                     out.truncate(cap.saturating_sub(3));
@@ -66,22 +66,22 @@ pub trait Logger {
                 break;
             }
         }
-        self.log_fmt(format_args!("{}", out));
+        self.log_fmt(format_args!("{out}"));
     }
 
     /// Logs the result of an I2C transaction with a ✅/❌ marker.
     #[cfg(feature = "debug_log")]
     fn log_i2c(&mut self, context: &str, result: Result<(), impl core::fmt::Debug>) {
         match result {
-            Ok(_) => self.log_fmt(format_args!("✅ {} OK", context)),
-            Err(e) => self.log_fmt(format_args!("❌ {} FAILED: {:?}", context, e)),
+            Ok(_) => self.log_fmt(format_args!("✅ {context} OK")),
+            Err(e) => self.log_fmt(format_args!("❌ {context} FAILED: {e:?}")),
         }
     }
 
     /// Logs a single command byte in `0xXX` format.
     #[cfg(feature = "debug_log")]
     fn log_cmd(&mut self, cmd: u8) {
-        self.log_fmt(format_args!("0x{:02X}", cmd));
+        self.log_fmt(format_args!("0x{cmd:02X}"));
     }
 }
 
@@ -97,7 +97,7 @@ impl<'a, W: core::fmt::Write> SerialLogger<'a, W> {
 
 impl<'a, W: core::fmt::Write> Logger for SerialLogger<'a, W> {
     fn log_fmt(&mut self, args: core::fmt::Arguments) {
-        let _ = writeln!(self.0, "{}", args);
+        let _ = writeln!(self.0, "{args}");
     }
 }
 
@@ -133,7 +133,7 @@ impl<const N: usize> BufferedLogger<N> {
 impl<const N: usize> Logger for BufferedLogger<N> {
     fn log_fmt(&mut self, args: core::fmt::Arguments) {
         use core::fmt::Write;
-        let _ = writeln!(self.buffer, "{}", args);
+        let _ = writeln!(self.buffer, "{args}");
     }
 }
 
