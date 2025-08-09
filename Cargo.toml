@@ -10,6 +10,10 @@ documentation = ""
 license = "MIT OR Apache-2.0"
 keywords = ["embedded-hal", "no-std", "arduino", "hal", "i2c", "logger", "scanner"]
 categories = ["embedded", "hardware-support", "no-std"]
+exclude = [
+  "target/",
+  ".github/",
+]
 
 [dependencies]
 embedded-hal = "1.0.0"
