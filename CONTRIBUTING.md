@@ -74,7 +74,7 @@ Please use the [Feature Request Template](.github/ISSUE_TEMPLATE/feature_request
 
 * Compliant with `rustfmt`
 * Recommends no warnings for `clippy`
-* When both `std` and `no_std` are supported, use `#[cfg(feature = ‘std’)]`.
+* When both `std` and `no_std` are supported, use `#[cfg(feature = 'std')]`.
 
 ---
 
