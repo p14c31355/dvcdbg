@@ -1,5 +1,5 @@
-name: ✨ 機能追加の提案
-description: 新機能の提案や改善アイデア
+name: ✨ Proposed new features
+description: Proposals for new features and ideas for improvement
 title: "[FEAT] "
 labels: ["enhancement"]
 assignees:
@@ -7,30 +7,30 @@ assignees:
 
 ---
 
-## 目的
+## Purpose
 
-<!-- 何を実現したいのか？ -->
-<!-- 例：DrawTarget 実装を追加して embedded-graphics と連携したい -->
+<!-- What do you want to achieve? -->
+<!-- Example: Add DrawTarget implementation and link with embedded graphics. -->
 
-## 提案内容
+## Proposal details
 
-<!-- どんな構成で？ trait？ mod？ -->
+<!-- What kind of configuration? trait? mod? -->
 
-## 想定インタフェース
+## Assumed interface
 
 ```rust
-// 提案するAPIのイメージ
+// Image of the proposed API
 impl DrawTarget for Sh1107g<...> {
     ...
 }
 ```
 
-## 関連する課題
+## Related issues
 
-<!-- 関連する Issue や PR があれば -->
+<!-- If there are any related issues or PRs -->
 
-## 補足
+## Supplementary information
 
-<!-- 任意 -->
+<!-- optional -->
 
 ---

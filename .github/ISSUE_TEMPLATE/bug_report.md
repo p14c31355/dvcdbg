@@ -1,5 +1,5 @@
-name: 🐛 バグ報告
-description: 実装中に発生したバグを報告します
+name: 🐛 Bug Report
+description: Reporting bugs encountered during implementation
 title: "[BUG] "
 labels: ["bug"]
 assignees:
@@ -7,37 +7,37 @@ assignees:
 
 ---
 
-## 概要
+## Overview
 
-<!-- 何が起きたのか？簡潔に記述 -->
+<!-- What happened? A concise description of the problem. -->
 
-## 発生環境
+## Environment of occurrence
 
-- ターゲット: `___`
+- Target: `___`
 - HAL or MCU: `___`
-- OS/ビルド: `cargo build` / `trunk` / `avr-hal` など
+- OS/Build Tool: `cargo build` / `trunk` / `avr-hal` など
 - `no_std`: true / false
 - Feature Flags: `sync` / `async` / `std`
 
-## 再現手順
+## Reproduction procedure
 
-<!-- できれば main.rs を抜粋して記述 -->
+<!-- If possible, describe an excerpt from main.rs. -->
 ```rust
-// 例:
+// example:
 let i2c = ...;
 let mut oled = Sh1107gBuilder::new().with_address(0x3C).connect(i2c);
-oled.init()?; // ← panic する
+oled.init()?; // ← panic
 ```
-## 期待した挙動
+## Expected behaviour
 
-<!-- 正常時の挙動 -->
+<!-- Normal behaviour -->
 
-## 実際の挙動
+## Actual behaviour
 
-<!-- panic, error, 画面出力など -->
+<!-- panic, error, screen output, etc. -->
 
-## 補足
+## Supplementary information
 
-<!-- 任意 -->
+<!-- optional, e.g. screenshots, videos, etc. -->
 
 ---
