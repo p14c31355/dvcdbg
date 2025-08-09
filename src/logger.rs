@@ -121,6 +121,7 @@ impl<const N: usize> BufferedLogger<N> {
 #[cfg(feature = "debug_log")]
 impl<const N: usize> Logger for BufferedLogger<N> {
     fn log_fmt(&mut self, args: core::fmt::Arguments) {
+        use core::fmt::Write;
         let _ = writeln!(self.buffer, "{}", args);
     }
 }
