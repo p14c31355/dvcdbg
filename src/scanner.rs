@@ -25,10 +25,8 @@ where
 {
     log!(logger, "🔍 Scanning I2C bus with control bytes: {:?}", control_bytes);
     for addr in 0x03..=0x77 {
-        let res = i2c.write(addr, control_bytes);
-        match res {
-            Ok(_) => log!(logger, "✅ Found device at 0x{:02X} (ctrl bytes: {:?})", addr, control_bytes),
-            Err(_) => log!(logger, "❌ No response at 0x{:02X} (ctrl bytes: {:?})", addr, control_bytes),
+        if i2c.write(addr, control_bytes).is_ok() {
+            log!(logger, "✅ Found device at 0x{:02X} (ctrl bytes: {:?})", addr, control_bytes);
         }
     }
     log!(logger, "🛑 I2C scan complete.");
@@ -60,21 +58,22 @@ pub fn scan_init_sequence<I2C, L>(
             }
         }
 
-        if found_on_any {
-            detected_cmds.push(cmd).ok();
+        if detected_cmds.push(cmd).is_err() {
+            log!(logger, "⚠️ Detected commands buffer is full, results may be incomplete!");
         }
     }
 
     // 差分表示
-    log!(logger, "理想シーケンス: {:02X?}", init_sequence);
-    log!(logger, "応答ありコマンド: {:02X?}", detected_cmds.as_slice());
+    log!(logger, "Expected sequence: {:02X?}", init_sequence);
+    log!(logger, "Commands with response: {:02X?}", detected_cmds.as_slice());
 
+    detected_cmds.sort_unstable();
     let missing_cmds: Vec<u8, 64> = init_sequence.iter()
-        .filter(|&&c| !detected_cmds.contains(&c))
+        .filter(|&&c| detected_cmds.binary_search(&c).is_err())
         .copied()
         .collect();
 
-    log!(logger, "未応答コマンド: {:02X?}", missing_cmds.as_slice());
+    log!(logger, "Commands with no response: {:02X?}", missing_cmds.as_slice());
 
     log!(logger, "🛑 I2C scan with init sequence complete.");
 }
