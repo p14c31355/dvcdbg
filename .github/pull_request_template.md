@@ -8,11 +8,11 @@
 
 ## Change details
 
-- [x] New features added
+- [x] New feature
 - [ ] Refactoring
-- [ ] Bug fixes
+- [ ] Bug fix
 - [ ] CI / Build settings correction
-- [ ] Document update
+- [ ] Documentation update
 
 ## Build / Test Results
 
