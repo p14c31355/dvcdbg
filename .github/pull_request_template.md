@@ -39,6 +39,6 @@ $ cargo test      # ✅ / ❌
 
 ## Others
 
-<!-- If there are any points to note or considerations regarding the review -->
+<!-- Notes for reviewers -->
 
 ---
