@@ -1,26 +1,26 @@
 ---
 
-# コントリビューションガイドライン
+# Contribution Guidelines
 
-ようこそ！このリポジトリへの貢献を歓迎します 🙌  
-以下のガイドラインに従って、バグ報告・機能追加・改善を行ってください。
+Welcome! We welcome your contributions to this repository. 🙌
+Please follow the guidelines below when reporting bugs, adding features, or making improvements.
 
 ---
 
-## 🔧 開発環境のセットアップ
+## 🔧 Setting up the development environment
 
-### 前提
+### Prerequisites
 
-- Rust (最新版推奨)
-- `cargo` / `rustup` インストール済み
-- 組込みターゲットの場合、ターゲット向け toolchain も必要（例：`avr-hal`, `esp-idf`, `thumbv7em`）
+- Rust (Latest version recommended)
+- `cargo` / `rustup` already installed
+- For embedded targets, a target-specific toolchain is also required (e.g., `avr-hal`, `esp-idf`, `thumbv7em`).
 
 ```sh
-# Rust nightly が必要な場合
+# If you need Rust nightly
 rustup install nightly
-````
+```
 
-### 依存の取得
+### Getting dependencies
 
 ```sh
 cargo check
@@ -28,33 +28,33 @@ cargo check
 
 ---
 
-## 🐛 バグ報告
+## 🐛 Bug report
 
-[Bug Report テンプレート](.github/ISSUE_TEMPLATE/bug_report.md) に従って Issue を作成してください。
-可能であれば **再現コード** や **I2C ログ** を添付してください。
-
----
-
-## ✨ 機能提案
-
-[Feature Request テンプレート](.github/ISSUE_TEMPLATE/feature_request.md) を使って提案を Issue に投稿してください。
-
-* 既存ドライバとの互換性や制約に留意してください。
-* `no_std` 対応は明記してください。
-* コマンド仕様の変更やマクロ追加には rationale を添えてください。
+Please create an issue following the [Bug Report Template](.github/ISSUE_TEMPLATE/bug_report.md).
+If possible, please attach **reproducible code** and **I2C logs**.
 
 ---
 
-## 🔃 プルリクエスト
+## ✨ Feature proposal
 
-1. **Issue を立ててからブランチを切る**
-   ブランチ名例: `fix/init-error`, `feat/drawtarget-support`
+Please use the [Feature Request Template](.github/ISSUE_TEMPLATE/feature_request.md) to submit your proposal as an issue.
 
-2. **テストと `cargo check` に通ること**
+* Please note the compatibility and limitations with existing drivers.
+* Please clearly indicate support for `no_std`.
+* Please provide a rationale for any changes to command specifications or additions of macros.
 
-3. **PR テンプレートに沿って説明を記述**
+---
 
-4. PR コメントで関連 Issue をクローズするように書いてください:
+## 🔃 Pull request
+
+1. **Create an issue and then create a branch**
+   Branch name examples: `fix/init-error`, `feat/drawtarget-support`
+
+2. **Passing tests and `cargo check`**
+
+3. **Describe the explanation according to the PR template.**
+
+4. Please write in the PR comment to close the related issue:
 
    ```text
    Closes #42
@@ -62,32 +62,32 @@ cargo check
 
 ---
 
-## 🧪 テストポリシー
+## 🧪 Testing Policy
 
-* 基本は `cargo test` が通ること
-* `no_std` ターゲットではコンパイルが通ること
-* 実機テスト（I2C/SPI）は環境によって CI 対象外です（目視確認で OK）
-
----
-
-## 📦 コーディング規約
-
-* `rustfmt` 準拠
-* `clippy` 警告なしを推奨
-* `std` / `no_std` 両対応の場合、`#[cfg(feature = "std")]` を利用
+* The basic requirement is that `cargo test` passes.
+* Compilation passes on the `no_std` target.
+* Testing on physical hardware (I2C/SPI) is not subject to CI depending on the environment (visual confirmation is OK).
 
 ---
 
-## 🤝 ライセンス
+## 📦 Coding conventions
+
+* Compliant with `rustfmt`
+* We recommend addressing all clippy warnings
+* When both `std` and `no_std` are supported, use `#[cfg(feature = 'std')]`.
+
+---
+
+## 🤝 License
 
 This project is licensed under the MIT License and the Apache 2.0 License.
 Contributed code will also be released under the MIT License and the Apache 2.0 License.
 
 ---
 
-## 💬 コンタクト
+## 💬 Contact
 
-* メンテナ: [p14c31355](https://github.com/p14c31355)
-* Issue または Discussions にお気軽にどうぞ！
+* Maintainer: [p14c31355](https://github.com/p14c31355)
+* Feel free to visit Issues or Discussions!
 
 ---

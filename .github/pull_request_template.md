@@ -1,28 +1,28 @@
 # 🚀 Pull Request
 
-## 概要
+## Overview
 
-<!-- このPRが解決するIssueとその目的を記述 -->
-- 関連Issue: #XX
-- 対応内容: （例）DrawTarget trait を実装
+<!-- Describe the issue that this PR solves and its purpose. -->
+- Related Issue: #XX
+- Response details: (Example) Implement DrawTarget trait
 
-## 変更内容
+## Change details
 
-- [x] 新規機能追加
-- [ ] リファクタリング
-- [ ] バグ修正
-- [ ] CI / ビルド設定の修正
-- [ ] ドキュメントの更新
+- [x] New feature
+- [ ] Refactoring
+- [ ] Bug fix
+- [ ] CI / Build settings correction
+- [ ] Documentation update
 
-## ビルド / テスト結果
+## Build / Test Results
 
 ```sh
 $ cargo check     # ✅ / ❌
 $ cargo test      # ✅ / ❌
-# embedded: シリアル出力 or LED 確認など
+# embedded: Serial output or LED confirmation, etc.
 ```
 
-## 動作確認済みターゲット
+## Target board with confirmed operation
  - [ ] ATmega328p
 
  - [ ] ESP32
@@ -33,12 +33,12 @@ $ cargo test      # ✅ / ❌
 
  - [ ] その他: ___
 
-## スクリーンショット / デモ（任意）
+## Screenshots / Demos (optional)
 
-<!-- OLED に出力された画像などがあると嬉しい -->
+<!-- It would be great if there were images output to OLED. -->
 
-## その他
+## Others
 
-<!-- レビューの観点や注意点があれば -->
+<!-- Notes for reviewers -->
 
 ---
