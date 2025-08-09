@@ -14,14 +14,21 @@
 ///
 /// # Example
 /// ```no_run
-/// use mycrate::logger::{log, Logger, SerialLogger};
+/// use dvcdbg::logger::{log, Logger, SerialLogger};
 ///
-/// let mut serial = arduino_hal::default_serial!();
-/// let mut logger = SerialLogger::new(&mut serial);
+/// struct DummyWriter(String);
+/// impl core::fmt::Write for DummyWriter {
+///     fn write_str(&mut self, s: &str) -> core::fmt::Result {
+///         self.0.push_str(s);
+///         Ok(())
+///     }
+/// }
 ///
-/// log!(logger, "System started");
-/// logger.log_bytes("Data", &[0xDE, 0xAD, 0xBE, 0xEF]);
-/// ```
+/// let mut dw = DummyWriter(String::new());
+/// let mut logger = SerialLogger::new(&mut dw);
+/// log!(logger, "Hello {}!", "world");
+/// ``` 
+
 #[macro_export]
 macro_rules! log {
     ($logger:expr, $($arg:tt)*) => {
