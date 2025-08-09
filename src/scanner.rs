@@ -1,5 +1,5 @@
 /// Scanner utilities for I2C bus device discovery and analysis.
-/// 
+///
 /// This module provides functions to scan the I2C bus for connected devices,
 /// optionally testing with control bytes or initialization command sequences,
 /// with detailed logging support.
