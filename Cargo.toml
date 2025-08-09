@@ -8,7 +8,7 @@ readme = "README.md"
 repository = "https://github.com/p14c31355/dvcdbg"
 documentation = "https://docs.rs/dvcdbg"
 license = "MIT OR Apache-2.0"
-keywords = ["embedded-hal", "no-std", "arduino", "hal", "i2c", "logger", "scanner"]
+keywords = ["embedded-hal", "no-std", "arduino", "i2c", "scanner"]
 categories = ["embedded", "hardware-support", "no-std"]
 exclude = [
   "target/",
