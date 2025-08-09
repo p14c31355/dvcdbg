@@ -9,7 +9,7 @@ Please follow the guidelines below when reporting bugs, adding features, or maki
 
 ## 🔧 Setting up the development environment
 
-### Prerequisite environment
+### Prerequisites
 
 - Rust (Latest version recommended)
 - `cargo` / `rustup` already installed
