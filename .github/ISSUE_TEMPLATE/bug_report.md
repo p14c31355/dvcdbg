@@ -1,3 +1,5 @@
+---
+
 name: 🐛 Bug Report
 description: Reporting bugs encountered during implementation
 title: "[BUG] "

@@ -1,3 +1,5 @@
+---
+
 name: ✨ Proposed new features
 description: Proposals for new features and ideas for improvement
 title: "[FEAT] "
