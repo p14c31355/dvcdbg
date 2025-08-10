@@ -46,7 +46,7 @@ log!(logger, "Formatted number: {}", 42);
 
 ## 📚 Documentation
 
-* [API Documentation (docs.rs)](https://docs.rs/dvcdbg) (Link will be active after publishing)
+* [API Documentation (docs.rs)](https://docs.rs/dvcdbg)
 
 ## 🛠️ Supported environments
 
