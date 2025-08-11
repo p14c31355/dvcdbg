@@ -48,13 +48,22 @@ Please use the [Feature Request Template](.github/ISSUE_TEMPLATE/feature_request
 ## 🔃 Pull request
 
 1. **Create an issue and then create a branch**
-   Branch name examples: `fix/init-error`, `feat/drawtarget-support`
+   Please name it according to the branch strategy.
+   - `develop/**` (for development integration)  
+   - `feature/**` (for new features)  
+   - `hotfix/**` (for emergency fixes)
 
-2. **Passing tests and `cargo check`**
+2. **Commit message conventions**
+   <type>: <short summary>
+   <optional longer description>
 
-3. **Describe the explanation according to the PR template.**
+   type -> feat, fix, chore
 
-4. Please write in the PR comment to close the related issue:
+3. **Passing tests and `cargo check`**
+
+4. **Describe the explanation according to the PR template.**
+
+5. Please write in the PR comment to close the related issue:
 
    ```text
    Closes #42
