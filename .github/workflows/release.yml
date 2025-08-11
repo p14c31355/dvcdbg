@@ -4,11 +4,15 @@ on:
   push:
     tags:
       - 'v*.*.*'
-    if: github.actor != 'github-actions[bot]' # この行を追加
+    if: github.actor != 'github-actions[bot]'
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
