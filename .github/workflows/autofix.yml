@@ -1,4 +1,4 @@
-name: Auto Clippy Fix 
+name: Auto Clippy Fix
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
       - 'develop/**'
       - 'feature/**'
       - 'hotfix/**'
+    if: github.actor != 'github-actions[bot]'
 
 jobs:
   clippy-fix:
@@ -17,17 +18,26 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run cargo clippy and cargo fix
-        run: |
-          cargo clippy --all-features -- -D warnings
-          cargo fix --allow-dirty --allow-staged
+      # separate clippy step
+      - name: Run cargo clippy
+        run: cargo clippy --all-features -- -D warnings
 
+      # auto test step
+      - name: Run cargo fix and tests
+        run: |
+          cargo fix --allow-dirty --allow-staged
           if [[ -n $(git status --porcelain) ]]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add .
-            git commit -m "chore: automatic clippy fixes"
-            git push
+            echo "::notice::Automatic fixes applied. Running tests..."
+            if cargo test --all-features; then
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git add .
+              git commit -m "chore: automatic clippy fixes"
+              git push
+            else
+              echo "::error::Tests failed after applying fixes. Manual intervention required."
+              exit 1
+            fi
           else
             echo "No fixes needed."
           fi
