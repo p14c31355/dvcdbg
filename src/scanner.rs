@@ -18,7 +18,6 @@
 /// scan_i2c(&mut i2c, &mut logger);
 /// scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
 /// ```
-
 use crate::log;
 use crate::logger::Logger;
 use embedded_hal::i2c::I2c;
