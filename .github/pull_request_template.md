@@ -8,7 +8,7 @@
 
 ## Change details
 
-- [x] New feature
+- [ ] New feature
 - [ ] Refactoring
 - [ ] Bug fix
 - [ ] CI / Build settings correction
@@ -31,7 +31,7 @@ $ cargo test      # ✅ / ❌
 
  - [ ] Linux mock
 
- - [ ] その他: ___
+ - [ ] Other: ___
 
 ## Screenshots / Demos (optional)
 

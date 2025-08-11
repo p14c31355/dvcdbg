@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          cargo install git-cliff
+          cargo install cargo-edit
+
+      - name: Update Cargo.toml version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cargo set-version "$version"
+
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - name: Generate CHANGELOG
+        run: git cliff --tag ${GITHUB_REF_NAME} > CHANGELOG.md
+
+      - name: Commit CHANGELOG and Cargo.toml version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md Cargo.toml
+          git commit -m "chore(release): update changelog and version to ${{ github.ref_name#v }}"
+          git push
+
+      - name: Publish to crates.io
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body_path: CHANGELOG.md

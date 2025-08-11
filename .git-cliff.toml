@@ -1,0 +1,21 @@
+# .git-cliff.toml
+[changelog]
+output = "CHANGELOG.md"
+template = """
+## {{ version }} - {{ timestamp | date(format="%Y-%m-%d") }}
+{% if commits | length > 0 %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {{ commit.message | first_line }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+"""
+
+[git]
+commit_parsers = [
+    { message = "^feat", group = "Added" },
+    { message = "^fix",  group = "Fixed" },
+    { message = "^chore", group = "Chores" }
+]
