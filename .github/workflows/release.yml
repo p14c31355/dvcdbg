@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*.*.*'
+    if: github.actor != 'github-actions[bot]' # この行を追加
 
 jobs:
   release:
@@ -36,7 +37,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md Cargo.toml
-          git commit -m "chore(release): update changelog and version to ${{ github.ref_name#v }}"
+          git commit -m "chore(release): update changelog and version to ${{ steps.update_version.outputs.version }}"
           git push
 
       - name: Publish to crates.io
