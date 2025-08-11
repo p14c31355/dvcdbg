@@ -110,6 +110,13 @@ pub struct BufferedLogger<const N: usize> {
 }
 
 #[cfg(feature = "debug_log")]
+impl<const N: usize> Default for BufferedLogger<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "debug_log")]
 impl<const N: usize> BufferedLogger<N> {
     /// Creates a new empty `BufferedLogger`.
     pub fn new() -> Self {
@@ -139,6 +146,12 @@ impl<const N: usize> Logger for BufferedLogger<N> {
 
 /// Logger that discards all messages.
 pub struct NoopLogger;
+
+impl Default for NoopLogger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl NoopLogger {
     /// Creates a new `NoopLogger` instance.
