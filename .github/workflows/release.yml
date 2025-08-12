@@ -67,14 +67,12 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: avr-atmega328p
 
       - name: Install GNUplot
         run: sudo apt-get update && sudo apt-get install -y gnuplot
 
       - name: Build firmware
-        run: cargo build --release --target avr-atmega328p.json
+        run: cargo build --release
 
       - name: Measure firmware size
         run: |
