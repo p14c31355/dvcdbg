@@ -6,6 +6,18 @@ on:
       - 'v*.*.*'
     if: github.actor != 'github-actions[bot]'
 
+defaults: &defaults
+  - name: Checkout
+    uses: actions/checkout@v4
+
+  - name: Install Rust toolchain
+    uses: dtolnay/rust-toolchain@stable
+
+  - name: Configure git
+    run: |
+      git config user.name "github-actions[bot]"
+      git config user.email "github-actions[bot]@users.noreply.github.com"
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -14,11 +26,7 @@ jobs:
       id-token: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - <<: *defaults
 
       - name: Install dependencies
         run: |
@@ -38,8 +46,6 @@ jobs:
 
       - name: Commit CHANGELOG and Cargo.toml version bump
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md Cargo.toml
           git commit -m "chore(release): update changelog and version to ${{ steps.update_version.outputs.version }}"
           git push
@@ -62,11 +68,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - <<: *defaults
 
       - name: Install GNUplot
         run: sudo apt-get update && sudo apt-get install -y gnuplot
@@ -76,7 +78,7 @@ jobs:
 
       - name: Measure firmware size
         run: |
-          size target/avr-atmega328p/release/dvcdbg | tee size.txt
+          size target/release/dvcdbg | tee size.txt
           bin_size=$(grep -m1 'text' size.txt | awk '{print $1}')
           echo "$(date +%Y-%m-%d),${bin_size}" >> .github/size-history.csv
 
@@ -97,8 +99,6 @@ jobs:
 
       - name: Commit size history artifacts
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/size-history.csv .github/size-history.svg
           git commit -m "Update firmware size history [skip ci]" || echo "No changes"
           git push
