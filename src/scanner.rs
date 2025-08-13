@@ -43,7 +43,7 @@ where
             log!(logger, "[ok] Found device at 0x{:02X}", addr);
         }
     }
-    log!(logger, "I2C scan complete.");
+    log!(logger, "[info] I2C scan complete.");
 }
 
 /// Scan the I2C bus for devices by sending specified control bytes.
