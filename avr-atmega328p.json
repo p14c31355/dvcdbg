@@ -1,0 +1,14 @@
+{
+  "llvm-target": "avr",
+  "data-layout": "e-m:o-p:16:8-i8:8:8-i16:16:16-i32:16:16-n8:16",
+  "arch": "avr",
+  "os": "none",
+  "executables": true,
+  "linker": "avr-gcc",
+  "pre-link-args": ["-mmcu=atmega328p"],
+  "post-link-args": [],
+  "panic-strategy": "abort",
+  "code-model": "small",
+  "disable-redzone": true,
+  "features": "+16bit-tables,+call0,+minimal-atomic"
+}
