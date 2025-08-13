@@ -1,4 +1,4 @@
-# .git-cliff.toml
+# .github/cliff.toml
 [changelog]
 output = "CHANGELOG.md"
 template = """
