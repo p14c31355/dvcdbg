@@ -2,10 +2,10 @@
   <h1>***dvcdbg***</h1>
 </div>
 
-> 🛠️ Lightweight debug & logger crate for embedded Rust (no_std friendly)
+> 🛠️ Lightweight i2c scan & logger crate for embedded Rust (no_std friendly)
 
 `dvcdbg` is a lightweight logging and debugging output library for embedded Rust development.  
-It can be used in a `no_std` environment and supports log output via UART, I2C, etc.
+It can be used in a `no_std` environment and supports log output via I2C
 
 ---
 
