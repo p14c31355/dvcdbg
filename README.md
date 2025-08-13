@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>***dvcdbg***</h1>
+  <h1>dvcdbg</h1>
 </div>
 
 > 🛠️ Lightweight i2c scan & logger crate for embedded Rust (no_std friendly)
