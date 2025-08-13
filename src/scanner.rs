@@ -147,5 +147,5 @@ where
         missing_cmds.as_slice()
     );
 
-    log!(logger, "I2C scan with init sequence complete.");
+    log!(logger, "[info] I2C scan with init sequence complete.");
 }
