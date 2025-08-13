@@ -76,7 +76,7 @@ where
             );
         }
     }
-    log!(logger, "I2C scan complete.");
+    log!(logger, "[info] I2C scan complete.");
 }
 
 /// Scan the I2C bus by testing each command in an initialization sequence.
