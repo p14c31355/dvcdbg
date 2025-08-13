@@ -40,11 +40,16 @@ jobs:
       - name: Generate CHANGELOG
         run: git cliff --config .github/cliff.toml --tag ${GITHUB_REF_NAME} > CHANGELOG.md
 
+      - name: Checkout and switch to main branch
+        uses: actions/checkout@v4
+        with:
+          ref: 'main'
+
       - name: Commit CHANGELOG and Cargo.toml version bump
         run: |
           git add CHANGELOG.md Cargo.toml
           git commit -m "chore(release): update changelog and version to ${{ steps.update_version.outputs.version }}"
-          git push
+          git push origin main
 
       - name: Publish to crates.io
         run: cargo publish

@@ -18,6 +18,11 @@ It can be used in a `no_std` environment and supports log output via I2C
 - ✅ Comes with handy built-in utilities such as an I2C bus scanner
 - ✅ Features can be selected with feature flags (e.g., `debug_log`)
 
+## 📈 Firmware Size History
+![Firmware Size](.github/size-history.svg)
+
+---
+
 ## 📦 Quickstart
 
 ```toml
