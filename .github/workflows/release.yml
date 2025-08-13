@@ -75,17 +75,22 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         
-      - name: Install GNUplot
-        run: sudo apt-get update && sudo apt-get install -y gnuplot
+      - name: Install GNUplot and AVR tools
+        run: sudo apt-get update && sudo apt-get install -y gnuplot binutils-avr gcc-avr
 
-      - name: Build firmware
-        run: cargo build --release
+      - name: Build minimal firmware example for size measurement
+        run: cargo build --release --example size_check --target avr-atmega328p.json
 
       - name: Measure firmware size
         run: |
-          size target/release/dvcdbg | tee size.txt
-          bin_size=$(grep -m1 'text' size.txt | awk '{print $1}')
-          echo "$(date +%Y-%m-%d),${bin_size}" >> .github/size-history.csv
+          elf_file=target/avr-atmega328p/release/examples/size_check.elf
+          avr-size -C --mcu=atmega328p $elf_file | tee size.txt
+          FLASH=$(grep Program: size.txt | awk '{print $2}')
+          RAM=$(grep Data: size.txt | awk '{print $2}')
+          if [ ! -f .github/size-history.csv ]; then
+            echo "date,flash,ram" > .github/size-history.csv
+          fi
+          echo "$(date +%Y-%m-%d),$FLASH,$RAM" >> .github/size-history.csv
 
       - name: Generate size history graph
         run: |
@@ -94,16 +99,19 @@ jobs:
             set output '.github/size-history.svg'
             set title "Firmware Size History"
             set xlabel "Date"
-            set ylabel "Size (bytes)"
+            set ylabel "Bytes"
             set xdata time
             set timefmt "%Y-%m-%d"
             set format x "%Y-%m-%d"
             set grid
-            plot '.github/size-history.csv' using 1:2 with linespoints title 'Firmware Size'
+            plot '.github/size-history.csv' using 1:2 with linespoints title 'Flash', \
+                 '.github/size-history.csv' using 1:3 with linespoints title 'RAM'
           EOF
 
       - name: Commit size history artifacts
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/size-history.csv .github/size-history.svg
           git commit -m "Update firmware size history [skip ci]" || echo "No changes"
           git push
