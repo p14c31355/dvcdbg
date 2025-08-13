@@ -69,12 +69,12 @@ pub trait Logger {
         self.log_fmt(format_args!("{out}"));
     }
 
-    /// Logs the result of an I2C transaction with a ✅/❌ marker.
+    /// Logs the result of an I2C transaction with a [ok]/[err] marker.
     #[cfg(feature = "debug_log")]
     fn log_i2c(&mut self, context: &str, result: Result<(), impl core::fmt::Debug>) {
         match result {
-            Ok(_) => self.log_fmt(format_args!("✅ {context} OK")),
-            Err(e) => self.log_fmt(format_args!("❌ {context} FAILED: {e:?}")),
+            Ok(_) => self.log_fmt(format_args!("[ok] {context} ")),
+            Err(e) => self.log_fmt(format_args!("[err] {context} FAILED: {e:?}")),
         }
     }
 
