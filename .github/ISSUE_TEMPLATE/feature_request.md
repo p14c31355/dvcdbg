@@ -1,7 +1,7 @@
 ---
 name: "✨ Proposed new features"
 about: Proposed new features
-title: "[FEAT] "
+title: " "
 labels: enhancement
 assignees: p14c31355
 
@@ -10,7 +10,7 @@ assignees: p14c31355
 ## Purpose
 
 <!-- What do you want to achieve? -->
-<!-- Example: Add DrawTarget implementation and link with embedded graphics. -->
+<!-- Example: Add Error enum. -->
 
 ## Proposal details
 
@@ -20,9 +20,7 @@ assignees: p14c31355
 
 ```rust
 // Image of the proposed API
-impl DrawTarget for Sh1107g<...> {
-    ...
-}
+
 ```
 
 ## Related issues

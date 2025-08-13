@@ -1,7 +1,7 @@
 ---
 name: "\U0001F41B Bug Report"
 about: Bug Report
-title: "[BUG] "
+title: " "
 labels: bug
 assignees: p14c31355
 
@@ -24,9 +24,7 @@ assignees: p14c31355
 <!-- If possible, describe an excerpt from main.rs. -->
 ```rust
 // example:
-let i2c = ...;
-let mut oled = Sh1107gBuilder::new().with_address(0x3C).connect(i2c);
-oled.init()?; // ← panic
+scan_i2c(&mut i2c, &mut logger); // <- failed
 ```
 ## Expected behaviour
 

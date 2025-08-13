@@ -1,9 +1,11 @@
-# dvcdbg
+<div align="center">
+  <h1>***dvcdbg***</h1>
+</div>
 
-> 🛠️ Lightweight debug & logger crate for embedded Rust (no_std friendly)
+> 🛠️ Lightweight i2c scan & logger crate for embedded Rust (no_std friendly)
 
 `dvcdbg` is a lightweight logging and debugging output library for embedded Rust development.  
-It can be used in a `no_std` environment and supports log output via UART, I2C, etc.
+It can be used in a `no_std` environment and supports log output via I2C
 
 ---
 
@@ -21,7 +23,7 @@ It can be used in a `no_std` environment and supports log output via UART, I2C, 
 ```toml
 # Cargo.toml
 [dependencies]
-dvcdbg = { git = "https://github.com/p14c31355/dvcdbg", features = ["debug_log"] }
+dvcdbg = { version = "0.1.1", features = ["debug_log"] }
 ```
 
 ## 📄 Usage example (Arduino)
@@ -47,6 +49,25 @@ log!(logger, "Formatted number: {}", 42);
 ## 📚 Documentation
 
 * [API Documentation (docs.rs)](https://docs.rs/dvcdbg)
+
+---
+
+## 🚀 Binary Size Optimisation
+
+Since `dvcdbg` is designed for a `no_std` environment, it is important to minimise the final binary size.
+
+Enabling **LTO (link-time optimisation)** and **strip** during release builds will remove unused code from `dvcdbg` and other dependent crates, significantly reducing the binary size.
+
+Add the following settings to your application's `Cargo.toml`.
+
+```toml
+# Cargo.toml (application side)
+[profile.release]
+lto = true
+strip = true
+```
+
+---
 
 ## 🛠️ Supported environments
 

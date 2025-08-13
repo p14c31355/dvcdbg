@@ -37,13 +37,13 @@ where
     I2C: I2c,
     L: Logger,
 {
-    log!(logger, "🔍 Scanning I2C bus...");
+    log!(logger, "[scan] Scanning I2C bus...");
     for addr in 0x03..=0x77 {
         if i2c.write(addr, &[]).is_ok() {
-            log!(logger, "✅ Found device at 0x{:02X}", addr);
+            log!(logger, "[ok] Found device at 0x{:02X}", addr);
         }
     }
-    log!(logger, "🛑 I2C scan complete.");
+    log!(logger, "[info] I2C scan complete.");
 }
 
 /// Scan the I2C bus for devices by sending specified control bytes.
@@ -63,20 +63,20 @@ where
 {
     log!(
         logger,
-        "🔍 Scanning I2C bus with control bytes: {:?}",
+        "[scan] Scanning I2C bus with control bytes: {:?}",
         control_bytes
     );
     for addr in 0x03..=0x77 {
         if i2c.write(addr, control_bytes).is_ok() {
             log!(
                 logger,
-                "✅ Found device at 0x{:02X} (ctrl bytes: {:?})",
+                "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})",
                 addr,
                 control_bytes
             );
         }
     }
-    log!(logger, "🛑 I2C scan complete.");
+    log!(logger, "[info] I2C scan complete.");
 }
 
 /// Scan the I2C bus by testing each command in an initialization sequence.
@@ -97,21 +97,21 @@ where
 {
     log!(
         logger,
-        "🔍 Scanning I2C bus with init sequence: {:02X?}",
+        "[scan] Scanning I2C bus with init sequence: {:02X?}",
         init_sequence
     );
 
     let mut detected_cmds = Vec::<u8, 64>::new();
 
     for &cmd in init_sequence {
-        log!(logger, "→ Testing command 0x{:02X}", cmd);
+        log!(logger, "-> Testing command 0x{:02X}", cmd);
 
         for addr in 0x03..=0x77 {
             let res = i2c.write(addr, &[0x00, cmd]); // 0x00 = control byte for command
             if res.is_ok() {
                 log!(
                     logger,
-                    "✅ Found device at 0x{:02X} responding to command 0x{:02X}",
+                    "[ok] Found device at 0x{:02X} responding to command 0x{:02X}",
                     addr,
                     cmd
                 );
@@ -121,7 +121,7 @@ where
         if detected_cmds.push(cmd).is_err() {
             log!(
                 logger,
-                "⚠️ Detected commands buffer is full, results may be incomplete!"
+                "[warn] Detected commands buffer is full, results may be incomplete!"
             );
         }
     }
@@ -147,5 +147,5 @@ where
         missing_cmds.as_slice()
     );
 
-    log!(logger, "🛑 I2C scan with init sequence complete.");
+    log!(logger, "[info] I2C scan with init sequence complete.");
 }

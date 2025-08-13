@@ -42,7 +42,7 @@ jobs:
         id: auth
 
       - name: Generate CHANGELOG
-        run: git cliff --tag ${GITHUB_REF_NAME} > CHANGELOG.md
+        run: git cliff --config .github/cliff.toml --tag ${GITHUB_REF_NAME} > CHANGELOG.md
 
       - name: Commit CHANGELOG and Cargo.toml version bump
         run: |
