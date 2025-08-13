@@ -4,19 +4,6 @@ on:
   push:
     tags:
       - 'v*.*.*'
-    if: github.actor != 'github-actions[bot]'
-
-defaults: &defaults
-  - name: Checkout
-    uses: actions/checkout@v4
-
-  - name: Install Rust toolchain
-    uses: dtolnay/rust-toolchain@stable
-
-  - name: Configure git
-    run: |
-      git config user.name "github-actions[bot]"
-      git config user.email "github-actions[bot]@users.noreply.github.com"
 
 jobs:
   release:
@@ -26,8 +13,17 @@ jobs:
       id-token: write
 
     steps:
-      - <<: *defaults
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
       - name: Install dependencies
         run: |
           cargo install git-cliff
@@ -68,8 +64,12 @@ jobs:
       contents: write
 
     steps:
-      - <<: *defaults
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        
       - name: Install GNUplot
         run: sudo apt-get update && sudo apt-get install -y gnuplot
 
