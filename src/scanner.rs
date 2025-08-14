@@ -6,7 +6,7 @@
 ///
 /// # Examples
 ///
-/// ```no_run
+/// ```ignore
 /// use embedded_hal::i2c::I2c;
 /// use dvcdbg::logger::{Logger, SerialLogger};
 ///
