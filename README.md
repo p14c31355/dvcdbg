@@ -4,9 +4,7 @@
 
 > 🛠️ Lightweight logging & debugging crate for embedded Rust (no_std friendly)
 
-When you buy a new circuit board, do you set up multiple crates?
-Isn't it a hassle to configure the initial settings for the crate you mentioned?
-`dvcdbg` is a lightweight, no_std-friendly logging and debugging library for embedded Rust.  
+`dvcdbg` is a lightweight, `no_std`-friendly logging and debugging library for embedded Rust. It is designed to simplify the initial setup and bring-up of new hardware by providing a convenient set of diagnostic tools.
 
 ---
 
