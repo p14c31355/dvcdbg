@@ -15,14 +15,14 @@ Isn't it a hassle to configure the initial settings for the crate you mentioned?
 - ✅ Works in `no_std` environments
 - ✅ Lightweight and fast, formatless logging support
 - ✅ Includes useful embedded utilities:
-  - I²C bus scanner (`scan_i2c!`)
+  - I2C bus scanner (`scan_i2c!`)
   - Hex dump (`write_hex!`)
   - Execution cycle measurement (`measure_cycles!`)
 - ✅ Quick diagnostic workflow with `quick_diag!`
 - ✅ Serial logger abstraction for various HALs
 - ✅ Feature flags allow selective compilation:
   - `logger` → logging utilities
-  - `scanner` → I²C/SPI scanning utilities
+  - `scanner` → I2C scanning utilities
   - `macros` → helper macros like `impl_fmt_write_for_serial!`
   - `quick_diag` → workflow macros combining logger + scanner + timing
 
@@ -42,19 +42,37 @@ dvcdbg = { version = "0.1.1", features = ["quick_diag"] }
 
 ```rust
 use arduino_hal::default_serial;
-use dvcdbg::logger::SerialLogger;
+use dvcdbg::prelude::*;
 
-let dp = arduino_hal::Peripherals::take().unwrap();
-let pins = arduino_hal::pins!(dp);
-let mut serial = default_serial!(dp, pins, 57600);
+fn main() {
+    let dp = arduino_hal::Peripherals::take().unwrap();
+    let pins = arduino_hal::pins!(dp);
 
-let mut logger = SerialLogger::new(&mut serial);
+    let mut serial = default_serial!(dp, pins, 57600);
+    let mut logger = SerialLogger::new(&mut serial);
 
-// Quick diagnostic: scans I²C bus and prints cycles for test code
-quick_diag!(logger, i2c, timer, {
-    // Example test code to measure cycles
-    blink_led();
-});
+    #[cfg(feature = "quick_diag")]
+    {
+        // Initialization I2C instance and timer
+        let i2c = arduino_hal::I2c::new(
+            dp.TWI,
+            pins.a4.into_pull_up_input(),
+            pins.a5.into_pull_up_input(),
+            100_000,
+        );
+        let timer = arduino_hal::hal::timer::Timer1::new(dp.TC1, arduino_hal::hal::clock::Clock::new());
+
+        // Quick diagnostic: scans I2C bus and measures cycles for test code
+        quick_diag!(logger, i2c, timer, {
+            your_test_code();
+        });
+    }
+}
+
+fn your_test_code() {
+    // 
+}
+
 ```
 
 ---
