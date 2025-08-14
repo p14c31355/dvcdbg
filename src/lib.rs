@@ -1,8 +1,23 @@
 #![no_std]
 
-//! This crate provides utilities for fast logging in embedded environments.
-//! It is no_std compatible and supports multiple logger backends.
+//! # dvcdbg
+//!
+//! Lightweight logging and diagnostic utilities for embedded Rust.
+//! Compatible with `no_std` and multiple HAL backends.
 
+#[cfg(feature = "logger")]
 pub mod logger;
-#[cfg(feature = "debug_log")]
+
+#[cfg(feature = "macros")]
+pub mod macros;
+
+#[cfg(feature = "scanner")]
 pub mod scanner;
+
+/// Prelude module for easy import of commonly used types and macros.
+///
+/// Users can simply:
+/// ```rust
+/// use dvcdbg::prelude::*;
+/// ```
+pub mod prelude;
