@@ -151,3 +151,20 @@ where
 
     log!(logger, "[info] I2C scan with init sequence complete.");
 }
+
+/// Scans I2C bus for devices and logs found addresses.
+///
+/// # Example
+/// ```ignore
+/// scan_i2c!(i2c, logger);
+/// ```
+#[macro_export]
+macro_rules! scan_i2c {
+    ($i2c:expr, $logger:expr) => {{
+        for addr in 0x03..0x78 {
+            if $i2c.write(addr, &[]).is_ok() {
+                let _ = core::writeln!($logger, "Found: 0x{:02X}", addr);
+            }
+        }
+    }};
+}
