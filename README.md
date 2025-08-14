@@ -27,10 +27,8 @@
 
 ## 📦 Quickstart
 
-```toml
-# Cargo.toml
-[dependencies]
-dvcdbg = { version = "0.1.1", features = ["macros"] }
+```sh
+cargo add dvcdbg --features "macros"
 ```
 
 ---
