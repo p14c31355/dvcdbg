@@ -22,7 +22,7 @@ heapless = "0.8"
 [features]
 default = []
 
-debug_log = []
 logger = []
 scanner = ["logger"]
-macros = []
+macros = ["scanner"]
+quick_diag = ["logger", "scanner", "macros"]

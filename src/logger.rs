@@ -32,7 +32,7 @@
 #[macro_export]
 macro_rules! log {
     ($logger:expr, $($arg:tt)*) => {
-        #[cfg(feature = "debug_log")]
+        #[cfg(feature = "logger")]
         {
             $logger.log_fmt(core::format_args!($($arg)*));
         }
@@ -51,7 +51,7 @@ pub trait Logger {
     /// Logs a byte slice in `0xXX` format with a label.
     ///
     /// Truncates output with `...` if it exceeds the internal buffer.
-    #[cfg(feature = "debug_log")]
+    #[cfg(feature = "logger")]
     fn log_bytes(&mut self, label: &str, bytes: &[u8]) {
         use core::fmt::Write;
         let mut out: heapless::String<128> = heapless::String::new();
@@ -70,7 +70,7 @@ pub trait Logger {
     }
 
     /// Logs the result of an I2C transaction with a [ok]/[err] marker.
-    #[cfg(feature = "debug_log")]
+    #[cfg(feature = "logger")]
     fn log_i2c(&mut self, context: &str, result: Result<(), impl core::fmt::Debug>) {
         match result {
             Ok(_) => self.log_fmt(format_args!("[ok] {context} ")),
@@ -79,7 +79,7 @@ pub trait Logger {
     }
 
     /// Logs a single command byte in `0xXX` format.
-    #[cfg(feature = "debug_log")]
+    #[cfg(feature = "logger")]
     fn log_cmd(&mut self, cmd: u8) {
         self.log_fmt(format_args!("0x{cmd:02X}"));
     }
@@ -104,19 +104,19 @@ impl<'a, W: core::fmt::Write> Logger for SerialLogger<'a, W> {
 /// Logger that stores messages in a heapless string buffer.
 ///
 /// Useful for testing or when logs must be retrieved later.
-#[cfg(feature = "debug_log")]
+#[cfg(feature = "logger")]
 pub struct BufferedLogger<const N: usize> {
     buffer: heapless::String<N>,
 }
 
-#[cfg(feature = "debug_log")]
+#[cfg(feature = "logger")]
 impl<const N: usize> Default for BufferedLogger<N> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(feature = "debug_log")]
+#[cfg(feature = "logger")]
 impl<const N: usize> BufferedLogger<N> {
     /// Creates a new empty `BufferedLogger`.
     pub fn new() -> Self {
@@ -136,7 +136,7 @@ impl<const N: usize> BufferedLogger<N> {
     }
 }
 
-#[cfg(feature = "debug_log")]
+#[cfg(feature = "logger")]
 impl<const N: usize> Logger for BufferedLogger<N> {
     fn log_fmt(&mut self, args: core::fmt::Arguments) {
         use core::fmt::Write;
