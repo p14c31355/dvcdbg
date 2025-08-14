@@ -31,7 +31,7 @@
 ```toml
 # Cargo.toml
 [dependencies]
-dvcdbg = { version = "0.1.1", features = ["quick_diag"] }
+dvcdbg = { version = "0.1.1", features = ["macros"] }
 ```
 
 ---
@@ -49,7 +49,7 @@ fn main() {
     let mut serial = default_serial!(dp, pins, 57600);
     let mut logger = SerialLogger::new(&mut serial);
 
-    #[cfg(feature = "quick_diag")]
+    #[cfg(feature = "macros")]
     {
         // Initialization I2C instance and timer
         let i2c = arduino_hal::I2c::new(

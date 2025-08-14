@@ -14,9 +14,6 @@ pub mod macros;
 #[cfg(feature = "scanner")]
 pub mod scanner;
 
-#[cfg(feature = "quick_diag")]
-pub mod workflow;
-
 /// Prelude module for easy import of commonly used types and macros.
 ///
 /// Users can simply:
@@ -31,6 +28,4 @@ pub mod prelude {
     pub use crate::macros::*;
     #[cfg(feature = "scanner")]
     pub use crate::scanner::*;
-    #[cfg(feature = "quick_diag")]
-    pub use crate::workflow::*;
 }
