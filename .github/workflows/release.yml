@@ -40,11 +40,11 @@ jobs:
         id: auth
 
       - name: Generate CHANGELOG
-        run: git cliff --config .github/cliff.toml --tag ${GITHUB_REF_NAME} > CHANGELOG.md
+        run: git cliff --config .github/cliff.toml --tag ${{ github.ref_name }} --output CHANGELOG.md --prepend
 
       - name: Commit CHANGELOG and Cargo.toml version bump
         run: |
-          git add CHANGELOG.md Cargo.toml
+          git add CHANGELOG.md Cargo.toml Cargo.lock
           git commit -m "chore(release): update changelog and version to ${{ steps.update_version.outputs.version }}"
           git push origin main
 
