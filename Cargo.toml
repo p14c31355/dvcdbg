@@ -1,6 +1,6 @@
 [package]
 name = "dvcdbg"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["p14c31355 <thinkoverheat@gmail.com>"]
 description = "I2C scanner and logger for embedded, no_std use."
