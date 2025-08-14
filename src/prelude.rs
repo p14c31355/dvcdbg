@@ -17,6 +17,7 @@ pub use crate::{
     measure_cycles,
     loop_with_delay,
     assert_log,
+    quick_diag,
 };
 
 #[cfg(feature = "scanner")]
