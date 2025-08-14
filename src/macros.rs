@@ -51,6 +51,20 @@ macro_rules! write_hex {
     };
 }
 
+/// Writes a byte slice in binary format to a `fmt::Write` target.
+///
+/// Each byte is printed as an 8-bit binary number followed by a space.
+///
+/// # Arguments
+/// - `$dst`: Destination implementing `core::fmt::Write`
+/// - `$data`: Slice of bytes to print
+///
+/// # Example
+/// ```ignore
+/// let buf = [0b10101010, 0b11110000];
+/// write_bin!(logger, &buf);
+/// // Output: "10101010 11110000 "
+/// ```
 #[macro_export]
 macro_rules! write_bin {
     ($dst:expr, $data:expr) => {
@@ -59,6 +73,7 @@ macro_rules! write_bin {
         }
     };
 }
+
 
 /// Measures execution cycles (or timestamps) for an expression using a timer.
 ///
