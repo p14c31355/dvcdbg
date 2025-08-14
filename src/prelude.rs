@@ -25,8 +25,3 @@ pub use crate::scanner::{
     scan_i2c,
     scan_i2c_with_ctrl,
 };
-
-#[cfg(feature = "quick_diag")]
-pub use crate::workflow::{
-    quick_diag,
-};

@@ -23,6 +23,6 @@ heapless = "0.8"
 default = []
 
 debug_log = []
-logger = ["debug_log"]
+logger = []
 scanner = ["logger"]
 macros = []

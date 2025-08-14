@@ -95,7 +95,7 @@ macro_rules! measure_cycles {
 ///
 /// # Example
 /// ```ignore
-/// loop_with_delay!(delay, { blink_led(); });
+/// loop_with_delay!(delay, 100, { blink_led(); });
 /// ```
 #[macro_export]
 macro_rules! loop_with_delay {
@@ -172,7 +172,7 @@ macro_rules! quick_diag {
 
         let _ = core::writeln!($serial, "=== Quick Diagnostic Complete ===");
     }};
-    ($serial:expr, $i2c:expr, $timer:expr) => {{
+    ($serial:expr, $i2c:expr) => {{
         let _ = core::writeln!($serial, "=== Quick Diagnostic Start ===");
         let _ = core::writeln!($serial, "Scanning I2C bus...");
         $crate::scan_i2c!($i2c, $serial);

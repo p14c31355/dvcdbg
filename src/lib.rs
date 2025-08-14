@@ -20,12 +20,4 @@ pub mod scanner;
 /// ```rust
 /// use dvcdbg::prelude::*;
 /// ```
-#[allow(unused_imports)]
-pub mod prelude {
-    #[cfg(feature = "logger")]
-    pub use crate::logger::*;
-    #[cfg(feature = "macros")]
-    pub use crate::macros::*;
-    #[cfg(feature = "scanner")]
-    pub use crate::scanner::*;
-}
+pub mod prelude;
