@@ -24,5 +24,5 @@ default = []
 
 logger = []
 scanner = ["logger"]
-macros = []
+macros = ["scanner"]
 quick_diag = ["logger", "scanner", "macros"]
