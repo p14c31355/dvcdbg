@@ -40,7 +40,7 @@ jobs:
         id: auth
 
       - name: Generate CHANGELOG
-        run: git cliff --config .github/cliff.toml --tag ${{ github.ref_name }} --output CHANGELOG.md --prepend CHANGELOG.md --latest
+        run: git cliff --config .github/cliff.toml --tag ${{ github.ref_name }} --output - --prepend CHANGELOG.md --latest
 
       - name: Commit CHANGELOG and Cargo.toml version bump
         run: |
