@@ -4,14 +4,13 @@
 //! Users can simply `use dvcdbg::prelude::*;` to access the main types and macros.
 
 #[cfg(feature = "logger")]
-pub use crate::logger::{
+pub use crate::{log, logger::{
     Logger,         // Trait for logging
     SerialLogger,   // Default serial logger
-    log,            // log! macro for formatted logging
-};
+}};
 
 #[cfg(feature = "macros")]
-pub use crate::macros::{
+pub use crate::{
     impl_fmt_write_for_serial,
     write_hex,
     write_bin,
