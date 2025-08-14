@@ -21,8 +21,7 @@
 - ✅ Feature flags allow selective compilation:
   - `logger` → logging utilities
   - `scanner` → I2C scanning utilities
-  - `macros` → helper macros like `impl_fmt_write_for_serial!`
-  - `quick_diag` → workflow macros combining logger + scanner + timing
+  - `macros` → helper macros (`impl_fmt_write_for_serial!`, `quick_diag!`, etc.)
 
 ---
 
