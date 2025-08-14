@@ -34,6 +34,14 @@ macro_rules! write_hex {
     };
 }
 
+macro_rules! write_bin {
+    ($dst:expr, $data:expr) => {
+        for &b in $data {
+            let _ = core::write!($dst, "{:08b} ", b);
+        }
+    };
+}
+
 #[macro_export]
 macro_rules! measure_cycles {
     ($expr:expr, $timer:expr) => {{
