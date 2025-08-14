@@ -132,11 +132,7 @@ macro_rules! assert_log {
 #[macro_export]
 macro_rules! scan_i2c {
     ($i2c:expr, $logger:expr) => {{
-        for addr in 0x03..0x78 {
-            if $i2c.write(addr, &[]).is_ok() {
-                let _ = core::writeln!($logger, "Found: 0x{:02X}", addr);
-            }
-        }
+        $crate::scanner::scan_i2c($i2c, $logger);
     }};
 }
 
