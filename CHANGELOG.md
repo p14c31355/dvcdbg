@@ -1,5 +1,28 @@
 ## [0.1.2] - 2025-08-14
+
+### Added
+
+- #36 Add adapter boilerplate generation macros
+- #37 Add useful macros
+- #37 Add binary writing macro
+- #37 Edit rustdoc
+- #37 Add macro workflow
+- #37 Edit rustdoc
+- Update README.md (quickstart section)
+
+### Chores
+
 - *(release)* Update changelog and version to
+- Features Organised
+- Docs: Edit README.md
+
+### Fix
+
+- Delete outdated feature
+
+### Fixed
+
+- #38 review respond: parts moduling & parts features
 ## [0.1.1] - 2025-08-14
 
 ### Chores
