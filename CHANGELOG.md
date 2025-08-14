@@ -1,3 +1,4 @@
+## [0.1.2] - 2025-08-14
 - *(release)* Update changelog and version to
 ## [0.1.1] - 2025-08-14
 
