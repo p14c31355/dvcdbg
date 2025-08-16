@@ -19,7 +19,7 @@
 /// impl_fmt_write_for_serial!(esp_idf_hal::uart::UartDriver, write);
 /// ```
 #[macro_export]
-macro_rules! impl_fmt_write_for_serial {
+macro_rules! corefmt_write_for_serial {
     ($type:ty, $write_method:ident) => {
         impl core::fmt::Write for $type {
             #[inline(always)]
@@ -34,6 +34,49 @@ macro_rules! impl_fmt_write_for_serial {
         }
     };
 }
+
+/// Macro that wraps any HAL-specific serial type in embedded-hal::serial::Write<u8>.
+#[macro_export]
+macro_rules! adapt_write_for_serial {
+    // avr-hal / arduino-hal Usart (four generic)
+    (avr_usart: $wrapper:ident, $write_fn:ident) => {
+        pub struct $wrapper<U, RX, TX, CLOCK>(pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>);
+
+        impl<U, RX, TX, CLOCK> embedded_hal::serial::Write<u8>
+            for $wrapper<U, RX, TX, CLOCK>
+        {
+            type Error = core::convert::Infallible;
+
+            fn write(&mut self, word: u8) -> nb::Result<(), Self::Error> {
+                self.0.$write_fn(word);
+                Ok(())
+            }
+
+            fn flush(&mut self) -> nb::Result<(), Self::Error> {
+                Ok(())
+            }
+        }
+    };
+
+    // General purpose (STM32 series, RP2040-hal series, etc., those that already have `impl Write<u8>`)
+    (generic: $wrapper:ident, $target:ty) => {
+        pub struct $wrapper(pub $target);
+
+        impl embedded_hal::serial::Write<u8> for $wrapper {
+            type Error = core::convert::Infallible;
+
+            fn write(&mut self, word: u8) -> nb::Result<(), Self::Error> {
+                self.0.write(word)?;
+                Ok(())
+            }
+
+            fn flush(&mut self) -> nb::Result<(), Self::Error> {
+                Ok(())
+            }
+        }
+    };
+}
+
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
 ///
