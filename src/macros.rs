@@ -7,31 +7,110 @@
 //! - Debugging assistance (assert, delayed loop, cycle measurement)
 //!
 
-/// Implements `core::fmt::Write` for any serial type.
+/// Wraps a serial peripheral that does **not** implement `embedded-hal::serial::Write<u8>`
+/// and provides implementations for:
+/// - [`core::fmt::Write`] → allows using `write!` / `writeln!`
+/// - [`embedded_hal::blocking::serial::Write`] → safe for blocking serials
+///
+/// # Variants
+///
+/// - `avr_usart`: For `arduino-hal` USARTs with 4 generics (`U, RX, TX, CLOCK`)
+/// - `generic`: For other types that have a simple blocking `write_byte`-like method
 ///
 /// # Arguments
-/// - `$type`: Target type (e.g., `arduino_hal::DefaultSerial`)
-/// - `$write_method`: 1-byte send method (e.g., `write_byte`, `write`)
 ///
-/// # Example
+/// - `$wrapper`: Wrapper type name
+/// - `$target`: Target type (for `generic`)
+/// - `$write_fn`: Method on the target that writes a single byte
+///
+/// # Examples
+///
+/// ## Arduino Uno (avr-hal)
 /// ```ignore
-/// impl_fmt_write_for_serial!(arduino_hal::DefaultSerial, write_byte);
-/// impl_fmt_write_for_serial!(esp_idf_hal::uart::UartDriver, write);
+/// use dvcdbg::adapt_serial;
+///
+/// adapt_serial!(avr_usart: UsartAdapter, write_byte);
+///
+/// let dp = arduino_hal::Peripherals::take().unwrap();
+/// let mut serial = arduino_hal::default_serial!(dp, 57600);
+/// let mut dbg_uart = UsartAdapter(serial);
+///
+/// // Use with dvcdbg
+/// dvcdbg::adapter!(dbg_uart);
+///
+/// // Also usable with fmt macros
+/// use core::fmt::Write;
+/// writeln!(dbg_uart, "Hello AVR!").ok();
+/// ```
+///
+/// ## Generic blocking serial (pseudo example)
+/// ```ignore
+/// struct MySerial;
+/// impl MySerial {
+///     fn write_byte(&mut self, b: u8) -> Result<(), ()> { Ok(()) }
+/// }
+///
+/// adapt_serial!(generic: MyAdapter, MySerial, write_byte);
+///
+/// let mut uart = MyAdapter(MySerial);
+/// writeln!(uart, "Logging via generic serial").ok();
+/// ```
+///
+/// ## STM32 / RP2040 / ESP32 HALs
+/// For types with a blocking `write_byte`-like method:
+/// ```ignore
+/// struct StmUart;
+/// impl StmUart {
+///     fn write_byte(&mut self, b: u8) -> Result<(), ()> { Ok(()) }
+/// }
+///
+/// adapt_serial!(generic: StmAdapter, StmUart, write_byte);
+/// let mut uart = StmAdapter(StmUart);
+/// writeln!(uart, "STM32 log").ok();
 /// ```
 #[macro_export]
-macro_rules! impl_fmt_write_for_serial {
-    ($type:ty, $write_method:ident) => {
-        impl core::fmt::Write for $type {
-            #[inline(always)]
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                for &b in s.as_bytes() {
-                    if self.$write_method(b).is_err() {
-                        return Err(core::fmt::Error);
-                    }
+macro_rules! adapt_serial {
+    // Internal helper to generate the impl blocks
+    (@impls $wrapper:ident, $write_fn:ident, $($generics:tt)*) => {
+        impl $($generics)* embedded_hal::blocking::serial::Write<u8>
+            for $wrapper $($generics)*
+        {
+            type Error = ();
+
+            fn bwrite_all(&mut self, buffer: &[u8]) -> Result<(), Self::Error> {
+                for &b in buffer {
+                    self.0.$write_fn(b).map_err(|_| ())?;
                 }
                 Ok(())
             }
+
+            fn bflush(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
         }
+
+        impl $($generics)* core::fmt::Write for $wrapper $($generics)* {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                use embedded_hal::blocking::serial::Write;
+                self.bwrite_all(s.as_bytes()).map_err(|_| core::fmt::Error)
+            }
+        }
+    };
+
+    // AVR-HAL USART (4 generics)
+    (avr_usart: $wrapper:ident, $write_fn:ident) => {
+        pub struct $wrapper<U, RX, TX, CLOCK>(
+            pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>
+        );
+
+        adapt_serial!(@impls $wrapper, $write_fn, <U, RX, TX, CLOCK>);
+    };
+
+    // Generic serial type with blocking write method
+    (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
+        pub struct $wrapper(pub $target);
+
+        adapt_serial!(@impls $wrapper, $write_fn,);
     };
 }
 
