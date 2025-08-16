@@ -27,4 +27,5 @@ pub use crate::{
 pub use crate::scanner::{
     scan_i2c,
     scan_i2c_with_ctrl,
+    scan_init_sequence,
 };
