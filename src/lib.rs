@@ -6,9 +6,11 @@
 //! Compatible with `no_std` and multiple HAL backends.
 
 #[cfg(feature = "logger")]
+#[macro_use]
 pub mod logger;
 
 #[cfg(feature = "macros")]
+#[macro_use]
 pub mod macros;
 
 #[cfg(feature = "scanner")]
