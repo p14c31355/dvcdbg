@@ -98,7 +98,7 @@ macro_rules! adapt_serial {
 
         adapt_serial!(@impls $wrapper, $write_fn,
             <U, RX, TX, CLOCK>,
-            where U: arduino_hal::usart::UsartOps<arduino_hal::atmega::Atmega, RX, TX>
+            where U: arduino_hal::usart::UsartOps<arduino_hal::pac::ATmega328p, RX, TX>
         );
     };
 
