@@ -54,7 +54,6 @@
 /// let mut uart = MyAdapter(MySerial);
 /// writeln!(uart, "Logging via generic serial").ok();
 /// ```
-
 #[macro_export]
 macro_rules! adapt_serial {
     // Internal helper to generate the impl blocks
