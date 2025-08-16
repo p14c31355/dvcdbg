@@ -88,7 +88,7 @@ macro_rules! adapt_serial {
     // AVR-HAL USART (ATmega)
     (avr_usart: $wrapper:ident, $write_fn:ident) => {
         pub struct $wrapper<
-            U,
+            U: arduino_hal::usart::UsartOps<arduino_hal::pac::ATmega328p, RX, TX>,
             RX,
             TX,
             CLOCK
