@@ -70,14 +70,10 @@
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    // AVR-HAL USART (4 generics)
-    (avr_usart: $wrapper:ident, $write_fn:ident) => {
-        pub struct $wrapper<U, RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>
-        );
-
-        impl<U, RX, TX, CLOCK> embedded_hal::blocking::serial::Write<u8>
-            for $wrapper<U, RX, TX, CLOCK>
+    // Internal helper to generate the impl blocks
+    (@impls $wrapper:ident, $write_fn:ident, $($generics:tt)*) => {
+        impl $($generics)* embedded_hal::blocking::serial::Write<u8>
+            for $wrapper $($generics)*
         {
             type Error = ();
 
@@ -93,7 +89,7 @@ macro_rules! adapt_serial {
             }
         }
 
-        impl<U, RX, TX, CLOCK> core::fmt::Write for $wrapper<U, RX, TX, CLOCK> {
+        impl $($generics)* core::fmt::Write for $wrapper $($generics)* {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 use embedded_hal::blocking::serial::Write;
                 self.bwrite_all(s.as_bytes()).map_err(|_| core::fmt::Error)
@@ -101,31 +97,20 @@ macro_rules! adapt_serial {
         }
     };
 
+    // AVR-HAL USART (4 generics)
+    (avr_usart: $wrapper:ident, $write_fn:ident) => {
+        pub struct $wrapper<U, RX, TX, CLOCK>(
+            pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>
+        );
+
+        adapt_serial!(@impls $wrapper, $write_fn, <U, RX, TX, CLOCK>);
+    };
+
     // Generic serial type with blocking write method
     (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
 
-        impl embedded_hal::blocking::serial::Write<u8> for $wrapper {
-            type Error = ();
-
-            fn bwrite_all(&mut self, buffer: &[u8]) -> Result<(), Self::Error> {
-                for &b in buffer {
-                    self.0.$write_fn(b).map_err(|_| ())?;
-                }
-                Ok(())
-            }
-
-            fn bflush(&mut self) -> Result<(), Self::Error> {
-                Ok(())
-            }
-        }
-
-        impl core::fmt::Write for $wrapper {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                use embedded_hal::blocking::serial::Write;
-                self.bwrite_all(s.as_bytes()).map_err(|_| core::fmt::Error)
-            }
-        }
+        adapt_serial!(@impls $wrapper, $write_fn,);
     };
 }
 
