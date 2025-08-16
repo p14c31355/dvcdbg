@@ -7,39 +7,6 @@
 //! - Debugging assistance (assert, delayed loop, cycle measurement)
 //!
 
-/// Internal macro: Implements `embedded-hal::serial::Write<u8>` for the given type.
-macro_rules! __impl_write_trait {
-    ($ty:ty, $write_fn:ident) => {
-        impl embedded_hal::serial::Write<u8> for $ty {
-            type Error = core::convert::Infallible;
-
-            #[inline(always)]
-            fn write(&mut self, word: u8) -> nb::Result<(), Self::Error> {
-                self.$write_fn(word);
-                Ok(())
-            }
-
-            #[inline(always)]
-            fn flush(&mut self) -> nb::Result<(), Self::Error> {
-                Ok(())
-            }
-        }
-
-        impl core::fmt::Write for $ty {
-            #[inline(always)]
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                for &b in s.as_bytes() {
-                    // If transmission fails, immediately return Err.
-                    if self.$write_fn(b).is_err() {
-                        return Err(core::fmt::Error);
-                    }
-                }
-                Ok(())
-            }
-        }
-    };
-}
-
 /// Wraps a serial peripheral that does **not** implement `embedded-hal::serial::Write<u8>`
 /// and provides implementations for:
 /// - [`core::fmt::Write`] → allows using `write!` / `writeln!`
