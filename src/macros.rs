@@ -7,17 +7,6 @@
 //! - Debugging assistance (assert, delayed loop, cycle measurement)
 //!
 
-/// Implements `core::fmt::Write` for any serial type.
-///
-/// # Arguments
-/// - `$type`: Target type (e.g., `arduino_hal::DefaultSerial`)
-/// - `$write_method`: 1-byte send method (e.g., `write_byte`, `write`)
-///
-/// # Example
-/// ```ignore
-/// impl_fmt_write_for_serial!(arduino_hal::DefaultSerial, write_byte);
-/// impl_fmt_write_for_serial!(esp_idf_hal::uart::UartDriver, write);
-/// ```
 /// Internal macro: Implements `embedded-hal::serial::Write<u8>` for the given type.
 macro_rules! __impl_write_trait {
     ($ty:ty, $write_fn:ident) => {
@@ -51,7 +40,74 @@ macro_rules! __impl_write_trait {
     };
 }
 
-/// Wrap any HAL type and implement the `Write` trait.
+/// Wraps a HAL-specific serial type and implements both
+/// [`embedded_hal::serial::Write<u8>`] and [`core::fmt::Write`].
+///
+/// This allows using any serial peripheral as a backend for
+/// `dvcdbg` logging or standard [`write!`] / [`writeln!`] macros.
+///
+/// # Variants
+///
+/// - `avr_usart`: Special case for [`arduino-hal`] USARTs, which use
+///   4 generic parameters (`Usart<U, RX, TX, CLOCK>`).
+/// - `generic`: Any other serial type (STM32, RP2040, ESP-IDF, etc.)
+///   where the type is monomorphic or already generic-safe.
+///
+/// # Arguments
+///
+/// - `$wrapper`: The new wrapper type name you want to expose.
+/// - `$target`: Target type (for `generic` only).
+/// - `$write_fn`: Method on the target type that writes one byte
+///   (e.g., `write`, `write_byte`).
+///
+/// # Examples
+///
+/// ## Arduino Uno (avr-hal)
+/// ```no_run
+/// use dvcdbg::adapt_serial;
+///
+/// adapt_serial!(avr_usart: UsartAdapter, write_byte);
+///
+/// fn main() {
+///     let dp = arduino_hal::Peripherals::take().unwrap();
+///     let mut serial = arduino_hal::default_serial!(dp, 57600);
+///
+///     let mut dbg_uart = UsartAdapter(serial);
+///
+///     // usable as dvcdbg backend
+///     dvcdbg::adapter!(dbg_uart);
+///
+///     // also usable with core::fmt::write!
+///     use core::fmt::Write;
+///     writeln!(dbg_uart, "Hello from AVR!").ok();
+/// }
+/// ```
+///
+/// ## STM32 (stm32f4xx-hal)
+/// ```ignore
+/// use dvcdbg::adapt_serial;
+///
+/// adapt_serial!(generic: UartAdapter, stm32f4xx_hal::serial::Tx<USART1>, write);
+///
+/// let tx: stm32f4xx_hal::serial::Tx<USART1> = /* init */;
+/// let mut dbg_uart = UartAdapter(tx);
+///
+/// dvcdbg::adapter!(dbg_uart);
+/// writeln!(dbg_uart, "stm32 log").ok();
+/// ```
+///
+/// ## ESP-IDF (esp-idf-hal)
+/// ```ignore
+/// use dvcdbg::adapt_serial;
+///
+/// adapt_serial!(generic: EspAdapter, esp_idf_hal::uart::UartDriver, write);
+///
+/// let uart = esp_idf_hal::uart::UartDriver::new(/* ... */)?;
+/// let mut dbg_uart = EspAdapter(uart);
+///
+/// dvcdbg::adapter!(dbg_uart);
+/// writeln!(dbg_uart, "esp32 log").ok();
+/// ```
 #[macro_export]
 macro_rules! adapt_serial {
     // avr-hal's Usart (with generics)
