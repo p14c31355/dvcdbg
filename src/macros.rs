@@ -7,21 +7,22 @@
 //! - Debugging assistance (assert, delayed loop, cycle measurement)
 //!
 
-/// Wraps a serial peripheral that does **not** implement `embedded-hal::serial::Write<u8>`
-/// and provides implementations for:
-/// - [`core::fmt::Write`] → allows using `write!` / `writeln!`
+/// # adapt_serial! macro
+///
+/// Wraps a serial peripheral that does **not** implement
+/// `embedded-hal::serial::Write<u8>` and provides implementations for:
+/// - [`core::fmt::Write`] → allows `write!` / `writeln!`
 /// - [`embedded_hal::blocking::serial::Write`] → safe for blocking serials
 ///
 /// # Variants
 ///
-/// - `avr_usart`: For `arduino-hal` USARTs on AVR MCUs (`U, RX, TX, CLOCK` generics).
-/// - `generic`: For any type that provides a simple blocking `write_byte(&mut self, u8)`
-///   method (e.g., STM32, RP2040, ESP32, or other HALs).
+/// - `avr_usart`: For `arduino-hal` USARTs (ATmega) with 4 generics (`U, RX, TX, CLOCK`)
+/// - `generic`: For any type that has a simple blocking `write_byte` method
 ///
 /// # Arguments
 ///
 /// - `$wrapper`: Wrapper type name
-/// - `$target`: Target type (only for `generic`)
+/// - `$target`: Target type (for `generic`)
 /// - `$write_fn`: Method on the target that writes a single byte
 ///
 /// # Examples
@@ -36,14 +37,11 @@
 /// let mut serial = arduino_hal::default_serial!(dp, 57600);
 /// let mut dbg_uart = UsartAdapter(serial);
 ///
-/// // Use with dvcdbg
-/// dvcdbg::adapter!(dbg_uart);
-///
 /// use core::fmt::Write;
 /// writeln!(dbg_uart, "Hello AVR!").ok();
 /// ```
 ///
-/// ## Generic blocking serial (STM32 / RP2040 / ESP32)
+/// ## Generic blocking serial
 /// ```ignore
 /// struct MySerial;
 /// impl MySerial {
@@ -51,6 +49,7 @@
 /// }
 ///
 /// adapt_serial!(generic: MyAdapter, MySerial, write_byte);
+///
 /// let mut uart = MyAdapter(MySerial);
 /// writeln!(uart, "Logging via generic serial").ok();
 /// ```
@@ -86,7 +85,7 @@ macro_rules! adapt_serial {
         }
     };
 
-    // AVR-HAL USART (4 generics)
+    // AVR-HAL USART (ATmega)
     (avr_usart: $wrapper:ident, $write_fn:ident) => {
         pub struct $wrapper<
             U,
@@ -97,17 +96,15 @@ macro_rules! adapt_serial {
             pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>
         );
 
-        adapt_serial!(
-            @impls $wrapper, $write_fn,
+        adapt_serial!(@impls $wrapper, $write_fn,
             <U, RX, TX, CLOCK>,
-            where U: arduino_hal::hal::usart::UsartOps<U, RX, TX>
+            where U: arduino_hal::usart::UsartOps<arduino_hal::atmega::Atmega, RX, TX>
         );
     };
 
     // Generic serial type with blocking write method
     (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
-
         adapt_serial!(@impls $wrapper, $write_fn, <>);
     };
 }
