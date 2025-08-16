@@ -59,7 +59,7 @@ macro_rules! __impl_write_trait {
 /// # Examples
 ///
 /// ## Arduino Uno (avr-hal)
-/// ```no_run
+/// ```ignore
 /// use dvcdbg::adapt_serial;
 ///
 /// adapt_serial!(avr_usart: UsartAdapter, write_byte);
@@ -89,9 +89,8 @@ macro_rules! __impl_write_trait {
 /// writeln!(uart, "Logging via generic serial").ok();
 /// ```
 ///
-/// ## STM32 / RP2040 / Other HALs
-/// For HAL types that **already implement blocking write_byte-like methods**
-/// but not embedded-hal Write<u8>:
+/// ## STM32 / RP2040 / ESP32 HALs
+/// For types with a blocking `write_byte`-like method:
 /// ```ignore
 /// struct StmUart;
 /// impl StmUart {
@@ -101,19 +100,6 @@ macro_rules! __impl_write_trait {
 /// adapt_serial!(generic: StmAdapter, StmUart, write_byte);
 /// let mut uart = StmAdapter(StmUart);
 /// writeln!(uart, "STM32 log").ok();
-/// ```
-///
-/// ## ESP32 / ESP-IDF HAL
-/// If you have a type with a `write_byte`-style method:
-/// ```ignore
-/// struct EspUart;
-/// impl EspUart {
-///     fn write_byte(&mut self, b: u8) -> Result<(), ()> { Ok(()) }
-/// }
-///
-/// adapt_serial!(generic: EspAdapter, EspUart, write_byte);
-/// let mut uart = EspAdapter(EspUart);
-/// writeln!(uart, "ESP32 log").ok();
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
@@ -142,10 +128,8 @@ macro_rules! adapt_serial {
 
         impl<U, RX, TX, CLOCK> core::fmt::Write for $wrapper<U, RX, TX, CLOCK> {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                for &b in s.as_bytes() {
-                    self.0.$write_fn(b).map_err(|_| core::fmt::Error)?;
-                }
-                Ok(())
+                use embedded_hal::blocking::serial::Write;
+                self.bwrite_all(s.as_bytes()).map_err(|_| core::fmt::Error)
             }
         }
     };
@@ -171,16 +155,12 @@ macro_rules! adapt_serial {
 
         impl core::fmt::Write for $wrapper {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                for &b in s.as_bytes() {
-                    self.0.$write_fn(b).map_err(|_| core::fmt::Error)?;
-                }
-                Ok(())
+                use embedded_hal::blocking::serial::Write;
+                self.bwrite_all(s.as_bytes()).map_err(|_| core::fmt::Error)
             }
         }
     };
 }
-
-
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
 ///
