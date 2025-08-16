@@ -22,4 +22,5 @@ pub mod scanner;
 /// ```rust
 /// use dvcdbg::prelude::*;
 /// ```
+#[macro_use]
 pub mod prelude;
