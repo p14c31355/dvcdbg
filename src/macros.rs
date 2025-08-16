@@ -100,9 +100,7 @@ macro_rules! adapt_serial {
         adapt_serial!(
             @impls $wrapper, $write_fn,
             <U, RX, TX, CLOCK>,
-            where U: arduino_hal::hal::usart::UsartOps<
-                arduino_hal::atmega_hal::Atmega, RX, TX
-            >
+            where U: arduino_hal::hal::usart::UsartOps<U, RX, TX>
         );
     };
 
