@@ -14,13 +14,14 @@
 ///
 /// # Variants
 ///
-/// - `avr_usart`: For `arduino-hal` USARTs with 4 generics (`U, RX, TX, CLOCK`)
-/// - `generic`: For other types that have a simple blocking `write_byte`-like method
+/// - `avr_usart`: For `arduino-hal` USARTs on AVR MCUs (`U, RX, TX, CLOCK` generics).
+/// - `generic`: For any type that provides a simple blocking `write_byte(&mut self, u8)`
+///   method (e.g., STM32, RP2040, ESP32, or other HALs).
 ///
 /// # Arguments
 ///
 /// - `$wrapper`: Wrapper type name
-/// - `$target`: Target type (for `generic`)
+/// - `$target`: Target type (only for `generic`)
 /// - `$write_fn`: Method on the target that writes a single byte
 ///
 /// # Examples
@@ -38,12 +39,11 @@
 /// // Use with dvcdbg
 /// dvcdbg::adapter!(dbg_uart);
 ///
-/// // Also usable with fmt macros
 /// use core::fmt::Write;
 /// writeln!(dbg_uart, "Hello AVR!").ok();
 /// ```
 ///
-/// ## Generic blocking serial (pseudo example)
+/// ## Generic blocking serial (STM32 / RP2040 / ESP32)
 /// ```ignore
 /// struct MySerial;
 /// impl MySerial {
@@ -51,23 +51,10 @@
 /// }
 ///
 /// adapt_serial!(generic: MyAdapter, MySerial, write_byte);
-///
 /// let mut uart = MyAdapter(MySerial);
 /// writeln!(uart, "Logging via generic serial").ok();
 /// ```
-///
-/// ## STM32 / RP2040 / ESP32 HALs
-/// For types with a blocking `write_byte`-like method:
-/// ```ignore
-/// struct StmUart;
-/// impl StmUart {
-///     fn write_byte(&mut self, b: u8) -> Result<(), ()> { Ok(()) }
-/// }
-///
-/// adapt_serial!(generic: StmAdapter, StmUart, write_byte);
-/// let mut uart = StmAdapter(StmUart);
-/// writeln!(uart, "STM32 log").ok();
-/// ```
+
 #[macro_export]
 macro_rules! adapt_serial {
     // Internal helper to generate the impl blocks
