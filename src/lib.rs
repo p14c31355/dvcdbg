@@ -6,15 +6,14 @@
 //! Compatible with `no_std` and multiple HAL backends.
 
 #[cfg(feature = "logger")]
-#[macro_use]
 pub mod logger;
+
+#[cfg(feature = "scanner")]
+pub mod scanner;
 
 #[cfg(feature = "macros")]
 #[macro_use]
 pub mod macros;
-
-#[cfg(feature = "scanner")]
-pub mod scanner;
 
 /// Prelude module for easy import of commonly used types and macros.
 ///

@@ -20,9 +20,8 @@ embedded-hal = "1.0.0"
 heapless = "0.8"
 
 [features]
-default = []
-
+default = ["logger", "scanner", "macros"]
 logger = []
-scanner = ["logger"]
-macros = ["scanner"]
+scanner = []
+macros = []
 quick_diag = ["logger", "scanner", "macros"]
