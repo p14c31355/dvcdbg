@@ -40,88 +40,143 @@ macro_rules! __impl_write_trait {
     };
 }
 
-/// Wraps a HAL-specific serial type and implements both
-/// [`embedded_hal::serial::Write<u8>`] and [`core::fmt::Write`].
-///
-/// This allows using any serial peripheral as a backend for
-/// `dvcdbg` logging or standard [`write!`] / [`writeln!`] macros.
+/// Wraps a serial peripheral that does **not** implement `embedded-hal::serial::Write<u8>`
+/// and provides implementations for:
+/// - [`core::fmt::Write`] → allows using `write!` / `writeln!`
+/// - [`embedded_hal::blocking::serial::Write`] → safe for blocking serials
 ///
 /// # Variants
 ///
-/// - `avr_usart`: Special case for [`arduino-hal`] USARTs, which use
-///   4 generic parameters (`Usart<U, RX, TX, CLOCK>`).
-/// - `generic`: Any other serial type (STM32, RP2040, ESP-IDF, etc.)
-///   where the type is monomorphic or already generic-safe.
+/// - `avr_usart`: For `arduino-hal` USARTs with 4 generics (`U, RX, TX, CLOCK`)
+/// - `generic`: For other types that have a simple blocking `write_byte`-like method
 ///
 /// # Arguments
 ///
-/// - `$wrapper`: The new wrapper type name you want to expose.
-/// - `$target`: Target type (for `generic` only).
-/// - `$write_fn`: Method on the target type that writes one byte
-///   (e.g., `write`, `write_byte`).
+/// - `$wrapper`: Wrapper type name
+/// - `$target`: Target type (for `generic`)
+/// - `$write_fn`: Method on the target that writes a single byte
 ///
 /// # Examples
 ///
 /// ## Arduino Uno (avr-hal)
-/// ```ignore
+/// ```no_run
 /// use dvcdbg::adapt_serial;
 ///
 /// adapt_serial!(avr_usart: UsartAdapter, write_byte);
 ///
-/// fn main() {
-///     let dp = arduino_hal::Peripherals::take().unwrap();
-///     let mut serial = arduino_hal::default_serial!(dp, 57600);
+/// let dp = arduino_hal::Peripherals::take().unwrap();
+/// let mut serial = arduino_hal::default_serial!(dp, 57600);
+/// let mut dbg_uart = UsartAdapter(serial);
 ///
-///     let mut dbg_uart = UsartAdapter(serial);
+/// // Use with dvcdbg
+/// dvcdbg::adapter!(dbg_uart);
 ///
-///     // usable as dvcdbg backend
-///     dvcdbg::adapter!(dbg_uart);
+/// // Also usable with fmt macros
+/// use core::fmt::Write;
+/// writeln!(dbg_uart, "Hello AVR!").ok();
+/// ```
 ///
-///     // also usable with core::fmt::write!
-///     use core::fmt::Write;
-///     writeln!(dbg_uart, "Hello from AVR!").ok();
+/// ## Generic blocking serial (pseudo example)
+/// ```ignore
+/// struct MySerial;
+/// impl MySerial {
+///     fn write_byte(&mut self, b: u8) -> Result<(), ()> { Ok(()) }
 /// }
+///
+/// adapt_serial!(generic: MyAdapter, MySerial, write_byte);
+///
+/// let mut uart = MyAdapter(MySerial);
+/// writeln!(uart, "Logging via generic serial").ok();
 /// ```
 ///
-/// ## STM32 (stm32f4xx-hal)
+/// ## STM32 / RP2040 / Other HALs
+/// For HAL types that **already implement blocking write_byte-like methods**
+/// but not embedded-hal Write<u8>:
 /// ```ignore
-/// use dvcdbg::adapt_serial;
+/// struct StmUart;
+/// impl StmUart {
+///     fn write_byte(&mut self, b: u8) -> Result<(), ()> { Ok(()) }
+/// }
 ///
-/// adapt_serial!(generic: UartAdapter, stm32f4xx_hal::serial::Tx<USART1>, write);
-///
-/// let tx: stm32f4xx_hal::serial::Tx<USART1> = /* init */;
-/// let mut dbg_uart = UartAdapter(tx);
-///
-/// dvcdbg::adapter!(dbg_uart);
-/// writeln!(dbg_uart, "stm32 log").ok();
+/// adapt_serial!(generic: StmAdapter, StmUart, write_byte);
+/// let mut uart = StmAdapter(StmUart);
+/// writeln!(uart, "STM32 log").ok();
 /// ```
 ///
-/// ## ESP-IDF (esp-idf-hal)
+/// ## ESP32 / ESP-IDF HAL
+/// If you have a type with a `write_byte`-style method:
 /// ```ignore
-/// use dvcdbg::adapt_serial;
+/// struct EspUart;
+/// impl EspUart {
+///     fn write_byte(&mut self, b: u8) -> Result<(), ()> { Ok(()) }
+/// }
 ///
-/// adapt_serial!(generic: EspAdapter, esp_idf_hal::uart::UartDriver, write);
-///
-/// let uart = esp_idf_hal::uart::UartDriver::new(/* ... */)?;
-/// let mut dbg_uart = EspAdapter(uart);
-///
-/// dvcdbg::adapter!(dbg_uart);
-/// writeln!(dbg_uart, "esp32 log").ok();
+/// adapt_serial!(generic: EspAdapter, EspUart, write_byte);
+/// let mut uart = EspAdapter(EspUart);
+/// writeln!(uart, "ESP32 log").ok();
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    // avr-hal's Usart (with generics)
+    // AVR-HAL USART (4 generics)
     (avr_usart: $wrapper:ident, $write_fn:ident) => {
         pub struct $wrapper<U, RX, TX, CLOCK>(
             pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>
         );
-        $crate::__impl_write_trait!($wrapper<U, RX, TX, CLOCK>, $write_fn);
+
+        impl<U, RX, TX, CLOCK> embedded_hal::blocking::serial::Write<u8>
+            for $wrapper<U, RX, TX, CLOCK>
+        {
+            type Error = ();
+
+            fn bwrite_all(&mut self, buffer: &[u8]) -> Result<(), Self::Error> {
+                for &b in buffer {
+                    self.0.$write_fn(b).map_err(|_| ())?;
+                }
+                Ok(())
+            }
+
+            fn bflush(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
+        }
+
+        impl<U, RX, TX, CLOCK> core::fmt::Write for $wrapper<U, RX, TX, CLOCK> {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                for &b in s.as_bytes() {
+                    self.0.$write_fn(b).map_err(|_| core::fmt::Error)?;
+                }
+                Ok(())
+            }
+        }
     };
 
-    // Generic (without generics)
+    // Generic serial type with blocking write method
     (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
-        $crate::__impl_write_trait!($wrapper, $write_fn);
+
+        impl embedded_hal::blocking::serial::Write<u8> for $wrapper {
+            type Error = ();
+
+            fn bwrite_all(&mut self, buffer: &[u8]) -> Result<(), Self::Error> {
+                for &b in buffer {
+                    self.0.$write_fn(b).map_err(|_| ())?;
+                }
+                Ok(())
+            }
+
+            fn bflush(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
+        }
+
+        impl core::fmt::Write for $wrapper {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                for &b in s.as_bytes() {
+                    self.0.$write_fn(b).map_err(|_| core::fmt::Error)?;
+                }
+                Ok(())
+            }
+        }
     };
 }
 
