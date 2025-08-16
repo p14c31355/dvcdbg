@@ -14,7 +14,7 @@ pub use crate::{
 
 #[cfg(feature = "macros")]
 pub use crate::{
-    impl_fmt_write_for_serial,
+    adapt_serial,
     write_hex,
     write_bin,
     measure_cycles,
