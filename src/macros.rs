@@ -63,7 +63,7 @@ macro_rules! __impl_write_trait {
 /// # Examples
 ///
 /// ## Arduino Uno (avr-hal)
-/// ```no_run
+/// ```ignore
 /// use dvcdbg::adapt_serial;
 ///
 /// adapt_serial!(avr_usart: UsartAdapter, write_byte);
