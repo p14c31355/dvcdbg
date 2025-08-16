@@ -99,7 +99,12 @@ macro_rules! adapt_serial {
 
     // AVR-HAL USART (4 generics)
     (avr_usart: $wrapper:ident, $write_fn:ident) => {
-        pub struct $wrapper<U, RX, TX, CLOCK>(
+        pub struct $wrapper<
+            U: arduino_hal::hal::usart::UsartOps<arduino_hal::atmega_hal::Atmega, RX, TX>,
+            RX,
+            TX,
+            CLOCK
+        >(
             pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>
         );
 
