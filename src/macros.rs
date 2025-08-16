@@ -110,7 +110,7 @@ macro_rules! adapt_serial {
     (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
 
-        adapt_serial!(@impls $wrapper, $write_fn, <> ,);
+        adapt_serial!(@impls $wrapper, $write_fn, <>);
     };
 }
 
