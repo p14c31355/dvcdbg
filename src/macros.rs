@@ -18,14 +18,30 @@
 /// impl_fmt_write_for_serial!(arduino_hal::DefaultSerial, write_byte);
 /// impl_fmt_write_for_serial!(esp_idf_hal::uart::UartDriver, write);
 /// ```
-#[macro_export]
-macro_rules! corefmt_write_for_serial {
-    ($type:ty, $write_method:ident) => {
-        impl core::fmt::Write for $type {
+/// Internal macro: Implements `embedded-hal::serial::Write<u8>` for the given type.
+macro_rules! __impl_write_trait {
+    ($ty:ty, $write_fn:ident) => {
+        impl embedded_hal::serial::Write<u8> for $ty {
+            type Error = core::convert::Infallible;
+
+            #[inline(always)]
+            fn write(&mut self, word: u8) -> nb::Result<(), Self::Error> {
+                self.$write_fn(word);
+                Ok(())
+            }
+
+            #[inline(always)]
+            fn flush(&mut self) -> nb::Result<(), Self::Error> {
+                Ok(())
+            }
+        }
+
+        impl core::fmt::Write for $ty {
             #[inline(always)]
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 for &b in s.as_bytes() {
-                    if self.$write_method(b).is_err() {
+                    // If transmission fails, immediately return Err.
+                    if self.$write_fn(b).is_err() {
                         return Err(core::fmt::Error);
                     }
                 }
@@ -35,47 +51,24 @@ macro_rules! corefmt_write_for_serial {
     };
 }
 
-/// Macro that wraps any HAL-specific serial type in embedded-hal::serial::Write<u8>.
+/// Wrap any HAL type and implement the `Write` trait.
 #[macro_export]
-macro_rules! adapt_write_for_serial {
-    // avr-hal / arduino-hal Usart (four generic)
+macro_rules! adapt_serial {
+    // avr-hal's Usart (with generics)
     (avr_usart: $wrapper:ident, $write_fn:ident) => {
-        pub struct $wrapper<U, RX, TX, CLOCK>(pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>);
-
-        impl<U, RX, TX, CLOCK> embedded_hal::serial::Write<u8>
-            for $wrapper<U, RX, TX, CLOCK>
-        {
-            type Error = core::convert::Infallible;
-
-            fn write(&mut self, word: u8) -> nb::Result<(), Self::Error> {
-                self.0.$write_fn(word);
-                Ok(())
-            }
-
-            fn flush(&mut self) -> nb::Result<(), Self::Error> {
-                Ok(())
-            }
-        }
+        pub struct $wrapper<U, RX, TX, CLOCK>(
+            pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>
+        );
+        $crate::__impl_write_trait!($wrapper<U, RX, TX, CLOCK>, $write_fn);
     };
 
-    // General purpose (STM32 series, RP2040-hal series, etc., those that already have `impl Write<u8>`)
-    (generic: $wrapper:ident, $target:ty) => {
+    // Generic (without generics)
+    (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
-
-        impl embedded_hal::serial::Write<u8> for $wrapper {
-            type Error = core::convert::Infallible;
-
-            fn write(&mut self, word: u8) -> nb::Result<(), Self::Error> {
-                self.0.write(word)?;
-                Ok(())
-            }
-
-            fn flush(&mut self) -> nb::Result<(), Self::Error> {
-                Ok(())
-            }
-        }
+        $crate::__impl_write_trait!($wrapper, $write_fn);
     };
 }
+
 
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
