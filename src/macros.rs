@@ -71,10 +71,10 @@
 #[macro_export]
 macro_rules! adapt_serial {
     // Internal helper to generate the impl blocks
-    (@impls $wrapper:ident, $write_fn:ident, <$($generics:tt)*>, $where:tt) => {
+    (@impls $wrapper:ident, $write_fn:ident, <$($generics:tt)*> $(, $where:tt)?) => {
         impl<$($generics)*> embedded_hal::blocking::serial::Write<u8>
             for $wrapper<$($generics)*>
-            $where
+            $( $where )?
         {
             type Error = ();
 
@@ -91,7 +91,7 @@ macro_rules! adapt_serial {
         }
 
         impl<$($generics)*> core::fmt::Write for $wrapper<$($generics)*>
-            $where
+            $( $where )?
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 use embedded_hal::blocking::serial::Write;
@@ -121,7 +121,7 @@ macro_rules! adapt_serial {
     };
 
     // Generic serial type with blocking write method
-    (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
+    (<$($generics),*>: $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
 
         adapt_serial!(@impls $wrapper, $write_fn, <>,);
