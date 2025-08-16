@@ -71,9 +71,10 @@
 #[macro_export]
 macro_rules! adapt_serial {
     // Internal helper to generate the impl blocks
-    (@impls $wrapper:ident, $write_fn:ident, $($generics:tt)*) => {
-        impl $($generics)* embedded_hal::blocking::serial::Write<u8>
-            for $wrapper $($generics)*
+    (@impls $wrapper:ident, $write_fn:ident, <$($generics:tt)*>, $where:tt) => {
+        impl<$($generics)*> embedded_hal::blocking::serial::Write<u8>
+            for $wrapper<$($generics)*>
+            $where
         {
             type Error = ();
 
@@ -89,7 +90,9 @@ macro_rules! adapt_serial {
             }
         }
 
-        impl $($generics)* core::fmt::Write for $wrapper $($generics)* {
+        impl<$($generics)*> core::fmt::Write for $wrapper<$($generics)*>
+            $where
+        {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 use embedded_hal::blocking::serial::Write;
                 self.bwrite_all(s.as_bytes()).map_err(|_| core::fmt::Error)
@@ -100,7 +103,7 @@ macro_rules! adapt_serial {
     // AVR-HAL USART (4 generics)
     (avr_usart: $wrapper:ident, $write_fn:ident) => {
         pub struct $wrapper<
-            U: arduino_hal::hal::usart::UsartOps<arduino_hal::atmega_hal::Atmega, RX, TX>,
+            U,
             RX,
             TX,
             CLOCK
@@ -108,16 +111,23 @@ macro_rules! adapt_serial {
             pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>
         );
 
-        adapt_serial!(@impls $wrapper, $write_fn, <U, RX, TX, CLOCK>);
+        adapt_serial!(
+            @impls $wrapper, $write_fn,
+            <U, RX, TX, CLOCK>,
+            where U: arduino_hal::hal::usart::UsartOps<
+                arduino_hal::atmega_hal::Atmega, RX, TX
+            >
+        );
     };
 
     // Generic serial type with blocking write method
     (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
 
-        adapt_serial!(@impls $wrapper, $write_fn,);
+        adapt_serial!(@impls $wrapper, $write_fn, <>,);
     };
 }
+
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
 ///
