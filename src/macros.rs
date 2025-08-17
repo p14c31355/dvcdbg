@@ -13,21 +13,38 @@
 /// - nb_write: wraps `nb`-style `write(byte)`
 /// - io_passthrough: wraps `embedded_io::Write` directly
 ///
-/// # Example:
+/// # Example
 /// ```ignore
-/// use embedded_io::Write;
+/// use core::convert::Infallible;
+/// use arduino_hal::prelude::*;
+/// use dvcdbg::adapt_serial;
+///
+/// let dp = arduino_hal::Peripherals::take().unwrap();
+/// let pins = arduino_hal::pins!(dp);
+/// let serial = arduino_hal::default_serial!(dp, pins, 57600);
+///
 /// adapt_serial!(UsartAdapter, nb_write = write, error = Infallible, flush = flush);
-/// let mut uart = UsartAdapter(serial);
-/// writeln!(uart, "Hello!").unwrap();
-/// uart.write_all(&[0x01, 0x02]).unwrap();
+///
+/// let mut dbg_uart = UsartAdapter(serial);
+/// use core::fmt::Write;
+/// writeln!(dbg_uart, "Hello AVR!").ok();
+/// dbg_uart.write_all(&[0x01, 0x02]).unwrap();
+/// dbg_uart.flush().unwrap();
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    // nb_write variant with optional flush
-    ($name:ident, nb_write = $write_fn:ident, error = $err_ty:ty $(, flush = $flush_fn:ident)?) => {
+    // nb_write variant
+    ($name:ident, nb_write = $write_fn:ident, error = $err_ty:ty $(, flush = $flush_fn:ident)? ) => {
         pub struct $name<T>(pub T);
 
-        impl<T> embedded_io::Write for $name<T> {
+        impl<T> embedded_io::ErrorType for $name<T> {
+            type Error = $err_ty;
+        }
+
+        impl<T> embedded_io::Write for $name<T>
+        where
+            T: Sized,
+        {
             type Error = $err_ty;
 
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
@@ -45,44 +62,14 @@ macro_rules! adapt_serial {
             }
         }
 
-        impl<T> core::fmt::Write for $name<T>
-        {
+        impl<T> core::fmt::Write for $name<T> {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                use embedded_io::Write;
-                self.write_all(s.as_bytes())
-                    .map_err(|_| core::fmt::Error)
-            }
-            fn flush(&mut self) -> core::fmt::Result {
-                use embedded_io::Write;
-                self.flush().map_err(|_| core::fmt::Error)
-            }
-        }
-    };
-
-    // passthrough variant for types that already implement embedded_io::Write
-    ($name:ident, io_passthrough) => {
-        pub struct $name<T>(pub T);
-
-        impl<T: embedded_io::Write> embedded_io::Write for $name<T> {
-            type Error = T::Error;
-
-            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-                self.0.write(buf)
-            }
-
-            fn flush(&mut self) -> Result<(), Self::Error> {
-                self.0.flush()
-            }
-        }
-
-        impl<T: embedded_io::Write> core::fmt::Write for $name<T> {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                self.0.write_all(s.as_bytes())
+                embedded_io::Write::write_all(self, s.as_bytes())
                     .map_err(|_| core::fmt::Error)
             }
 
             fn flush(&mut self) -> core::fmt::Result {
-                self.0.flush().map_err(|_| core::fmt::Error)
+                embedded_io::Write::flush(self).map_err(|_| core::fmt::Error)
             }
         }
     };
