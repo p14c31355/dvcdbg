@@ -127,13 +127,13 @@ macro_rules! adapt_serial {
         );
 
         macro_rules! __dvcdbg_define_usart_wrapper {
-            ( $pac_ty:ty, $( $feature:tt ),* ) => {
-                #[cfg(any($( $feature ),* ))]
+            ( $pac_ty:ty $(, $feature:meta )+ ) => {
+                #[cfg(any($( $feature ),*))]
                 pub struct $wrapper<RX, TX, CLOCK>(
                     pub arduino_hal::hal::usart::Usart<$pac_ty, RX, TX, CLOCK>
                 );
 
-                #[cfg(any($( $feature ),* ))]
+                #[cfg(any($( $feature ),*))]
                 adapt_serial!(@impls $wrapper, $write_fn,
                     <RX, TX, CLOCK>,
                     where $pac_ty: arduino_hal::usart::UsartOps<$pac_ty, RX, TX>
