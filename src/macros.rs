@@ -115,7 +115,8 @@ macro_rules! adapt_serial {
     // AVR-HAL USART (ATmega) with automatic PAC selection
     // Helper macro to define the USART wrapper struct for a specific PAC.
     // This avoids repeating the struct definition.
-        (avr_usart: $wrapper:ident, $write_fn:ident) => {
+    // Define individual rules for each board type.
+    (avr_usart: $wrapper:ident, $write_fn:ident) => {
         #[cfg(not(any(
             feature = "arduino-uno",
             feature = "arduino-nano",
@@ -127,34 +128,50 @@ macro_rules! adapt_serial {
         );
 
         macro_rules! __dvcdbg_define_usart_wrapper {
-            ( $pac_ty:ty $(, $feature:meta )+ ) => {
-                #[cfg(any($( $feature ),*))]
+            (uno, $pac:ty) => {
+                #[cfg(any(feature = "arduino-uno", feature = "arduino-nano"))]
                 pub struct $wrapper<RX, TX, CLOCK>(
-                    pub arduino_hal::hal::usart::Usart<$pac_ty, RX, TX, CLOCK>
+                    pub arduino_hal::hal::usart::Usart<$pac, RX, TX, CLOCK>
                 );
 
-                #[cfg(any($( $feature ),*))]
+                #[cfg(any(feature = "arduino-uno", feature = "arduino-nano"))]
                 adapt_serial!(@impls $wrapper, $write_fn,
                     <RX, TX, CLOCK>,
-                    where $pac_ty: arduino_hal::usart::UsartOps<$pac_ty, RX, TX>
+                    where $pac: arduino_hal::usart::UsartOps<$pac, RX, TX>
+                );
+            };
+
+            (mega, $pac:ty) => {
+                #[cfg(feature = "arduino-mega")]
+                pub struct $wrapper<RX, TX, CLOCK>(
+                    pub arduino_hal::hal::usart::Usart<$pac, RX, TX, CLOCK>
+                );
+
+                #[cfg(feature = "arduino-mega")]
+                adapt_serial!(@impls $wrapper, $write_fn,
+                    <RX, TX, CLOCK>,
+                    where $pac: arduino_hal::usart::UsartOps<$pac, RX, TX>
+                );
+            };
+
+            (leonardo, $pac:ty) => {
+                #[cfg(feature = "arduino-leonardo")]
+                pub struct $wrapper<RX, TX, CLOCK>(
+                    pub arduino_hal::hal::usart::Usart<$pac, RX, TX, CLOCK>
+                );
+
+                #[cfg(feature = "arduino-leonardo")]
+                adapt_serial!(@impls $wrapper, $write_fn,
+                    <RX, TX, CLOCK>,
+                    where $pac: arduino_hal::usart::UsartOps<$pac, RX, TX>
                 );
             };
         }
 
-        __dvcdbg_define_usart_wrapper!(
-            arduino_hal::pac::atmega328p::Peripherals,
-            feature = "arduino-uno", feature = "arduino-nano"
-        );
-
-        __dvcdbg_define_usart_wrapper!(
-            arduino_hal::pac::atmega2560::Peripherals,
-            feature = "arduino-mega"
-        );
-
-        __dvcdbg_define_usart_wrapper!(
-            arduino_hal::pac::atmega32u4::Peripherals,
-            feature = "arduino-leonardo"
-        );
+        // 各ボードのルールを呼び出す
+        __dvcdbg_define_usart_wrapper!(uno, arduino_hal::pac::atmega328p::Peripherals);
+        __dvcdbg_define_usart_wrapper!(mega, arduino_hal::pac::atmega2560::Peripherals);
+        __dvcdbg_define_usart_wrapper!(leonardo, arduino_hal::pac::atmega32u4::Peripherals);
     };
 
     // Generic serial type with blocking write method
