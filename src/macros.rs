@@ -56,12 +56,12 @@
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    // common inplementation
-    (@impls $wrapper:ty, $write_fn:ident) => {
+    // common implementation
+    (@impls $wrapper:ident, $inner:ident, $write_fn:ident) => {
         impl core::fmt::Write for $wrapper {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 for &b in s.as_bytes() {
-                    self.$write_fn(b).map_err(|_| core::fmt::Error)?;
+                    self.$inner.$write_fn(b).map_err(|_| core::fmt::Error)?;
                 }
                 Ok(())
             }
@@ -70,27 +70,23 @@ macro_rules! adapt_serial {
         impl embedded_hal::blocking::serial::Write<u8> for $wrapper {
             type Error = ();
             fn bwrite_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-                for &b in buf { self.$write_fn(b).map_err(|_| ())?; }
+                for &b in buf { self.$inner.$write_fn(b).map_err(|_| ())?; }
                 Ok(())
             }
             fn bflush(&mut self) -> Result<(), Self::Error> { Ok(()) }
         }
     };
 
-    // AVR USART
-    (avr_usart: $wrapper:ident, $instance:expr, $write_fn:ident) => {
-        pub struct $wrapper<T>(pub T);
-        impl From<typeof($instance)> for $wrapper<typeof($instance)> {
-            fn from(s: typeof($instance)) -> Self { Self(s) }
-        }
-
-        adapt_serial!(@impls $wrapper<typeof($instance)>, $write_fn);
+    // AVR USART (Type inference wrapping)
+    (avr_usart: $wrapper:ident, $instance:ident, $write_fn:ident) => {
+        pub struct $wrapper(pub _); // Encapsulating USART with type inference
+        adapt_serial!(@impls $wrapper, 0, $write_fn);
     };
 
-    // Generic serial type
+    // Generic serial
     (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
-        adapt_serial!(@impls $wrapper, $write_fn);
+        adapt_serial!(@impls $wrapper, 0, $write_fn);
     };
 }
 
