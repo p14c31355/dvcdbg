@@ -103,7 +103,7 @@ macro_rules! adapt_serial {
             $name<T>: IoWrite<Error = Infallible>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                IoWrite::write(self, s.as_bytes()).map(|_| ()).map_err(|_| core::fmt::Error)
+                IoWrite::write_all(self, s.as_bytes()).map_err(|_| core::fmt::Error)
             }
         }
     };
