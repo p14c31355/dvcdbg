@@ -16,7 +16,7 @@
 /// # Example:
 /// ```ignore
 /// use embedded_io::Write;
-/// adapt_serial!(UsartAdapter, nb_write = write, error = nb::Error<Infallible>, flush = flush);
+/// adapt_serial!(UsartAdapter, nb_write = write, error = Infallible, flush = flush);
 /// let mut uart = UsartAdapter(serial);
 /// writeln!(uart, "Hello!").unwrap();
 /// uart.write_all(&[0x01, 0x02]).unwrap();
