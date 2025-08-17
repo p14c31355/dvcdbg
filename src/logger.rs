@@ -90,16 +90,18 @@ use embedded_io::Write;
 /// Our adapter trait for byte-oriented serial.
 /// This replaces the old embedded-hal blocking::serial::Write<u8>.
 pub trait WriteAdapter {
-    fn write(&mut self, byte: u8);
+    type Error;
+    fn write(&mut self, byte: u8) -> Result<(), Self::Error>;
 }
 
 impl<T> WriteAdapter for T
 where
     T: Write,
 {
-    fn write(&mut self, byte: u8) {
-        // `Write::write` takes a buffer, so we wrap the single byte
-        let _ = self.write(&[byte]);
+    type Error = T::Error;
+    fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
+        // `Write::write_all` ensures the whole buffer is written.
+        self.write_all(&[byte])
     }
 }
 
