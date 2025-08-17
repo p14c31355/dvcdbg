@@ -40,11 +40,11 @@ macro_rules! adapt_serial {
 
         impl<T, E> core::fmt::Write for $wrapper<T>
         where
-            T: embedded_io::blocking::Write<u8, Error = E>,
+            T: embedded_hal::blocking::Write<u8, Error = E>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 for &b in s.as_bytes() {
-                    embedded_io::blocking::Write::write(&mut self.0, &[b])
+                    embedded_hal::blocking::Write::write(&mut self.0, &[b])
                         .map_err(|_| core::fmt::Error)?;
                 }
                 Ok(())
