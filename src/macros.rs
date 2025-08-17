@@ -93,7 +93,7 @@ macro_rules! adapt_serial {
             pub arduino_hal::hal::usart::Usart<arduino_hal::pac::$pac::Peripherals, RX, TX, CLOCK>
         );
 
-        adapt_serial!(@impls $wrapper, $write_fn,
+        adapt_serial!(@impls $name: $wrapper, $write_fn,
             <RX, TX, CLOCK>,
             where arduino_hal::pac::$pac::Peripherals:
                 arduino_hal::usart::UsartOps<arduino_hal::pac::$pac::Peripherals, RX, TX>
@@ -102,13 +102,13 @@ macro_rules! adapt_serial {
 
     // AVR-HAL USART (ATmega) with board type argument
     (avr_usart: $name:ident : $wrapper:ident, $write_fn:ident, $board:ident) => {
-        adapt_serial!(@avr_usart_impl $wrapper, $write_fn, $board);
+        adapt_serial!(@avr_usart_impl $name: $wrapper, $write_fn, $board);
     };
 
     // Generic serial type
     (generic: $name:ident : $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
-        adapt_serial!(@impls $wrapper, $write_fn, <>);
+        adapt_serial!(@impls $name: $wrapper, $write_fn, <>);
     };
 }
 
