@@ -24,31 +24,31 @@
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    ($wrapper:ident, $serial:ident) => {
-        pub struct $wrapper<T>(pub T);
+    ($name:ident) => {
+        pub struct $name<T>(pub T);
 
-        impl<T> $wrapper<T> {
-            pub fn new(inner: T) -> Self {
-                Self(inner)
-            }
-        }
-
-        impl<T, E> core::fmt::Write for $wrapper<T>
+        impl<T> core::fmt::Write for $name<T>
         where
-            T: embedded_hal::serial::Write<Word = u8, Error = E>,
+            T: embedded_hal::blocking::serial::Write<u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                use nb::block;
-                for &b in s.as_bytes() {
-                    block!(self.0.write(b)).map_err(|_| core::fmt::Error)?;
+                for b in s.as_bytes() {
+                    nb::block!(self.0.write(*b)).map_err(|_| core::fmt::Error)?;
                 }
                 Ok(())
             }
         }
+
+        impl<T> dvcdbg::logger::WriteAdapter for $name<T>
+        where
+            T: embedded_hal::blocking::serial::Write<u8>,
+        {
+            fn write(&mut self, byte: u8) {
+                let _ = nb::block!(self.0.write(byte));
+            }
+        }
     };
 }
-
-
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
 ///
