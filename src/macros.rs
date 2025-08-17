@@ -62,31 +62,31 @@ macro_rules! adapt_serial {
         pub struct $name<T>(pub T);
 
         /// Implement embedded-io Write for the wrapper
-        impl<T> ::embedded_io::Write for $name<T>
+        impl<T>: embedded_io::Write for $name<T>
         where
-            T: ::nb::serial::Write<u8>,
+            T: nb::serial::Write<u8>,
         {
-            type Error = <T as ::nb::serial::Write<u8>>::Error;
+            type Error = <T as nb::serial::Write<u8>>::Error;
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
-                    ::nb::block!(self.0.$write_fn(b))?;
+                    nb::block!(self.0.$write_fn(b))?;
                 }
                 Ok(buf.len())
             }
             fn flush(&mut self) -> Result<(), Self::Error> {
-                $(::nb::block!(self.0.$flush_fn())?;)?
+                $(nb::block!(self.0.$flush_fn())?;)?
                 Ok(())
             }
         }
 
         /// Implement core::fmt::Write for writeln! / write!
-        impl<T> ::core::fmt::Write for $name<T>
+        impl<T>: core::fmt::Write for $name<T>
         where
-            T: ::nb::serial::Write<u8>,
+            T: nb::serial::Write<u8>,
         {
-            fn write_str(&mut self, s: &str) -> ::core::fmt::Result {
-                <Self as ::embedded_io::Write>::write_all(self, s.as_bytes())
-                    .map_err(|_| ::core::fmt::Error)
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                <Self as embedded_io::Write> write_all(self, s.as_bytes())
+                    .map_err(|_| core::fmt::Error)
             }
         }
     };
