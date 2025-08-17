@@ -43,14 +43,21 @@
 /// # Examples
 ///
 /// ## Arduino Uno (avr-hal)
+///
+/// First, enable the feature for your board in `Cargo.toml`:
+/// ```toml
+/// [dependencies]
+/// dvcdbg = { version = "0.1.2", features = ["arduino-uno"] }
+/// ```
+///
+/// Then, use the macro in your code:
 /// ```ignore
 /// use arduino_hal::prelude::*;
 /// use dvcdbg::adapt_serial;
 ///
 /// adapt_serial!(
 ///     avr_usart: UsartAdapter,
-///     write_byte,
-///     arduino_hal::pac::atmega328p
+///     write_byte
 /// );
 ///
 /// let dp = arduino_hal::Peripherals::take().unwrap();
