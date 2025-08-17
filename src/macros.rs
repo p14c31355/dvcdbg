@@ -23,7 +23,6 @@
 ///
 /// - `$wrapper`: Wrapper type name
 /// - `$write_fn`: Method on the target that writes a single byte
-/// - `$usart`: Peripheral type from the PAC (e.g. `USART0`, `USART1`) for AVR-HAL
 ///
 /// # Examples
 ///
@@ -33,7 +32,7 @@
 /// use dvcdbg::adapt_serial;
 ///
 /// // Wrap Arduino's USART0
-/// adapt_serial!(avr_usart: UsartAdapter, write_byte, USART0);
+/// adapt_serial!(avr_usart: UsartAdapter, write_byte);
 ///
 /// let dp = arduino_hal::Peripherals::take().unwrap();
 /// let mut serial = arduino_hal::default_serial!(dp, 57600);
@@ -57,7 +56,7 @@
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    // Impl helper
+    // Impl helper (Defining unused arguments to maintain consistency within the API)
     (@impls $_name:ident : $wrapper:ident, $write_fn:ident, <$($generics:tt)*> $(, $where:tt)?) => {
         impl<$($generics)*> embedded_hal::blocking::serial::Write<u8>
             for $wrapper<$($generics)*>
