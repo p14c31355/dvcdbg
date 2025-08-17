@@ -85,6 +85,14 @@ pub trait Logger {
     }
 }
 
+/// Adapter trait for low-level byte writes.
+///
+/// Typically implemented by wrappers around `embedded_hal::serial::Write<u8>`.
+pub trait WriteAdapter {
+    /// Writes a single byte (blocking).
+    fn write(&mut self, byte: u8);
+}
+
 /// Logger that writes directly to any `core::fmt::Write` target.
 pub struct SerialLogger<'a, W: core::fmt::Write>(&'a mut W);
 
