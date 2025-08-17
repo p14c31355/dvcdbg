@@ -9,7 +9,7 @@ fn main() {
         "arduino-leonardo",
     ];
 
-        let enabled_count = features
+    let enabled_count = features
         .iter()
         .filter(|feature| {
             env::var(format!(

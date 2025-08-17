@@ -168,7 +168,6 @@ macro_rules! adapt_serial {
     };
 }
 
-
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
 ///
 /// # Example
@@ -207,7 +206,6 @@ macro_rules! write_bin {
         }
     };
 }
-
 
 /// Measures execution cycles (or timestamps) for an expression using a timer.
 ///
