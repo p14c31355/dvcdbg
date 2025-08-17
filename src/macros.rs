@@ -57,12 +57,11 @@
 #[macro_export]
 macro_rules! adapt_serial {
     ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
-            ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
         /// Serial adapter wrapper
         pub struct $name<T>(pub T);
 
         /// Implement embedded-io Write for the wrapper
-        impl<T>: embedded_io::Write for $name<T>
+        impl<T> embedded_io::Write for $name<T>
         where
             T: nb::serial::Write<u8>,
         {
@@ -80,17 +79,16 @@ macro_rules! adapt_serial {
         }
 
         /// Implement core::fmt::Write for writeln! / write!
-        impl<T>: core::fmt::Write for $name<T>
+        impl<T> core::fmt::Write for $name<T>
         where
             T: nb::serial::Write<u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                <Self as embedded_io::Write> write_all(self, s.as_bytes())
+                <Self as embedded_io::Write>::write_all(self, s.as_bytes())
                     .map_err(|_| core::fmt::Error)
             }
         }
     };
-}
 }
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
