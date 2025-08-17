@@ -7,59 +7,96 @@
 //! - Debugging assistance (assert, delayed loop, cycle measurement)
 //!
 
-/// # adapt_serial! macro
+/// ---------------------------------------------------------------------------
+/// adapt_serial!
 ///
-/// Wraps a serial peripheral that implements `embedded_hal::serial::Write<Word=u8>`
-/// and provides `core::fmt::Write` for easy `write!`/`writeln!`.
+/// Purpose of the macro:
+/// - Make serial ports such as UART/USART compatible with `embedded-io::Write` and `core::fmt::Write`.
+/// - Also supports 1-byte write API using `nb` (avr-hal, etc.)
 ///
-/// # Example
-/// ```ignore
-/// adapt_serial!(UsartAdapter);
-/// let mut uart = UsartAdapter(serial);
-/// writeln!(uart, "Hello!").ok();
-/// ```
+/// Usage (2 patterns):
+///
+/// 1) Types with 1-byte write in nb mode (e.g., `.write(u8) -> nb::Result<(), E>`)
+///    adapt_serial!(UsartAdapter, nb_write = write);
+///    // If flush is available
+///    adapt_serial!(UsartAdapter, nb_write = write, flush = flush);
+///
+/// 2) If you only want to wrap a type that already implements `embedded_io::Write`
+///    adapt_serial!(UsartAdapter, io_passthrough);
+///
+/// Generated code:
+/// - `pub struct <Adapter<T>>(pub T)`
+/// - `impl core::fmt::Write for <Adapter<T>>`
+/// - `impl embedded_io::Write  for <Adapter<T>>`
+///
+/// Caution:
+/// - In the nb backend, we have simplified the implementation by setting `type Error = core::convert::Infallible`.
+/// ---------------------------------------------------------------------------
 #[macro_export]
 macro_rules! adapt_serial {
-    ($name:ident) => {
+    // -------- Backend with 1-byte write that returns nb::Result<()> --------
+    ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)? ) => {
         pub struct $name<T>(pub T);
 
-        impl<T> core::fmt::Write for $name<T>
-        where
-            T: embedded_hal::serial::Write<u8>,
-        {
+        impl<T> core::fmt::Write for $name<T> {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                // Pack 1 byte at a time with nb::block macro
                 for &b in s.as_bytes() {
-                    nb::block!(self.0.write(b)).map_err(|_| core::fmt::Error)?;
+                    let _ = nb::block!(self.0.$write_fn(b)).map_err(|_| core::fmt::Error)?;
                 }
                 Ok(())
             }
         }
 
-        // embedded-io::Write implementation
-        impl<T> embedded_io::Write for $name<T>
-        where
-            T: embedded_hal::serial::Write<u8>,
-        {
-            type Error = T::Error;
+        impl<T> embedded_io::Write for $name<T> {
+            // Since most nb implementations do not actually fail, let's first decide on Infallible.
+            type Error = core::convert::Infallible;
 
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
-                    nb::block!(self.0.write(b))?;
+                    // Discard the error and proceed
+                    let _ = nb::block!(self.0.$write_fn(b));
                 }
                 Ok(buf.len())
             }
 
             fn flush(&mut self) -> Result<(), Self::Error> {
-                nb::block!(self.0.flush())
+                $(
+                    // Call only if there is a flush method.
+                    let _ = nb::block!(self.0.$flush_fn());
+                )?
+                Ok(())
+            }
+        }
+    };
+
+    // -------- Simply wrap what has already been implemented in embedded-io::Write --------
+    ($name:ident, io_passthrough) => {
+        pub struct $name<T>(pub T);
+
+        impl<T: embedded_io::Write> embedded_io::Write for $name<T> {
+            type Error = <T as embedded_io::ErrorType>::Error;
+
+            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+                self.0.write(buf)
+            }
+            fn flush(&mut self) -> Result<(), Self::Error> {
+                self.0.flush()
             }
         }
 
-        impl<T> dvcdbg::logger::WriteAdapter for $name<T>
-        where
-            T: embedded_hal::serial::Write<u8>,
-        {
-            fn write(&mut self, byte: u8) {
-                let _ = nb::block!(self.0.write(byte));
+        impl<T: embedded_io::Write> core::fmt::Write for $name<T> {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                // write_all compatible
+                let mut left = s.as_bytes();
+                while !left.is_empty() {
+                    match self.0.write(left) {
+                        Ok(0) => return Err(core::fmt::Error),
+                        Ok(n) => left = &left[n..],
+                        Err(_) => return Err(core::fmt::Error),
+                    }
+                }
+                Ok(())
             }
         }
     };
