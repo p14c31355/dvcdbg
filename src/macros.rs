@@ -21,32 +21,33 @@
 /// # Examples
 ///
 /// ```ignore
-/// adapt_serial!(MySerialAdapter, serial, write_byte);
-/// let mut uart = MySerialAdapter::new(serial);
-/// writeln!(uart, "Hello embedded!").ok();
+/// adapt_serial!(UsartAdapter, serial_port, write_byte);
+/// let mut uart = UsartAdapter(serial_port);
+/// let mut logger = SerialLogger::new(&mut uart);
+/// writeln!(logger, "Hello embedded!").ok();
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    ($wrapper:ident, $serial:expr, $write_fn:ident) => {
-
+    ($wrapper:ident, $serial:ident, $write_fn:ident) => {
+        // Structure wrapping the specified serial
         pub struct $wrapper<T>(pub T);
-
-        impl<T, E> core::fmt::Write for $wrapper<T>
-        where
-            T: embedded_hal::serial::Write<u8, Error = E>,
-        {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                for b in s.as_bytes() {
-                    // blocking transmission
-                    nb::block!(self.0.$write_fn(*b)).map_err(|_| core::fmt::Error)?;
-                }
-                Ok(())
-            }
-        }
 
         impl<T> $wrapper<T> {
             pub fn new(inner: T) -> Self {
-                $wrapper(inner)
+                Self(inner)
+            }
+        }
+
+        impl<T, E> core::fmt::Write for $wrapper<T>
+        where
+            T: embedded_io::blocking::Write<u8, Error = E>,
+        {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                for &b in s.as_bytes() {
+                    embedded_io::blocking::Write::write(&mut self.0, &[b])
+                        .map_err(|_| core::fmt::Error)?;
+                }
+                Ok(())
             }
         }
     };
