@@ -64,19 +64,17 @@ macro_rules! adapt_serial {
         impl<T> embedded_io::Write for $name<T>
         where
             T: nb::Write<u8>,
-            <T as nb::Write<u8>>::Error: core::fmt::Debug,
         {
             fn write(&mut self, buf: &[u8]) -> Result<usize, embedded_io::Error> {
                 for &b in buf {
-                    nb::block!(self.0.$write_fn(b)).map_err(|_| embedded_io::ErrorKind::Other)?;
+                    nb::block!(self.0.$write_fn(b))
+                        .map_err(|_| embedded_io::ErrorKind::Other)?;
                 }
                 Ok(buf.len())
             }
 
             fn flush(&mut self) -> Result<(), embedded_io::Error> {
-                $(
-                    nb::block!(self.0.$flush_fn()).map_err(|_| embedded_io::ErrorKind::Other)?;
-                )?
+                $(nb::block!(self.0.$flush_fn()).map_err(|_| embedded_io::ErrorKind::Other)?;)?
                 Ok(())
             }
         }
@@ -85,7 +83,6 @@ macro_rules! adapt_serial {
         impl<T> core::fmt::Write for $name<T>
         where
             T: nb::Write<u8>,
-            <T as nb::Write<u8>>::Error: core::fmt::Debug,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 <Self as embedded_io::Write>::write_all(self, s.as_bytes())
