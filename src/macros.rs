@@ -9,15 +9,15 @@
 
 /// # adapt_serial! macro
 ///
-/// Creates a newtype wrapper around a serial peripheral implementing
-/// `embedded_io::blocking::Write<u8>` and provides `core::fmt::Write`
-/// for use with `SerialLogger` or `write!` / `writeln!`.
+/// Serial adapter macro for embedded-hal 1.0 `serial::Write<Word = u8>`
+/// Produces a newtype wrapper that implements `core::fmt::Write`
+/// for use with logging or `write!` / `writeln!`.
 ///
 /// # Arguments
 ///
-/// - `$wrapper`: Name of the wrapper struct
-/// - `$serial`: The HAL serial object (used only in example; macro just defines wrapper)
-/// - `$write_fn`: Ignored (kept for backward compatibility)
+/// - `$wrapper`: Name of the wrapper type
+/// - `$serial`: Serial object (only for documentation / example)
+/// - `$write_fn`: Method on the target that writes a single byte (embedded-hal 1.0 ignores this)
 ///
 /// # Example
 ///
@@ -30,7 +30,7 @@
 #[macro_export]
 macro_rules! adapt_serial {
     ($wrapper:ident, $serial:ident, $write_fn:ident) => {
-        /// Wrapper around the given serial peripheral
+        /// Wrapper newtype around a serial peripheral
         pub struct $wrapper<T>(pub T);
 
         impl<T> $wrapper<T> {
@@ -39,14 +39,37 @@ macro_rules! adapt_serial {
             }
         }
 
+        // embedded-hal 1.0 support: Blocking write
         impl<T, E> core::fmt::Write for $wrapper<T>
         where
             T: embedded_hal::serial::Write<u8, Error = E>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                // nb::block! using to blocking async Write
+                use nb::block;
                 for &b in s.as_bytes() {
-                    nb::block!(self.0.write(b)).map_err(|_| core::fmt::Error)?;
+                    block!(self.0.write(b)).map_err(|_| core::fmt::Error)?;
                 }
+                Ok(())
+            }
+        }
+
+        // Optionally implement embedded-hal blocking Write<u8>
+        impl<T, E> embedded_hal::blocking::serial::Write<u8> for $wrapper<T>
+        where
+            T: embedded_hal::serial::Write<u8, Error = E>,
+        {
+            type Error = E;
+
+            fn bwrite_all(&mut self, buffer: &[u8]) -> Result<(), Self::Error> {
+                use nb::block;
+                for &b in buffer {
+                    block!(self.0.write(b))?;
+                }
+                Ok(())
+            }
+
+            fn bflush(&mut self) -> Result<(), Self::Error> {
                 Ok(())
             }
         }
