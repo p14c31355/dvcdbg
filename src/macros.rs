@@ -128,8 +128,8 @@ macro_rules! adapt_serial {
 
         adapt_serial!(@impls $wrapper, $write_fn,
             <RX, TX, CLOCK>,
-            where RX: arduino_hal::hal::usart::Read<u8>,
-                  TX: arduino_hal::hal::usart::Write<u8>
+            RX: arduino_hal::hal::usart::Read<u8>,
+            TX: arduino_hal::hal::usart::Write<u8>
         );
     };
 
