@@ -1,7 +1,7 @@
 /// Scanner utilities for I2C bus device discovery and analysis.
 ///
 /// Supports both embedded-hal 0.2.x and 1.0.x through feature flags:
-/// - `ehal_0_2` → uses `blocking::i2c::{Write}`
+/// - `ehal_0_2` → uses `blocking::i2c::Write`
 /// - `ehal_1_0` → uses `i2c::I2c`
 ///
 /// # Examples
@@ -9,20 +9,12 @@
 /// ```ignore
 /// use dvcdbg::logger::{Logger, SerialLogger};
 ///
-/// #[cfg(feature = "ehal_1_0")]
-/// use embedded_hal::i2c::I2c;
+/// let mut i2c = /* your i2c interface */;
+/// let mut logger = /* your logger */;
 ///
-/// #[cfg(feature = "ehal_0_2")]
-/// use embedded_hal::blocking::i2c::Write;
-///
-/// fn main() {
-///     let mut i2c = /* your i2c interface */;
-///     let mut logger = /* your logger */;
-///
-///     scan_i2c(&mut i2c, &mut logger);
-///     scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
-///     scan_init_sequence(&mut i2c, &mut logger, &[0x00, 0x01]);
-/// }
+/// scan_i2c(&mut i2c, &mut logger);
+/// scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
+/// scan_init_sequence(&mut i2c, &mut logger, &[0x00, 0xA5]);
 /// ```
 use crate::log;
 use crate::logger::Logger;
@@ -32,64 +24,73 @@ use heapless::Vec;
 use embedded_hal_1::i2c::I2c;
 
 #[cfg(feature = "ehal_0_2")]
-use embedded_hal_0_2::blocking::i2c::Write;
+use embedded_hal::blocking::i2c::Write;
 
-/// Scan the I2C bus for connected devices (addresses 0x03..=0x77)
+/// Scan the I2C bus for connected devices (addresses 0x03 to 0x77).
 pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
 where
     L: Logger,
-    #[cfg(feature = "ehal_1_0")]
-    I2C: I2c,
-    #[cfg(feature = "ehal_0_2")]
-    I2C: Write,
 {
     log!(logger, "[scan] Scanning I2C bus...");
+
     for addr in 0x03..=0x77 {
         let ok = {
             #[cfg(feature = "ehal_1_0")]
-            { i2c.write(addr, &[]).is_ok() }
+            {
+                embedded_hal_1::i2c::I2c::write(i2c, addr, &[]).is_ok()
+            }
 
             #[cfg(feature = "ehal_0_2")]
-            { i2c.write(addr, &[]).is_ok() }
+            {
+                embedded_hal::blocking::i2c::Write::write(i2c, addr, &[]).is_ok()
+            }
         };
 
         if ok {
             log!(logger, "[ok] Found device at 0x{:02X}", addr);
         }
     }
+
     log!(logger, "[info] I2C scan complete.");
 }
 
-/// Scan I2C bus with provided control bytes
+/// Scan the I2C bus with specified control bytes.
 pub fn scan_i2c_with_ctrl<I2C, L>(i2c: &mut I2C, logger: &mut L, control_bytes: &[u8])
 where
     L: Logger,
-    #[cfg(feature = "ehal_1_0")] I2C: I2c,
-    #[cfg(feature = "ehal_0_2")] I2C: Write,
 {
-    log!(logger, "[scan] Scanning I2C bus with control bytes: {:02X?}", control_bytes);
+    log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
+
     for addr in 0x03..=0x77 {
         let ok = {
             #[cfg(feature = "ehal_1_0")]
-            { i2c.write(addr, control_bytes).is_ok() }
+            {
+                embedded_hal_1::i2c::I2c::write(i2c, addr, control_bytes).is_ok()
+            }
 
             #[cfg(feature = "ehal_0_2")]
-            { i2c.write(addr, control_bytes).is_ok() }
+            {
+                embedded_hal::blocking::i2c::Write::write(i2c, addr, control_bytes).is_ok()
+            }
         };
 
         if ok {
-            log!(logger, "[ok] Found device at 0x{:02X} (ctrl bytes: {:02X?})", addr, control_bytes);
+            log!(
+                logger,
+                "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})",
+                addr,
+                control_bytes
+            );
         }
     }
+
     log!(logger, "[info] I2C scan complete.");
 }
 
-/// Scan I2C bus with an initialization sequence
+/// Scan the I2C bus by testing an initialization sequence.
 pub fn scan_init_sequence<I2C, L>(i2c: &mut I2C, logger: &mut L, init_sequence: &[u8])
 where
     L: Logger,
-    #[cfg(feature = "ehal_1_0")] I2C: I2c,
-    #[cfg(feature = "ehal_0_2")] I2C: Write,
 {
     log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
 
@@ -101,19 +102,31 @@ where
         for addr in 0x03..=0x77 {
             let ok = {
                 #[cfg(feature = "ehal_1_0")]
-                { i2c.write(addr, &[0x00, cmd]).is_ok() }
+                {
+                    embedded_hal_1::i2c::I2c::write(i2c, addr, &[0x00, cmd]).is_ok()
+                }
 
                 #[cfg(feature = "ehal_0_2")]
-                { i2c.write(addr, &[0x00, cmd]).is_ok() }
+                {
+                    embedded_hal::blocking::i2c::Write::write(i2c, addr, &[0x00, cmd]).is_ok()
+                }
             };
 
             if ok {
-                log!(logger, "[ok] Found device at 0x{:02X} responding to command 0x{:02X}", addr, cmd);
+                log!(
+                    logger,
+                    "[ok] Found device at 0x{:02X} responding to command 0x{:02X}",
+                    addr,
+                    cmd
+                );
             }
         }
 
         if detected_cmds.push(cmd).is_err() {
-            log!(logger, "[warn] Detected commands buffer is full, results may be incomplete!");
+            log!(
+                logger,
+                "[warn] Detected commands buffer is full, results may be incomplete!"
+            );
         }
     }
 
