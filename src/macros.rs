@@ -126,11 +126,7 @@ macro_rules! adapt_serial {
         #[cfg(feature = "arduino-leonardo")]
         __dvcdbg_define_usart_wrapper!(arduino_hal::pac::atmega32u4::Peripherals);
 
-        adapt_serial!(@impls $wrapper, $write_fn,
-            <RX, TX, CLOCK>,
-            RX: arduino_hal::hal::usart::Read<u8>,
-            TX: arduino_hal::hal::usart::Write<u8>
-        );
+        adapt_serial!(@impls $wrapper, $write_fn, <RX, TX, CLOCK>);
     };
 
     // Generic serial type with blocking write method
