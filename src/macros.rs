@@ -9,66 +9,100 @@
 
 /// Macro to adapt a serial peripheral into a fmt::Write + embedded_io::Write bridge.
 ///
-/// io_passthrough variant was removed as it provided little value and added unnecessary complexity.
+/// # Arguments
+/// - '$name' -> Name of the generated structure
+/// - 'nb_write' -> Serial write function name required by HAL
+/// - 'flush(optional)' -> Function for non-blocking transmission of one byte at a time using the nb crate function
 /// 
 /// # Example
+///
+/// ## Using Arduino HAL Serial
 /// ```ignore
-/// use core::convert::Infallible;
 /// use arduino_hal::prelude::*;
 /// use dvcdbg::adapt_serial;
 /// use core::fmt::Write;
 ///
+/// // Wrap the built-in serial
+/// adapt_serial!(UsartAdapter, nb_write = write, flush = flush);
+///
 /// let dp = arduino_hal::Peripherals::take().unwrap();
 /// let pins = arduino_hal::pins!(dp);
 /// let serial = arduino_hal::default_serial!(dp, pins, 57600);
-///
-/// adapt_serial!(UsartAdapter, nb_write = write, error = Infallible, flush = flush);
-///
 /// let mut dbg_uart = UsartAdapter(serial);
-/// writeln!(dbg_uart, "Hello AVR!").ok();
-/// // Use fully qualified syntax to avoid name conflicts with core::fmt::Write
-/// embedded_io::Write::write_all(&mut dbg_uart, &[0x01, 0x02]).unwrap();
-/// embedded_io::Write::flush(&mut dbg_uart).unwrap();
+///
+/// writeln!(dbg_uart, "Hello from embedded-io bridge!").unwrap();
+/// dbg_uart.write_all(&[0x01, 0x02, 0x03]).unwrap();
+/// ```
+///
+/// ## Using a custom serial-like type
+/// ```ignore
+/// use dvcdbg::adapt_serial;
+/// use core::convert::Infallible;
+/// use core::fmt::Write;
+/// use nb;
+///
+/// // Define a simple serial-like type
+/// struct MySerial;
+///
+/// impl nb::serial::Write<u8> for MySerial {
+///     type Error = Infallible;
+///
+///     fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> {
+///         Ok(())
+///     }
+///
+///     fn flush(&mut self) -> nb::Result<(), Self::Error> {
+///         Ok(())
+///     }
+/// }
+///
+/// // Adapt it with the macro
+/// adapt_serial!(MyAdapter, nb_write = write, error = Infallible, flush = flush);
+///
+/// let mut uart = MyAdapter(MySerial);
+/// writeln!(uart, "Hello via custom serial").unwrap();
+/// uart.write_all(&[0xAA, 0xBB]).unwrap();
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
     // nb_write variant
-    ($name:ident, nb_write = $write_fn:ident, error = $err_ty:ty $(, flush = $flush_fn:ident)? ) => {
+    ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
+        use core::convert::Infallible;
+        use embedded_io::Write as IoWrite;
+        use nb::block;
+
+        /// Serial adapter wrapper
         pub struct $name<T>(pub T);
 
-        impl<T> embedded_io::ErrorType for $name<T> {
-            type Error = $err_ty;
-        }
-
-        impl<T> embedded_io::Write for $name<T>
+        /// Implement embedded-io Write for the wrapper
+        impl<T> IoWrite for $name<T>
         where
-            T: Sized,
+            T: $crate::prelude::_embedded_hal_serial_Write<u8>, // trait bound for Arduino HAL serial
         {
-            type Error = $err_ty;
+            type Error = Infallible;
 
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
-                    nb::block!(self.0.$write_fn(b))?;
+                    block!(self.0.$write_fn(b)).ok();
                 }
                 Ok(buf.len())
             }
 
             fn flush(&mut self) -> Result<(), Self::Error> {
                 $(
-                    nb::block!(self.0.$flush_fn())?;
+                    block!(self.0.$flush_fn()).ok();
                 )?
                 Ok(())
             }
         }
 
-        impl<T> core::fmt::Write for $name<T> {
+        /// Implement core::fmt::Write for use with writeln! / write!
+        impl<T> core::fmt::Write for $name<T>
+        where
+            $name<T>: IoWrite<Error = Infallible>,
+        {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                embedded_io::Write::write_all(self, s.as_bytes())
-                    .map_err(|_| core::fmt::Error)
-            }
-
-            fn flush(&mut self) -> core::fmt::Result {
-                embedded_io::Write::flush(self).map_err(|_| core::fmt::Error)
+                IoWrite::write(self, s.as_bytes()).map(|_| ()).map_err(|_| core::fmt::Error)
             }
         }
     };
