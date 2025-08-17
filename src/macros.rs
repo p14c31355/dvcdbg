@@ -12,13 +12,9 @@
 /// Wraps a serial peripheral that implements `embedded_hal::serial::Write<Word=u8>`
 /// and provides `core::fmt::Write` for easy `write!`/`writeln!`.
 ///
-/// # Arguments
-/// - `$wrapper`: newtype wrapper name
-/// - `$serial`: variable name of the HAL serial
-///
 /// # Example
 /// ```ignore
-/// adapt_serial!(UsartAdapter, serial);
+/// adapt_serial!(UsartAdapter);
 /// let mut uart = UsartAdapter(serial);
 /// writeln!(uart, "Hello!").ok();
 /// ```
