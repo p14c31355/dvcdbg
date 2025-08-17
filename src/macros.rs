@@ -127,16 +127,13 @@ macro_rules! adapt_serial {
         );
 
         macro_rules! __dvcdbg_define_usart_wrapper {
-            (
-                $pac_ty:ty,
-                [ $( $feature:tt ),* ]
-            ) => {
-                #[cfg(any( $( $feature ),* ))]
+            ( $pac_ty:ty, $( $feature:tt ),* ) => {
+                #[cfg(any($( $feature ),* ))]
                 pub struct $wrapper<RX, TX, CLOCK>(
                     pub arduino_hal::hal::usart::Usart<$pac_ty, RX, TX, CLOCK>
                 );
 
-                #[cfg(any( $( $feature ),* ))]
+                #[cfg(any($( $feature ),* ))]
                 adapt_serial!(@impls $wrapper, $write_fn,
                     <RX, TX, CLOCK>,
                     where $pac_ty: arduino_hal::usart::UsartOps<$pac_ty, RX, TX>
@@ -146,17 +143,17 @@ macro_rules! adapt_serial {
 
         __dvcdbg_define_usart_wrapper!(
             arduino_hal::pac::atmega328p::Peripherals,
-            [feature = "arduino-uno", feature = "arduino-nano"]
+            feature = "arduino-uno", feature = "arduino-nano"
         );
 
         __dvcdbg_define_usart_wrapper!(
             arduino_hal::pac::atmega2560::Peripherals,
-            [feature = "arduino-mega"]
+            feature = "arduino-mega"
         );
 
         __dvcdbg_define_usart_wrapper!(
             arduino_hal::pac::atmega32u4::Peripherals,
-            [feature = "arduino-leonardo"]
+            feature = "arduino-leonardo"
         );
     };
 
