@@ -16,49 +16,23 @@
 ///
 /// # Variants
 ///
-/// - `avr_usart`: For `arduino-hal` USARTs (ATmega) with generics `RX, TX, CLOCK`
+/// - `avr_usart`: For `arduino-hal` USARTs (ATmega) with 3 generics (`RX, TX, CLOCK`)
 /// - `generic`: For any type that has a simple blocking `write_byte` method
 ///
 /// # Arguments
 ///
-/// ## AVR-HAL (`avr_usart`)
 /// - `$wrapper`: Wrapper type name
-/// - `$write_fn`: Method on the USART that writes a single byte
-/// - `$pac`: PAC type corresponding to your MCU (see MCU support table)
-///
-/// ## Generic (`generic`)
-/// - `$wrapper`: Wrapper type name
-/// - `$target`: Target serial type
 /// - `$write_fn`: Method on the target that writes a single byte
-///
-/// # MCU support (PAC types)
-///
-/// | Board           | PAC type                          |
-/// |-----------------|----------------------------------|
-/// | Arduino UNO     | `arduino_hal::pac::atmega328p`   |
-/// | Arduino Nano    | `arduino_hal::pac::atmega328p`   |
-/// | Arduino Mega    | `arduino_hal::pac::atmega2560`   |
-/// | Arduino Leonardo| `arduino_hal::pac::atmega32u4`   |
+/// - `$board`: Board PAC type (`atmega328p`, `atmega2560`, `atmega32u4`) for AVR-HAL
 ///
 /// # Examples
 ///
-/// ## Arduino Uno (avr-hal)
-///
-/// First, enable the feature for your board in `Cargo.toml`:
-/// ```toml
-/// [dependencies]
-/// dvcdbg = { version = "0.1.2", features = ["arduino-uno"] }
-/// ```
-///
-/// Then, use the macro in your code:
+/// ## Arduino Uno / Nano (avr-hal)
 /// ```ignore
 /// use arduino_hal::prelude::*;
 /// use dvcdbg::adapt_serial;
 ///
-/// adapt_serial!(
-///     avr_usart: UsartAdapter,
-///     write_byte
-/// );
+/// adapt_serial!(avr_usart: UsartAdapter, write_byte, atmega328p);
 ///
 /// let dp = arduino_hal::Peripherals::take().unwrap();
 /// let mut serial = arduino_hal::default_serial!(dp, 57600);
@@ -82,7 +56,7 @@
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    // Internal helper to generate the impl blocks
+    // Impl helper
     (@impls $wrapper:ident, $write_fn:ident, <$($generics:tt)*> $(, $where:tt)?) => {
         impl<$($generics)*> embedded_hal::blocking::serial::Write<u8>
             for $wrapper<$($generics)*>
@@ -112,69 +86,26 @@ macro_rules! adapt_serial {
         }
     };
 
-    // AVR-HAL USART (ATmega) with automatic PAC selection
-    // Helper macro to define the USART wrapper struct for a specific PAC.
-    // This avoids repeating the struct definition.
-    // Define individual rules for each board type.
-    (avr_usart: $wrapper:ident, $write_fn:ident) => {
-        #[cfg(not(any(
-            feature = "arduino-uno",
-            feature = "arduino-nano",
-            feature = "arduino-mega",
-            feature = "arduino-leonardo"
-        )))]
-        compile_error!(
-            "None of the AVR boards are enabled in Cargo.toml!"
+    // AVR-HAL USART (ATmega) with board type argument
+    // Internal helper for AVR-HAL USARTs
+    (@avr_usart_impl $wrapper:ident, $write_fn:ident, $pac:ident) => {
+        pub struct $wrapper<RX, TX, CLOCK>(
+            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::$pac::Peripherals, RX, TX, CLOCK>
         );
 
-        macro_rules! __dvcdbg_define_usart_wrapper {
-            (uno, $pac:ty) => {
-                #[cfg(any(feature = "arduino-uno", feature = "arduino-nano"))]
-                pub struct $wrapper<RX, TX, CLOCK>(
-                    pub arduino_hal::hal::usart::Usart<$pac, RX, TX, CLOCK>
-                );
-
-                #[cfg(any(feature = "arduino-uno", feature = "arduino-nano"))]
-                adapt_serial!(@impls $wrapper, $write_fn,
-                    <RX, TX, CLOCK>,
-                    where $pac: arduino_hal::usart::UsartOps<$pac, RX, TX>
-                );
-            };
-
-            (mega, $pac:ty) => {
-                #[cfg(feature = "arduino-mega")]
-                pub struct $wrapper<RX, TX, CLOCK>(
-                    pub arduino_hal::hal::usart::Usart<$pac, RX, TX, CLOCK>
-                );
-
-                #[cfg(feature = "arduino-mega")]
-                adapt_serial!(@impls $wrapper, $write_fn,
-                    <RX, TX, CLOCK>,
-                    where $pac: arduino_hal::usart::UsartOps<$pac, RX, TX>
-                );
-            };
-
-            (leonardo, $pac:ty) => {
-                #[cfg(feature = "arduino-leonardo")]
-                pub struct $wrapper<RX, TX, CLOCK>(
-                    pub arduino_hal::hal::usart::Usart<$pac, RX, TX, CLOCK>
-                );
-
-                #[cfg(feature = "arduino-leonardo")]
-                adapt_serial!(@impls $wrapper, $write_fn,
-                    <RX, TX, CLOCK>,
-                    where $pac: arduino_hal::usart::UsartOps<$pac, RX, TX>
-                );
-            };
-        }
-
-        // Calling individual rules for each board type.
-        __dvcdbg_define_usart_wrapper!(uno, arduino_hal::pac::atmega328p::Peripherals);
-        __dvcdbg_define_usart_wrapper!(mega, arduino_hal::pac::atmega2560::Peripherals);
-        __dvcdbg_define_usart_wrapper!(leonardo, arduino_hal::pac::atmega32u4::Peripherals);
+        adapt_serial!(@impls $wrapper, $write_fn,
+            <RX, TX, CLOCK>,
+            where arduino_hal::pac::$pac::Peripherals:
+                arduino_hal::usart::UsartOps<arduino_hal::pac::$pac::Peripherals, RX, TX>
+        );
     };
 
-    // Generic serial type with blocking write method
+    // AVR-HAL USART (ATmega) with board type argument
+    (avr_usart: $wrapper:ident, $write_fn:ident, $board:ident) => {
+        adapt_serial!(@avr_usart_impl $wrapper, $write_fn, $board);
+    };
+
+    // Generic serial type
     (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
         adapt_serial!(@impls $wrapper, $write_fn, <>);
