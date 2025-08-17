@@ -10,19 +10,19 @@
 /// Macro to adapt a serial peripheral into a fmt::Write + embedded_io::Write bridge.
 ///
 /// # Arguments
-/// - '$name' -> Name of the generated structure
-/// - 'nb_write' -> Serial write function name required by HAL
-/// - 'flush(optional)' -> Function for non-blocking transmission of one byte at a time using the nb crate function
+/// - `$name` → Name of the generated adapter struct
+/// - `nb_write` → Serial write method name required by HAL
+/// - `flush` (optional) → Method for flushing non-blocking serial
 ///
 /// # Example
 ///
-/// ## Using Arduino HAL Serial
+/// ## Arduino HAL Serial
 /// ```ignore
 /// use arduino_hal::prelude::*;
 /// use dvcdbg::adapt_serial;
 /// use core::fmt::Write;
+/// use embedded_io::Write;
 ///
-/// // Wrap the built-in serial
 /// adapt_serial!(UsartAdapter, nb_write = write, flush = flush);
 ///
 /// let dp = arduino_hal::Peripherals::take().unwrap();
@@ -31,41 +31,31 @@
 /// let mut dbg_uart = UsartAdapter(serial);
 ///
 /// writeln!(dbg_uart, "Hello from embedded-io bridge!").unwrap();
-/// embedded_io::Write::write_all(&mut dbg_uart, &[0x01, 0x02, 0x03]).unwrap();
+/// dbg_uart.write_all(&[0x01, 0x02, 0x03]).unwrap();
 /// ```
 ///
-/// ## Using a custom serial-like type
+/// ## Custom serial-like type
 /// ```ignore
 /// use dvcdbg::adapt_serial;
-/// use core::convert::Infallible;
 /// use core::fmt::Write;
+/// use core::convert::Infallible;
 /// use nb;
+/// use embedded_io::Write;
 ///
-/// // Define a simple serial-like type
 /// struct MySerial;
-///
 /// impl nb::serial::Write<u8> for MySerial {
-///     type Error = Infallible;
-///
-///     fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> {
-///         Ok(())
-///     }
-///
-///     fn flush(&mut self) -> nb::Result<(), Self::Error> {
-///         Ok(())
-///     }
+///     type Error = Infallible; // Error type is not fixed to Infallible
+///     fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> { Ok(()) }
+///     fn flush(&mut self) -> nb::Result<(), Self::Error> { Ok(()) }
 /// }
 ///
-/// // Adapt it with the macro
 /// adapt_serial!(MyAdapter, nb_write = write, flush = flush);
-///
 /// let mut uart = MyAdapter(MySerial);
 /// writeln!(uart, "Hello via custom serial").unwrap();
-/// embedded_io::Write::write_all(&mut uart, &[0xAA, 0xBB]).unwrap();
+/// uart.write_all(&[0xAA, 0xBB]).unwrap();
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    // nb_write variant
     ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
         /// Serial adapter wrapper
         pub struct $name<T>(pub T);
@@ -73,36 +63,34 @@ macro_rules! adapt_serial {
         /// Implement embedded-io Write for the wrapper
         impl<T> embedded_io::Write for $name<T>
         where
-            T: nb::serial::Write<u8, Error = core::convert::Infallible>,
+            T: nb::serial::Write<u8>,
+            <T as nb::serial::Write<u8>>::Error: core::fmt::Debug,
         {
-            type Error = core::convert::Infallible;
-
+            type Error = $crate::AdaptError<<T as nb::serial::Write<u8>>::Error>;
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
-                    nb::block!(self.0.$write_fn(b))?;
+                    nb::block!(self.0.$write_fn(b)).map_err($crate::AdaptError::Other)?;
                 }
                 Ok(buf.len())
             }
-
             fn flush(&mut self) -> Result<(), Self::Error> {
-                $(
-                    nb::block!(self.0.$flush_fn())?;
-                )?
+                $(nb::block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;)?
                 Ok(())
             }
         }
 
-        /// Implement core::fmt::Write for use with writeln! / write!
+        /// Implement core::fmt::Write for writeln! / write!
         impl<T> core::fmt::Write for $name<T>
         where
-            T: nb::serial::Write<u8, Error = core::convert::Infallible>,
+            T: nb::serial::Write<u8>,
+            <T as nb::serial::Write<u8>>::Error: core::fmt::Debug,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 <Self as embedded_io::Write>::write_all(self, s.as_bytes())
                     .map_err(|_| core::fmt::Error)
             }
         }
-    }
+    };
 }
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
