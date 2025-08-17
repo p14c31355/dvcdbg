@@ -16,7 +16,7 @@
 ///
 /// # Variants
 ///
-/// - `avr_usart`: For `arduino-hal` USARTs (ATmega) with 4 generics (`U, RX, TX, CLOCK`)
+/// - `avr_usart`: For `arduino-hal` USARTs (ATmega) with generics `RX, TX, CLOCK`
 /// - `generic`: For any type that has a simple blocking `write_byte` method
 ///
 /// # Arguments
@@ -30,13 +30,16 @@
 /// - `$wrapper`: Wrapper type name
 /// - `$target`: Target serial type
 /// - `$write_fn`: Method on the target that writes a single byte
-/// 
-/// # MCU support
 ///
-/// Select the PAC type that matches your Arduino board:
+/// # MCU support (PAC types)
 ///
-/// | Board              | PAC type                         |\n/// |--------------------|----------------------------------|\n/// | Arduino UNO        | `arduino_hal::pac::atmega328p`   |\n/// | Arduino Nano       | `arduino_hal::pac::atmega328p`   |\n/// | Arduino Mega       | `arduino_hal::pac::atmega2560`   |\n/// | Arduino Leonardo   | `arduino_hal::pac::atmega32u4`   |
-/// 
+/// | Board           | PAC type                          |
+/// |-----------------|----------------------------------|
+/// | Arduino UNO     | `arduino_hal::pac::atmega328p`   |
+/// | Arduino Nano    | `arduino_hal::pac::atmega328p`   |
+/// | Arduino Mega    | `arduino_hal::pac::atmega2560`   |
+/// | Arduino Leonardo| `arduino_hal::pac::atmega32u4`   |
+///
 /// # Examples
 ///
 /// ## Arduino Uno (avr-hal)
@@ -102,15 +105,15 @@ macro_rules! adapt_serial {
         }
     };
 
-    // AVR-HAL USART (ATmega)
+    // AVR-HAL USART (ATmega) - U removed, PAC fixed
     (avr_usart: $wrapper:ident, $write_fn:ident, $pac:ty) => {
-        pub struct $wrapper<U, RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>
+        pub struct $wrapper<RX, TX, CLOCK>(
+            pub arduino_hal::hal::usart::Usart<$pac, RX, TX, CLOCK>
         );
 
         adapt_serial!(@impls $wrapper, $write_fn,
-            <U, RX, TX, CLOCK>,
-            where U: arduino_hal::usart::UsartOps<$pac, RX, TX>
+            <RX, TX, CLOCK>,
+            where $pac: arduino_hal::usart::UsartOps<$pac, RX, TX>
         );
     };
 
