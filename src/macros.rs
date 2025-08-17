@@ -118,6 +118,12 @@ macro_rules! adapt_serial {
                 pub struct $wrapper<RX, TX, CLOCK>(
                     pub arduino_hal::hal::usart::Usart<$pac_ty, RX, TX, CLOCK>
                 );
+
+                #[cfg(any( $( $feature ),* ))]
+                adapt_serial!(@impls $wrapper, $write_fn,
+                    <RX, TX, CLOCK>,
+                    where $pac_ty: arduino_hal::usart::UsartOps<$pac_ty, RX, TX>
+                );
             };
         }
 
@@ -135,7 +141,6 @@ macro_rules! adapt_serial {
             arduino_hal::pac::atmega32u4::Peripherals,
             [feature = "arduino-leonardo"]
         );
-        adapt_serial!(@impls $wrapper, $write_fn, <RX, TX, CLOCK>);
     };
 
     // Generic serial type with blocking write method
