@@ -1,21 +1,21 @@
-/// Scanner utilities for I2C bus device discovery and analysis.
-///
-/// Supports both embedded-hal 0.2.x and 1.0.x through feature flags:
-/// - `ehal_0_2` → uses `blocking::i2c::Write`
-/// - `ehal_1_0` → uses `i2c::I2c`
-///
-/// # Examples
-///
-/// ```ignore
-/// use dvcdbg::logger::{Logger, SerialLogger};
-///
-/// let mut i2c = /* your i2c interface */;
-/// let mut logger = /* your logger */;
-///
-/// scan_i2c(&mut i2c, &mut logger);
-/// scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
-/// scan_init_sequence(&mut i2c, &mut logger, &[0x00, 0xA5]);
-/// ```
+//! Scanner utilities for I2C bus device discovery and analysis.
+//!
+//! Supports both embedded-hal 0.2.x and 1.0.x through feature flags:
+//! - `ehal_0_2` → uses `blocking::i2c::Write`
+//! - `ehal_1_0` → uses `i2c::I2c`
+//!
+//! # Examples
+//!
+//! ```ignore
+//! use dvcdbg::logger::{Logger, SerialLogger};
+//!
+//! let mut i2c = /* your i2c interface */;
+//! let mut logger = /* your logger */;
+//!
+//! scan_i2c(&mut i2c, &mut logger);
+//! scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
+//! scan_init_sequence(&mut i2c, &mut logger, &[0x00, 0xA5]);
+//! ```
 use crate::log;
 use crate::logger::Logger;
 use heapless::Vec;
@@ -42,7 +42,7 @@ where
 
             #[cfg(feature = "ehal_0_2")]
             {
-                embedded_hal::blocking::i2c::Write::write(i2c, addr, &[]).is_ok()
+                Write::write(i2c, addr, &[]).is_ok()
             }
         };
 
@@ -70,7 +70,7 @@ where
 
             #[cfg(feature = "ehal_0_2")]
             {
-                embedded_hal::blocking::i2c::Write::write(i2c, addr, control_bytes).is_ok()
+                Write::write(i2c, addr, control_bytes).is_ok()
             }
         };
 
@@ -108,7 +108,7 @@ where
 
                 #[cfg(feature = "ehal_0_2")]
                 {
-                    embedded_hal::blocking::i2c::Write::write(i2c, addr, &[0x00, cmd]).is_ok()
+                    Write::write(i2c, addr, &[0x00, cmd]).is_ok()
                 }
             };
 
