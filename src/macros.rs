@@ -129,7 +129,7 @@ macro_rules! adapt_serial {
         macro_rules! __dvcdbg_define_usart_wrapper {
             (
                 $pac_ty:ty,
-                [ $( $feature:meta ),* ]
+                [ $( $feature:tt ),* ]
             ) => {
                 #[cfg(any( $( $feature ),* ))]
                 pub struct $wrapper<RX, TX, CLOCK>(
