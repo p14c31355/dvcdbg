@@ -13,7 +13,7 @@
 /// - '$name' -> Name of the generated structure
 /// - 'nb_write' -> Serial write function name required by HAL
 /// - 'flush(optional)' -> Function for non-blocking transmission of one byte at a time using the nb crate function
-/// 
+///
 /// # Example
 ///
 /// ## Using Arduino HAL Serial
