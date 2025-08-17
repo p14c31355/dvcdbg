@@ -27,7 +27,7 @@
 ///
 /// # Examples
 ///
-/// ## Arduino Uno / Nano (avr-hal)
+/// ## Arduino (avr-hal)
 /// ```ignore
 /// use arduino_hal::prelude::*;
 /// use dvcdbg::adapt_serial;
