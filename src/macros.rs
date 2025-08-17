@@ -61,7 +61,7 @@ macro_rules! adapt_serial {
         pub struct $name<T>(pub T);
 
         /// Implement embedded-io Write for the wrapper
-                impl<T> embedded_io::Write for $name<T>
+        impl<T> embedded_io::Write for $name<T>
         where
             T: nb::serial::Write<u8>,
             <T as nb::serial::Write<u8>>::Error: core::fmt::Debug,
