@@ -9,10 +9,6 @@
 
 /// Macro to adapt a serial peripheral into a fmt::Write + embedded_io::Write bridge.
 ///
-/// # Variants
-/// - nb_write: wraps `nb`-style `write(byte)`
-/// - io_passthrough: wraps `embedded_io::Write` directly
-///
 /// # Example
 /// ```ignore
 /// use core::convert::Infallible;
