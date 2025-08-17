@@ -42,7 +42,7 @@
 ///
 /// struct MySerial;
 /// impl nb::serial::Write<u8> for MySerial {
-///     type Error = Infallible;
+///     type Error = Infallible; // Error type is not fixed to Infallible
 ///     fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> { Ok(()) }
 ///     fn flush(&mut self) -> nb::Result<(), Self::Error> { Ok(()) }
 /// }
@@ -65,17 +65,15 @@ macro_rules! adapt_serial {
         /// Implement embedded-io Write for the wrapper
         impl<T> IoWrite for $name<T>
         where
-            T: NbWrite<u8, Error = core::convert::Infallible>,
+            T: NbWrite<u8>,
         {
-            type Error = core::convert::Infallible;
-
+            type Error = <T as NbWrite<u8>>::Error;
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
                     block!(self.0.$write_fn(b))?;
                 }
                 Ok(buf.len())
             }
-
             fn flush(&mut self) -> Result<(), Self::Error> {
                 $(block!(self.0.$flush_fn())?;)?
                 Ok(())
@@ -85,7 +83,7 @@ macro_rules! adapt_serial {
         /// Implement core::fmt::Write for writeln! / write!
         impl<T> core::fmt::Write for $name<T>
         where
-            $name<T>: IoWrite<Error = core::convert::Infallible>,
+            T: NbWrite<u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 IoWrite::write_all(self, s.as_bytes()).map_err(|_| core::fmt::Error)
