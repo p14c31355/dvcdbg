@@ -16,6 +16,7 @@
 /// use core::convert::Infallible;
 /// use arduino_hal::prelude::*;
 /// use dvcdbg::adapt_serial;
+/// use core::fmt::Write;
 ///
 /// let dp = arduino_hal::Peripherals::take().unwrap();
 /// let pins = arduino_hal::pins!(dp);
@@ -24,10 +25,10 @@
 /// adapt_serial!(UsartAdapter, nb_write = write, error = Infallible, flush = flush);
 ///
 /// let mut dbg_uart = UsartAdapter(serial);
-/// use core::fmt::Write;
 /// writeln!(dbg_uart, "Hello AVR!").ok();
-/// dbg_uart.write_all(&[0x01, 0x02]).unwrap();
-/// dbg_uart.flush().unwrap();
+/// // Use fully qualified syntax to avoid name conflicts with core::fmt::Write
+/// embedded_io::Write::write_all(&mut dbg_uart, &[0x01, 0x02]).unwrap();
+/// embedded_io::Write::flush(&mut dbg_uart).unwrap();
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
