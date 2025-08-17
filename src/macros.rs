@@ -168,7 +168,7 @@ macro_rules! adapt_serial {
             };
         }
 
-        // 各ボードのルールを呼び出す
+        // Calling individual rules for each board type.
         __dvcdbg_define_usart_wrapper!(uno, arduino_hal::pac::atmega328p::Peripherals);
         __dvcdbg_define_usart_wrapper!(mega, arduino_hal::pac::atmega2560::Peripherals);
         __dvcdbg_define_usart_wrapper!(leonardo, arduino_hal::pac::atmega32u4::Peripherals);
