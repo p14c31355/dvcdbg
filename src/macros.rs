@@ -106,21 +106,25 @@ macro_rules! adapt_serial {
     };
 
     // AVR-HAL USART (ATmega) with automatic PAC selection
-    (avr_usart: $wrapper:ident, $write_fn:ident) => {
-        #[cfg(feature = "arduino-uno", "arduino-nano")]
-        pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::atmega328p::Peripherals, RX, TX, CLOCK>
-        );
+        (avr_usart: $wrapper:ident, $write_fn:ident) => {
+        // Helper macro to define the USART wrapper struct for a specific PAC.
+        // This avoids repeating the struct definition.
+        macro_rules! __dvcdbg_define_usart_wrapper {
+            ($pac:ty) => {
+                pub struct $wrapper<RX, TX, CLOCK>(
+                    pub arduino_hal::hal::usart::Usart<$pac, RX, TX, CLOCK>
+                );
+            }
+        }
+
+        #[cfg(any(feature = "arduino-uno", feature = "arduino-nano"))]
+        __dvcdbg_define_usart_wrapper!(arduino_hal::pac::atmega328p::Peripherals);
 
         #[cfg(feature = "arduino-mega")]
-        pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::atmega2560::Peripherals, RX, TX, CLOCK>
-        );
+        __dvcdbg_define_usart_wrapper!(arduino_hal::pac::atmega2560::Peripherals);
 
         #[cfg(feature = "arduino-leonardo")]
-        pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::atmega32u4::Peripherals, RX, TX, CLOCK>
-        );
+        __dvcdbg_define_usart_wrapper!(arduino_hal::pac::atmega32u4::Peripherals);
 
         adapt_serial!(@impls $wrapper, $write_fn,
             <RX, TX, CLOCK>,
