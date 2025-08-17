@@ -30,7 +30,6 @@
 #[macro_export]
 macro_rules! adapt_serial {
     ($wrapper:ident, $serial:ident, $write_fn:ident) => {
-        /// Wrapper newtype around a serial peripheral
         pub struct $wrapper<T>(pub T);
 
         impl<T> $wrapper<T> {
@@ -39,42 +38,20 @@ macro_rules! adapt_serial {
             }
         }
 
-        // embedded-hal 1.0 support: Blocking write
         impl<T, E> core::fmt::Write for $wrapper<T>
         where
-            T: embedded_hal::serial::Write<u8, Error = E>,
+            T: embedded_io::Write<Error = E>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                // nb::block! using to blocking async Write
-                use nb::block;
                 for &b in s.as_bytes() {
-                    block!(self.0.write(b)).map_err(|_| core::fmt::Error)?;
+                    self.0.write(&[b]).map_err(|_| core::fmt::Error)?;
                 }
-                Ok(())
-            }
-        }
-
-        // Optionally implement embedded-hal blocking Write<u8>
-        impl<T, E> embedded_hal::blocking::serial::Write<u8> for $wrapper<T>
-        where
-            T: embedded_hal::serial::Write<u8, Error = E>,
-        {
-            type Error = E;
-
-            fn bwrite_all(&mut self, buffer: &[u8]) -> Result<(), Self::Error> {
-                use nb::block;
-                for &b in buffer {
-                    block!(self.0.write(b))?;
-                }
-                Ok(())
-            }
-
-            fn bflush(&mut self) -> Result<(), Self::Error> {
                 Ok(())
             }
         }
     };
 }
+
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
 ///
