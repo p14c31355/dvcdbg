@@ -25,19 +25,38 @@ macro_rules! adapt_serial {
 
         impl<T> core::fmt::Write for $name<T>
         where
-            T: embedded_io::Write,
+            T: embedded_hal::serial::Write<u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                for b in s.as_bytes() {
-                    nb::block!(self.0.write(*b)).map_err(|_| core::fmt::Error)?;
+                for &b in s.as_bytes() {
+                    nb::block!(self.0.write(b)).map_err(|_| core::fmt::Error)?;
                 }
                 Ok(())
             }
         }
 
+        // embedded-io::Write implementation
+        impl<T> embedded_io::Write for $name<T>
+        where
+            T: embedded_hal::serial::Write<u8>,
+        {
+            type Error = T::Error;
+
+            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+                for &b in buf {
+                    nb::block!(self.0.write(b))?;
+                }
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> Result<(), Self::Error> {
+                nb::block!(self.0.flush())
+            }
+        }
+
         impl<T> dvcdbg::logger::WriteAdapter for $name<T>
         where
-            T: embedded_io::Write,
+            T: embedded_hal::serial::Write<u8>,
         {
             fn write(&mut self, byte: u8) {
                 let _ = nb::block!(self.0.write(byte));
