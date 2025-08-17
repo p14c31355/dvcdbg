@@ -50,7 +50,7 @@
 ///     fn write_byte(&mut self, b: u8) -> Result<(), ()> { Ok(()) }
 /// }
 ///
-/// adapt_serial!(generic: MyAdapter, MySerial, write_byte);
+/// adapt_serial!(generic: my_adapter: MyAdapter, MySerial, write_byte);
 ///
 /// let mut uart = MyAdapter(MySerial);
 /// writeln!(uart, "Logging via generic serial").ok();
@@ -89,21 +89,21 @@ macro_rules! adapt_serial {
 
     // AVR-HAL USART (ATmega) with board type argument
     // Internal helper for AVR-HAL USARTs
-    (@avr_usart_impl $name:ident : $wrapper:ident, $write_fn:ident, $pac:ident) => {
+    (@avr_usart_impl $name:ident : $wrapper:ident, $write_fn:ident) => {
         pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::$pac::Peripherals, RX, TX, CLOCK>
+            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::Peripherals, RX, TX, CLOCK>
         );
 
         adapt_serial!(@impls $name: $wrapper, $write_fn,
             <RX, TX, CLOCK>,
-            where arduino_hal::pac::$pac::Peripherals:
-                arduino_hal::usart::UsartOps<arduino_hal::pac::$pac::Peripherals, RX, TX>
+            where arduino_hal::pac::Peripherals:
+                arduino_hal::usart::UsartOps<arduino_hal::pac::Peripherals, RX, TX>
         );
     };
 
-    // AVR-HAL USART (ATmega) with board type argument
-    (avr_usart: $name:ident : $wrapper:ident, $write_fn:ident, $board:ident) => {
-        adapt_serial!(@avr_usart_impl $name: $wrapper, $write_fn, $board);
+    // AVR-HAL USART (ATmega)
+    (avr_usart: $name:ident : $wrapper:ident, $write_fn:ident) => {
+        adapt_serial!(@avr_usart_impl $name: $wrapper, $write_fn);
     };
 
     // Generic serial type
