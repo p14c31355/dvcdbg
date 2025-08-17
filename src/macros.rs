@@ -9,6 +9,9 @@
 
 /// Macro to adapt a serial peripheral into a fmt::Write + embedded_io::Write bridge.
 ///
+/// io_passthrough variant basically does nothing but pass types, so it has little value in actual use and was removed 
+/// in 657cf32afe702eb3279f0b546167745e9f2df7e9 to avoid ‘unnecessary complexity.’
+/// 
 /// # Example
 /// ```ignore
 /// use core::convert::Infallible;
