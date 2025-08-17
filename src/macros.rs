@@ -87,40 +87,30 @@ macro_rules! adapt_serial {
     };
 
     // AVR-HAL USART (ATmega) with board type argument
-    (avr_usart: $wrapper:ident, $write_fn:ident, atmega328p) => {
+    // Internal helper for AVR-HAL USARTs
+    (@avr_usart_impl $wrapper:ident, $write_fn:ident, $pac:ident) => {
         pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::atmega328p::Peripherals, RX, TX, CLOCK>
+            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::$pac::Peripherals, RX, TX, CLOCK>
         );
 
         adapt_serial!(@impls $wrapper, $write_fn,
             <RX, TX, CLOCK>,
-            where arduino_hal::pac::atmega328p::Peripherals:
-                arduino_hal::usart::UsartOps<arduino_hal::pac::atmega328p::Peripherals, RX, TX>
+            where arduino_hal::pac::$pac::Peripherals:
+                arduino_hal::usart::UsartOps<arduino_hal::pac::$pac::Peripherals, RX, TX>
         );
+    };
+
+    // AVR-HAL USART (ATmega) with board type argument
+    (avr_usart: $wrapper:ident, $write_fn:ident, atmega328p) => {
+        adapt_serial!(@avr_usart_impl $wrapper, $write_fn, atmega328p);
     };
 
     (avr_usart: $wrapper:ident, $write_fn:ident, atmega2560) => {
-        pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::atmega2560::Peripherals, RX, TX, CLOCK>
-        );
-
-        adapt_serial!(@impls $wrapper, $write_fn,
-            <RX, TX, CLOCK>,
-            where arduino_hal::pac::atmega2560::Peripherals:
-                arduino_hal::usart::UsartOps<arduino_hal::pac::atmega2560::Peripherals, RX, TX>
-        );
+        adapt_serial!(@avr_usart_impl $wrapper, $write_fn, atmega2560);
     };
 
     (avr_usart: $wrapper:ident, $write_fn:ident, atmega32u4) => {
-        pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::atmega32u4::Peripherals, RX, TX, CLOCK>
-        );
-
-        adapt_serial!(@impls $wrapper, $write_fn,
-            <RX, TX, CLOCK>,
-            where arduino_hal::pac::atmega32u4::Peripherals:
-                arduino_hal::usart::UsartOps<arduino_hal::pac::atmega32u4::Peripherals, RX, TX>
-        );
+        adapt_serial!(@avr_usart_impl $wrapper, $write_fn, atmega32u4);
     };
 
     // Generic serial type
