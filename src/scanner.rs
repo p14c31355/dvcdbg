@@ -1,38 +1,64 @@
-/// Scanner utilities for I2C bus device discovery and analysis.
-///
-/// Supports both embedded-hal 0.2.x and 1.0.x through feature flags:
-/// - `ehal_0_2` → uses `blocking::i2c::Write`
-/// - `ehal_1_0` → uses `i2c::I2c`
+//! scanner.rs
+//! I2C デバイススキャンユーティリティ
+
+use crate::logger::log; // log! マクロ
 use crate::logger::Logger;
+
+#[cfg(feature = "ehal_0_2")]
+use embedded_hal::blocking::i2c::Write as I2cWrite;
 
 #[cfg(feature = "ehal_1_0")]
 use embedded_hal_1::i2c::I2c;
 
+/// I2C スキャン（バージョンごとに分ける）
+///
+/// control_bytes: 書き込み時に送る任意バイト列
+/// init_sequence: 初期化コマンド列
 #[cfg(feature = "ehal_0_2")]
-use embedded_hal_0_2::blocking::i2c::Write as I2cWrite;
-
-/// 内部共通関数
-fn scan_i2c_inner<I2C, L>(
+pub fn scan_i2c_inner<I2C, L>(
     i2c: &mut I2C,
     logger: &mut L,
     control_bytes: Option<&[u8]>,
     init_sequence: Option<&[u8]>,
 ) where
+    I2C: I2cWrite<u8>,
     L: Logger,
-    #[cfg(feature = "ehal_0_2")] I2C: I2cWrite,
-    #[cfg(feature = "ehal_1_0")] I2C: I2c,
-    #[cfg(feature = "ehal_1_0")] I2C::Error: core::fmt::Debug,
 {
-    #[cfg(feature = "ehal_0_2")]
     let mut write_fn = |i2c: &mut I2C, addr: u8, data: &[u8]| -> bool {
         i2c.write(addr, data).is_ok()
     };
 
-    #[cfg(feature = "ehal_1_0")]
+    scan_logic(i2c, logger, control_bytes, init_sequence, &mut write_fn);
+}
+
+#[cfg(feature = "ehal_1_0")]
+pub fn scan_i2c_inner<I2C, L>(
+    i2c: &mut I2C,
+    logger: &mut L,
+    control_bytes: Option<&[u8]>,
+    init_sequence: Option<&[u8]>,
+) where
+    I2C: I2c,
+    I2C::Error: core::fmt::Debug,
+    L: Logger,
+{
     let mut write_fn = |i2c: &mut I2C, addr: u8, data: &[u8]| -> bool {
-        i2c.write(addr, data).is_ok()
+        I2c::write(i2c, addr, data).is_ok()
     };
 
+    scan_logic(i2c, logger, control_bytes, init_sequence, &mut write_fn);
+}
+
+/// 共通スキャン処理
+fn scan_logic<I2C, L>(
+    i2c: &mut I2C,
+    logger: &mut L,
+    control_bytes: Option<&[u8]>,
+    init_sequence: Option<&[u8]>,
+    write_fn: &mut dyn FnMut(&mut I2C, u8, &[u8]) -> bool,
+) where
+    L: Logger,
+{
     if let Some(seq) = init_sequence {
         for &cmd in seq {
             for addr in 0x03..=0x77 {
@@ -54,33 +80,29 @@ fn scan_i2c_inner<I2C, L>(
     log!(logger, "[info] I2C scan complete.");
 }
 
-/// パブリック API
+/// 上位関数：シンプルな I2C スキャン
 pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
 where
     L: Logger,
-    #[cfg(feature = "ehal_0_2")] I2C: I2cWrite,
-    #[cfg(feature = "ehal_1_0")] I2C: I2c,
-    #[cfg(feature = "ehal_1_0")] I2C::Error: core::fmt::Debug,
+    I2C: Sized,
 {
     scan_i2c_inner(i2c, logger, None, None);
 }
 
+/// 上位関数：コントロールバイト付きスキャン
 pub fn scan_i2c_with_ctrl<I2C, L>(i2c: &mut I2C, logger: &mut L, control_bytes: &[u8])
 where
     L: Logger,
-    #[cfg(feature = "ehal_0_2")] I2C: I2cWrite,
-    #[cfg(feature = "ehal_1_0")] I2C: I2c,
-    #[cfg(feature = "ehal_1_0")] I2C::Error: core::fmt::Debug,
+    I2C: Sized,
 {
     scan_i2c_inner(i2c, logger, Some(control_bytes), None);
 }
 
+/// 上位関数：初期化コマンド列付きスキャン
 pub fn scan_init_sequence<I2C, L>(i2c: &mut I2C, logger: &mut L, init_sequence: &[u8])
 where
     L: Logger,
-    #[cfg(feature = "ehal_0_2")] I2C: I2cWrite,
-    #[cfg(feature = "ehal_1_0")] I2C: I2c,
-    #[cfg(feature = "ehal_1_0")] I2C::Error: core::fmt::Debug,
+    I2C: Sized,
 {
     scan_i2c_inner(i2c, logger, None, Some(init_sequence));
 }
