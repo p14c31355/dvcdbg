@@ -57,16 +57,14 @@
 #[macro_export]
 macro_rules! adapt_serial {
     ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
-        /// Serial adapter wrapper
         pub struct $name<T>(pub T);
 
-        /// Implement embedded-io Write for the wrapper
         impl<T> embedded_io::Write for $name<T>
         where
-            T: nb::Write<u8>,
-            <T as nb::Write<u8>>::Error: core::fmt::Debug,
+            T: nb::serial::Write<u8>,
+            <T as nb::serial::Write<u8>>::Error: core::fmt::Debug,
         {
-            type Error = $crate::AdaptError<<T as nb::Write<u8>>::Error>;
+            type Error = $crate::AdaptError<<T as nb::serial::Write<u8>>::Error>;
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
                     nb::block!(self.0.$write_fn(b)).map_err($crate::AdaptError::Other)?;
@@ -79,11 +77,10 @@ macro_rules! adapt_serial {
             }
         }
 
-        /// Implement core::fmt::Write for writeln! / write!
         impl<T> core::fmt::Write for $name<T>
         where
-            T: nb::Write<u8>,
-            <T as nb::Write<u8>>::Error: core::fmt::Debug,
+            T: nb::serial::Write<u8>,
+            <T as nb::serial::Write<u8>>::Error: core::fmt::Debug,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 <Self as embedded_io::Write>::write_all(self, s.as_bytes())
@@ -92,6 +89,7 @@ macro_rules! adapt_serial {
         }
     };
 }
+
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
 ///
