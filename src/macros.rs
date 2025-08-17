@@ -57,7 +57,7 @@
 #[macro_export]
 macro_rules! adapt_serial {
     // Impl helper
-    (@impls $wrapper:ident, $write_fn:ident, <$($generics:tt)*> $(, $where:tt)?) => {
+    (@impls $name:ident : $wrapper:ident, $write_fn:ident, <$($generics:tt)*> $(, $where:tt)?) => {
         impl<$($generics)*> embedded_hal::blocking::serial::Write<u8>
             for $wrapper<$($generics)*>
             $( $where )?
