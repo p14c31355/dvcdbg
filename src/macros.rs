@@ -87,16 +87,7 @@ macro_rules! adapt_serial {
 
         impl<T: embedded_io::Write> core::fmt::Write for $name<T> {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                // write_all compatible
-                let mut left = s.as_bytes();
-                while !left.is_empty() {
-                    match self.0.write(left) {
-                        Ok(0) => return Err(core::fmt::Error),
-                        Ok(n) => left = &left[n..],
-                        Err(_) => return Err(core::fmt::Error),
-                    }
-                }
-                Ok(())
+                self.0.write_all(s.as_bytes()).map_err(|_| core::fmt::Error)
             }
         }
     };
