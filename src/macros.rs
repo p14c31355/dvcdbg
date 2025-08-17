@@ -7,108 +7,84 @@
 //! - Debugging assistance (assert, delayed loop, cycle measurement)
 //!
 
-/// # adapt_serial! macro
-///
-/// Wraps a serial peripheral that does **not** implement
-/// `embedded-hal::serial::Write<u8>` and provides implementations for:
-/// - [`core::fmt::Write`] → allows `write!` / `writeln!`
-/// - [`embedded_hal::blocking::serial::Write`] → safe for blocking serials
+/// Macro to adapt a serial peripheral into a fmt::Write + embedded_io::Write bridge.
 ///
 /// # Variants
+/// - nb_write: wraps `nb`-style `write(byte)`
+/// - io_passthrough: wraps `embedded_io::Write` directly
 ///
-/// - `avr_usart`: For `arduino-hal` USARTs (ATmega) with 3 generics (`RX, TX, CLOCK`)
-/// - `generic`: For any type that has a simple blocking `write_byte` method
-///
-/// # Arguments
-///
-/// - `$wrapper`: Wrapper type name
-/// - `$write_fn`: Method on the target that writes a single byte
-/// - `$board`: Board PAC type (`atmega328p`, `atmega2560`, `atmega32u4`) for AVR-HAL
-///
-/// # Examples
-///
-/// ## Arduino Uno / Nano (avr-hal)
+/// # Example:
 /// ```ignore
-/// use arduino_hal::prelude::*;
-/// use dvcdbg::adapt_serial;
-///
-/// adapt_serial!(avr_usart: UsartAdapter, write_byte, atmega328p);
-///
-/// let dp = arduino_hal::Peripherals::take().unwrap();
-/// let mut serial = arduino_hal::default_serial!(dp, 57600);
-/// let mut dbg_uart = UsartAdapter(serial);
-///
-/// use core::fmt::Write;
-/// writeln!(dbg_uart, "Hello AVR!").ok();
-/// ```
-///
-/// ## Generic blocking serial
-/// ```ignore
-/// struct MySerial;
-/// impl MySerial {
-///     fn write_byte(&mut self, b: u8) -> Result<(), ()> { Ok(()) }
-/// }
-///
-/// adapt_serial!(generic: MyAdapter, MySerial, write_byte);
-///
-/// let mut uart = MyAdapter(MySerial);
-/// writeln!(uart, "Logging via generic serial").ok();
+/// use embedded_io::Write;
+/// adapt_serial!(UsartAdapter, nb_write = write, error = Infallible, flush = flush);
+/// let mut uart = UsartAdapter(serial);
+/// writeln!(uart, "Hello!").unwrap();
+/// uart.write_all(&[0x01, 0x02]).unwrap();
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    // Impl helper
-    (@impls $wrapper:ident, $write_fn:ident, <$($generics:tt)*> $(, $where:tt)?) => {
-        impl<$($generics)*> embedded_hal::blocking::serial::Write<u8>
-            for $wrapper<$($generics)*>
-            $( $where )?
-        {
-            type Error = ();
+    // nb_write variant with optional flush
+    ($name:ident, nb_write = $write_fn:ident, error = $err_ty:ty $(, flush = $flush_fn:ident)?) => {
+        pub struct $name<T>(pub T);
 
-            fn bwrite_all(&mut self, buffer: &[u8]) -> Result<(), Self::Error> {
-                for &b in buffer {
-                    self.0.$write_fn(b).map_err(|_| ())?;
+        impl<T> embedded_io::Write for $name<T> {
+            type Error = $err_ty;
+
+            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+                for &b in buf {
+                    nb::block!(self.0.$write_fn(b))?;
                 }
-                Ok(())
+                Ok(buf.len())
             }
 
-            fn bflush(&mut self) -> Result<(), Self::Error> {
+            fn flush(&mut self) -> Result<(), Self::Error> {
+                $(
+                    nb::block!(self.0.$flush_fn())?;
+                )?
                 Ok(())
             }
         }
 
-        impl<$($generics)*> core::fmt::Write for $wrapper<$($generics)*>
-            $( $where )?
+        impl<T> core::fmt::Write for $name<T>
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                use embedded_hal::blocking::serial::Write;
-                self.bwrite_all(s.as_bytes()).map_err(|_| core::fmt::Error)
+                use embedded_io::Write;
+                self.write_all(s.as_bytes())
+                    .map_err(|_| core::fmt::Error)
+            }
+            fn flush(&mut self) -> core::fmt::Result {
+                use embedded_io::Write;
+                self.flush().map_err(|_| core::fmt::Error)
             }
         }
     };
 
-    // AVR-HAL USART (ATmega) with board type argument
-    // Internal helper for AVR-HAL USARTs
-    (@avr_usart_impl $wrapper:ident, $write_fn:ident, $pac:ident) => {
-        pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::$pac::Peripherals, RX, TX, CLOCK>
-        );
+    // passthrough variant for types that already implement embedded_io::Write
+    ($name:ident, io_passthrough) => {
+        pub struct $name<T>(pub T);
 
-        adapt_serial!(@impls $wrapper, $write_fn,
-            <RX, TX, CLOCK>,
-            where arduino_hal::pac::$pac::Peripherals:
-                arduino_hal::usart::UsartOps<arduino_hal::pac::$pac::Peripherals, RX, TX>
-        );
-    };
+        impl<T: embedded_io::Write> embedded_io::Write for $name<T> {
+            type Error = T::Error;
 
-    // AVR-HAL USART (ATmega) with board type argument
-    (avr_usart: $wrapper:ident, $write_fn:ident, $board:ident) => {
-        adapt_serial!(@avr_usart_impl $wrapper, $write_fn, $board);
-    };
+            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+                self.0.write(buf)
+            }
 
-    // Generic serial type
-    (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
-        pub struct $wrapper(pub $target);
-        adapt_serial!(@impls $wrapper, $write_fn, <>);
+            fn flush(&mut self) -> Result<(), Self::Error> {
+                self.0.flush()
+            }
+        }
+
+        impl<T: embedded_io::Write> core::fmt::Write for $name<T> {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                self.0.write_all(s.as_bytes())
+                    .map_err(|_| core::fmt::Error)
+            }
+
+            fn flush(&mut self) -> core::fmt::Result {
+                self.0.flush().map_err(|_| core::fmt::Error)
+            }
+        }
     };
 }
 
