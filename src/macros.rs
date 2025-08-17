@@ -86,7 +86,6 @@ macro_rules! adapt_serial {
         }
     };
 
-    // AVR-HAL USART (ATmega) with board type argument
     // Internal helper for AVR-HAL USARTs
     (@avr_usart_impl $name:ident : $wrapper:ident, $write_fn:ident) => {
         pub struct $wrapper<RX, TX, CLOCK>(
@@ -100,8 +99,7 @@ macro_rules! adapt_serial {
         );
     };
 
-    // AVR-HAL USART (ATmega)
-    (avr_usart: $name:ident : $wrapper:ident, $write_fn:ident) => {
+    (avr_usart: $name:ident, $wrapper:ident, $write_fn:ident) => {
         adapt_serial!(@avr_usart_impl $name: $wrapper, $write_fn);
     };
 
