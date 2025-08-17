@@ -84,7 +84,7 @@ macro_rules! adapt_serial {
 
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
-                    block!(self.0.$write_fn(b)).ok();
+                    block!(self.0.$write_fn(b))?;
                 }
                 Ok(buf.len())
             }
