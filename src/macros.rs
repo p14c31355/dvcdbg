@@ -61,7 +61,7 @@
 ///
 /// let mut uart = MyAdapter(MySerial);
 /// writeln!(uart, "Hello via custom serial").unwrap();
-/// uart.write_all(&[0xAA, 0xBB]).unwrap();
+/// embedded_io::Write::write_all(&mut uart, &[0xAA, 0xBB]).unwrap();
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
