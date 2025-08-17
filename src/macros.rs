@@ -9,27 +9,28 @@
 
 /// # adapt_serial! macro
 ///
-/// Serial adapter macro for embedded-hal 1.0 `serial::Write<Word = u8>`
-/// Produces a newtype wrapper that implements `core::fmt::Write`
+/// Creates a newtype wrapper around a serial peripheral implementing
+/// `embedded_io::blocking::Write<u8>` and provides `core::fmt::Write`
+/// for use with `SerialLogger` or `write!` / `writeln!`.
 ///
 /// # Arguments
 ///
-/// - `$wrapper`: Wrapper type name
-/// - `$serial`: HAL serial object
-/// - `$write_fn`: Method on the target that writes a single byte
+/// - `$wrapper`: Name of the wrapper struct
+/// - `$serial`: The HAL serial object (used only in example; macro just defines wrapper)
+/// - `$write_fn`: Ignored (kept for backward compatibility)
 ///
-/// # Examples
+/// # Example
 ///
 /// ```ignore
 /// adapt_serial!(UsartAdapter, serial_port, write_byte);
-/// let mut uart = UsartAdapter(serial_port);
+/// let mut uart = UsartAdapter::new(serial_port);
 /// let mut logger = SerialLogger::new(&mut uart);
 /// writeln!(logger, "Hello embedded!").ok();
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
     ($wrapper:ident, $serial:ident, $write_fn:ident) => {
-        // Structure wrapping the specified serial
+        /// Wrapper around the given serial peripheral
         pub struct $wrapper<T>(pub T);
 
         impl<T> $wrapper<T> {
@@ -40,11 +41,11 @@ macro_rules! adapt_serial {
 
         impl<T, E> core::fmt::Write for $wrapper<T>
         where
-            T: embedded_hal::blocking::Write<u8, Error = E>,
+            T: embedded_io::blocking::Write<u8, Error = E>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 for &b in s.as_bytes() {
-                    embedded_hal::blocking::Write::write(&mut self.0, &[b])
+                    embedded_io::blocking::Write::write(&mut self.0, &[b])
                         .map_err(|_| core::fmt::Error)?;
                 }
                 Ok(())
