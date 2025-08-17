@@ -22,3 +22,17 @@ pub mod macros;
 /// use dvcdbg::prelude::*;
 /// ```
 pub mod prelude;
+
+/// error type and implementation
+///
+#[derive(Debug)]
+pub enum AdaptError<E> {
+    /// The underlying I/O error.
+    Other(E),
+}
+
+impl<E: core::fmt::Debug> embedded_io::Error for AdaptError<E> {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        embedded_io::ErrorKind::Other
+    }
+}
