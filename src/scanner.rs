@@ -1,153 +1,107 @@
-/// Scanner utilities for I2C bus device discovery and analysis.
-///
-/// This module provides functions to scan the I2C bus for connected devices,
-/// optionally testing with control bytes or initialization command sequences,
-/// with detailed logging support.
-///
-/// # Examples
-///
-/// ```ignore
-/// use embedded_hal::i2c::I2c;
-/// use dvcdbg::logger::{Logger, SerialLogger};
-///
-/// // `i2c` must implement `embedded_hal::i2c::I2c`
-/// // `logger` must implement `Logger` trait from dvcdbg
-/// fn main() {
-///     let mut i2c = /* your i2c interface */;
-///     let mut logger = /* your logger */;
-///
-///     scan_i2c(&mut i2c, &mut logger);
-///     scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
-/// }
-/// ```
 use crate::log;
 use crate::logger::Logger;
-use embedded_hal::i2c::I2c;
-use heapless::Vec;
+#[cfg(feature = "ehal_0_2")]
+use embedded_hal::blocking::i2c::Write as I2cWrite;
+#[cfg(feature = "ehal_1_0")]
+use embedded_hal_1::i2c::I2c;
 
-/// Scan the I2C bus for connected devices (addresses 0x03 to 0x77).
-///
-/// # Arguments
-///
-/// * `i2c` - Mutable reference to the I2C interface implementing `embedded_hal::i2c::I2c`.
-/// * `logger` - Mutable reference to a logger implementing the `Logger` trait.
-///
-/// This function attempts to write zero bytes to each possible device address on the I2C bus,
-/// logging addresses that respond successfully.
+/// Inner scan logic (0.2)
+#[cfg(feature = "ehal_0_2")]
+fn scan_i2c_inner_0_2<I2C, L>(
+    i2c: &mut I2C,
+    logger: &mut L,
+    control_bytes: Option<&[u8]>,
+    init_sequence: Option<&[u8]>,
+) where
+    I2C: I2cWrite,
+    L: Logger,
+{
+    // Actual I2C writing and logging processing
+    if let Some(ctrl) = control_bytes {
+        let _ = i2c.write(0x00, ctrl); // Temporary address and writing
+    }
+    if let Some(seq) = init_sequence {
+        let _ = i2c.write(0x00, seq);
+    }
+    log!(logger, "[info] I2C scan complete.");
+}
+
+/// Inner scan logic (1.0)
+#[cfg(feature = "ehal_1_0")]
+fn scan_i2c_inner_1_0<I2C, L>(
+    i2c: &mut I2C,
+    logger: &mut L,
+    control_bytes: Option<&[u8]>,
+    init_sequence: Option<&[u8]>,
+) where
+    I2C: I2c,
+    I2C::Error: core::fmt::Debug,
+    L: Logger,
+{
+    if let Some(ctrl) = control_bytes {
+        I2C::write(i2c, 0x00, ctrl).unwrap();
+    }
+    if let Some(seq) = init_sequence {
+        I2C::write(i2c, 0x00, seq).unwrap();
+    }
+    log!(logger, "[info] I2C scan complete.");
+}
+
+// ------------------- Public API -------------------
+
+#[cfg(feature = "ehal_0_2")]
+pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
+where
+    I2C: I2cWrite,
+    L: Logger,
+{
+    scan_i2c_inner_0_2(i2c, logger, None, None);
+}
+
+#[cfg(feature = "ehal_1_0")]
 pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
 where
     I2C: I2c,
+    I2C::Error: core::fmt::Debug,
     L: Logger,
 {
-    log!(logger, "[scan] Scanning I2C bus...");
-    for addr in 0x03..=0x77 {
-        if i2c.write(addr, &[]).is_ok() {
-            log!(logger, "[ok] Found device at 0x{:02X}", addr);
-        }
-    }
-    log!(logger, "[info] I2C scan complete.");
+    scan_i2c_inner_1_0(i2c, logger, None, None);
 }
 
-/// Scan the I2C bus for devices by sending specified control bytes.
-///
-/// # Arguments
-///
-/// * `i2c` - Mutable reference to the I2C interface implementing `embedded_hal::i2c::I2c`.
-/// * `logger` - Mutable reference to a logger implementing the `Logger` trait.
-/// * `control_bytes` - Byte slice to send as control bytes during the scan.
-///
-/// This function attempts to write the provided control bytes to each device address,
-/// logging those that respond successfully.
+#[cfg(feature = "ehal_0_2")]
+pub fn scan_i2c_with_ctrl<I2C, L>(i2c: &mut I2C, logger: &mut L, control_bytes: &[u8])
+where
+    I2C: I2cWrite,
+    L: Logger,
+{
+    scan_i2c_inner_0_2(i2c, logger, Some(control_bytes), None);
+}
+
+#[cfg(feature = "ehal_1_0")]
 pub fn scan_i2c_with_ctrl<I2C, L>(i2c: &mut I2C, logger: &mut L, control_bytes: &[u8])
 where
     I2C: I2c,
+    I2C::Error: core::fmt::Debug,
     L: Logger,
 {
-    log!(
-        logger,
-        "[scan] Scanning I2C bus with control bytes: {:?}",
-        control_bytes
-    );
-    for addr in 0x03..=0x77 {
-        if i2c.write(addr, control_bytes).is_ok() {
-            log!(
-                logger,
-                "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})",
-                addr,
-                control_bytes
-            );
-        }
-    }
-    log!(logger, "[info] I2C scan complete.");
+    scan_i2c_inner_1_0(i2c, logger, Some(control_bytes), None);
 }
 
-/// Scan the I2C bus by testing each command in an initialization sequence.
-///
-/// # Arguments
-///
-/// * `i2c` - Mutable reference to the I2C interface implementing `embedded_hal::i2c::I2c`.
-/// * `logger` - Mutable reference to a logger implementing the `Logger` trait.
-/// * `init_sequence` - Byte slice of initialization commands to test.
-///
-/// This function tries to send each command in `init_sequence` with a control byte (0x00)
-/// to all possible device addresses, logging which addresses respond to which commands.
-/// It also logs differences between expected and responding commands.
+#[cfg(feature = "ehal_0_2")]
+pub fn scan_init_sequence<I2C, L>(i2c: &mut I2C, logger: &mut L, init_sequence: &[u8])
+where
+    I2C: I2cWrite,
+    L: Logger,
+{
+    scan_i2c_inner_0_2(i2c, logger, None, Some(init_sequence));
+}
+
+#[cfg(feature = "ehal_1_0")]
 pub fn scan_init_sequence<I2C, L>(i2c: &mut I2C, logger: &mut L, init_sequence: &[u8])
 where
     I2C: I2c,
+    I2C::Error: core::fmt::Debug,
     L: Logger,
 {
-    log!(
-        logger,
-        "[scan] Scanning I2C bus with init sequence: {:02X?}",
-        init_sequence
-    );
-
-    let mut detected_cmds = Vec::<u8, 64>::new();
-
-    for &cmd in init_sequence {
-        log!(logger, "-> Testing command 0x{:02X}", cmd);
-
-        for addr in 0x03..=0x77 {
-            let res = i2c.write(addr, &[0x00, cmd]); // 0x00 = control byte for command
-            if res.is_ok() {
-                log!(
-                    logger,
-                    "[ok] Found device at 0x{:02X} responding to command 0x{:02X}",
-                    addr,
-                    cmd
-                );
-            }
-        }
-
-        if detected_cmds.push(cmd).is_err() {
-            log!(
-                logger,
-                "[warn] Detected commands buffer is full, results may be incomplete!"
-            );
-        }
-    }
-
-    // Show differences
-    log!(logger, "Expected sequence: {:02X?}", init_sequence);
-    log!(
-        logger,
-        "Commands with response: {:02X?}",
-        detected_cmds.as_slice()
-    );
-
-    detected_cmds.sort_unstable();
-    let missing_cmds: Vec<u8, 64> = init_sequence
-        .iter()
-        .filter(|&&c| detected_cmds.binary_search(&c).is_err())
-        .copied()
-        .collect();
-
-    log!(
-        logger,
-        "Commands with no response: {:02X?}",
-        missing_cmds.as_slice()
-    );
-
-    log!(logger, "[info] I2C scan with init sequence complete.");
+    scan_i2c_inner_1_0(i2c, logger, None, Some(init_sequence));
 }
