@@ -32,7 +32,7 @@
 /// use dvcdbg::adapt_serial;
 ///
 /// // Wrap Arduino's USART0
-/// adapt_serial!(avr_usart: UsartAdapter, write_byte);
+/// // adapt_serial!(avr_usart: some_name: UsartAdapter, write_byte);
 ///
 /// let dp = arduino_hal::Peripherals::take().unwrap();
 /// let mut serial = arduino_hal::default_serial!(dp, 57600);
@@ -101,7 +101,7 @@ macro_rules! adapt_serial {
     };
 
     // AVR-HAL USART (ATmega)
-    (avr_usart: $name:ident : $wrapper:ident, $write_fn:ident) => {
+    (avr_usart: $wrapper:ident, $write_fn:ident) => {
         adapt_serial!(@avr_usart_impl $name: $wrapper, $write_fn);
     };
 
