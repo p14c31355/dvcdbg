@@ -56,57 +56,41 @@
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    // Impl helper (Defining unused arguments to maintain consistency within the API)
-    (@impls $_name:ident : $wrapper:ident, $write_fn:ident, <$($generics:tt)*> $(, $where:tt)?) => {
-        impl<$($generics)*> embedded_hal::blocking::serial::Write<u8>
-            for $wrapper<$($generics)*>
-            $( $where )?
-        {
-            type Error = ();
-
-            fn bwrite_all(&mut self, buffer: &[u8]) -> Result<(), Self::Error> {
-                for &b in buffer {
-                    self.0.$write_fn(b).map_err(|_| ())?;
+    // common inplementation
+    (@impls $wrapper:ty, $write_fn:ident) => {
+        impl core::fmt::Write for $wrapper {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                for &b in s.as_bytes() {
+                    self.$write_fn(b).map_err(|_| core::fmt::Error)?;
                 }
                 Ok(())
             }
+        }
 
-            fn bflush(&mut self) -> Result<(), Self::Error> {
+        impl embedded_hal::blocking::serial::Write<u8> for $wrapper {
+            type Error = ();
+            fn bwrite_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+                for &b in buf { self.$write_fn(b).map_err(|_| ())?; }
                 Ok(())
             }
-        }
-
-        impl<$($generics)*> core::fmt::Write for $wrapper<$($generics)*>
-            $( $where )?
-        {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                use embedded_hal::blocking::serial::Write;
-                self.bwrite_all(s.as_bytes()).map_err(|_| core::fmt::Error)
-            }
+            fn bflush(&mut self) -> Result<(), Self::Error> { Ok(()) }
         }
     };
 
-    // Internal helper for AVR-HAL USARTs
-    (@avr_usart_impl $name:ident : $wrapper:ident, $write_fn:ident) => {
-        pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<RX, TX, CLOCK>
-        );
+    // AVR USART
+    (avr_usart: $wrapper:ident, $instance:expr, $write_fn:ident) => {
+        pub struct $wrapper<T>(pub T);
+        impl From<typeof($instance)> for $wrapper<typeof($instance)> {
+            fn from(s: typeof($instance)) -> Self { Self(s) }
+        }
 
-        adapt_serial!(@impls $name: $wrapper, $write_fn,
-            <RX, TX, CLOCK>,
-            where arduino_hal::hal::usart::Usart<RX, TX, CLOCK>:
-                arduino_hal::usart::UsartOps<RX, TX>
-        );
-    };
-
-    (avr_usart: $name:ident, $wrapper:ident, $write_fn:ident) => {
-        adapt_serial!(@avr_usart_impl $name: $wrapper, $write_fn);
+        adapt_serial!(@impls $wrapper<typeof($instance)>, $write_fn);
     };
 
     // Generic serial type
-    (generic: $name:ident : $wrapper:ident, $target:ty, $write_fn:ident) => {
+    (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
-        adapt_serial!(@impls $name: $wrapper, $write_fn, <>);
+        adapt_serial!(@impls $wrapper, $write_fn);
     };
 }
 
