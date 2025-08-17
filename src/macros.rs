@@ -9,10 +9,10 @@
 
 /// # adapt_serial! macro
 ///
-/// Wraps a serial peripheral that does **not** implement
-/// `embedded-hal::serial::Write<u8>` and provides implementations for:
+/// Wraps any serial peripheral implementing a `write_byte(&mut self, u8)`
+/// method into a type that implements:
 /// - [`core::fmt::Write`] → allows `write!` / `writeln!`
-/// - [`embedded_hal::blocking::serial::Write`] → safe for blocking serials
+/// - [`embedded_hal::blocking::serial::Write<u8>`] → safe blocking write
 ///
 /// # Variants
 ///
@@ -26,20 +26,18 @@
 ///
 /// # Examples
 ///
-/// ## Arduino (avr-hal)
 /// ```ignore
-/// use arduino_hal::prelude::*;
-/// use dvcdbg::adapt_serial;
+/// // AVR USART
+/// let mut usart0: arduino_hal::Usart0 = ...;
+/// adapt_serial!(avr: UsartAdapter: usart0, write_byte);
+/// let mut uart = UsartAdapter(usart0);
+/// writeln!(uart, "Hello AVR!").ok();
 ///
-/// // Wrap Arduino's USART0
-/// // adapt_serial!(avr_usart: some_name: UsartAdapter, write_byte);
-///
-/// let dp = arduino_hal::Peripherals::take().unwrap();
-/// let mut serial = arduino_hal::default_serial!(dp, 57600);
-/// let mut dbg_uart = UsartAdapter(serial);
-///
-/// use core::fmt::Write;
-/// writeln!(dbg_uart, "Hello AVR!").ok();
+/// // ESP-IDF UART
+/// let esp_uart: EspUart = ...;
+/// adapt_serial!(generic: EspAdapter: esp_uart, write_byte);
+/// let mut logger = EspAdapter(esp_uart);
+/// writeln!(logger, "Hello ESP!").ok();
 /// ```
 ///
 /// ## Generic blocking serial
@@ -56,12 +54,12 @@
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    // 共通実装
-    (@impls $wrapper:ident, $write_fn:ident) => {
+    // common implementation: core::fmt::Write + embedded_hal::blocking::serial::Write<u8>
+    (@impls $wrapper:ty, $write_fn:ident) => {
         impl core::fmt::Write for $wrapper {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 for &b in s.as_bytes() {
-                    self.inner.$write_fn(b).map_err(|_| core::fmt::Error)?;
+                    self.$write_fn(b).map_err(|_| core::fmt::Error)?;
                 }
                 Ok(())
             }
@@ -69,45 +67,42 @@ macro_rules! adapt_serial {
 
         impl embedded_hal::blocking::serial::Write<u8> for $wrapper {
             type Error = ();
+
             fn bwrite_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
                 for &b in buf {
-                    self.inner.$write_fn(b).map_err(|_| ())?;
+                    self.$write_fn(b).map_err(|_| ())?;
                 }
                 Ok(())
             }
-            fn bflush(&mut self) -> Result<(), Self::Error> {
-                Ok(())
-            }
+
+            fn bflush(&mut self) -> Result<(), Self::Error> { Ok(()) }
         }
     };
 
-    // AVR USART 用
-    (avr_usart: $wrapper:ident : $instance:expr, $write_fn:ident) => {
-        pub struct $wrapper {
-            pub inner: _,
+    // AVR: Wrapping USART with type generic
+    (avr: $wrapper:ident: $instance:expr, $write_fn:ident) => {
+        pub struct $wrapper<T>(pub T);
+        impl<T> $wrapper<T> {
+            pub fn new(inner: T) -> Self { Self(inner) }
         }
 
-        impl $wrapper {
-            pub fn new(inner: typeof($instance)) -> Self {
-                Self { inner }
-            }
+        impl<T> core::ops::Deref for $wrapper<T> {
+            type Target = T;
+            fn deref(&self) -> &Self::Target { &self.0 }
+        }
+        impl<T> core::ops::DerefMut for $wrapper<T> {
+            fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
         }
 
-        adapt_serial!(@impls $wrapper, $write_fn);
+        adapt_serial!(@impls $wrapper<$crate::core::marker::PhantomData>, $write_fn);
     };
 
-    // 汎用シリアル用
-    (generic: $wrapper:ident : $target:ty, $write_fn:ident) => {
-        pub struct $wrapper {
-            pub inner: $target,
-        }
-
+    // Generic: Types with arbitrary write_byte methods
+    (generic: $wrapper:ident: $target:ty, $write_fn:ident) => {
+        pub struct $wrapper(pub $target);
         impl $wrapper {
-            pub fn new(inner: $target) -> Self {
-                Self { inner }
-            }
+            pub fn new(inner: $target) -> Self { Self(inner) }
         }
-
         adapt_serial!(@impls $wrapper, $write_fn);
     };
 }
