@@ -45,16 +45,15 @@ macro_rules! adapt_serial {
         }
 
         impl<T> core::fmt::Write for $name<T>
-        where
-            T: embedded_io::Write<Error = $err_ty>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                self.0.write_all(s.as_bytes())
+                use embedded_io::Write;
+                self.write_all(s.as_bytes())
                     .map_err(|_| core::fmt::Error)
             }
-
             fn flush(&mut self) -> core::fmt::Result {
-                self.0.flush().map_err(|_| core::fmt::Error)
+                use embedded_io::Write;
+                self.flush().map_err(|_| core::fmt::Error)
             }
         }
     };
