@@ -83,7 +83,7 @@ macro_rules! adapt_serial {
         /// Implement core::fmt::Write for writeln! / write!
         impl<T> core::fmt::Write for $name<T>
         where
-            T: core::ops::DerefMut,
+            T: nb::Write<u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 <Self as embedded_io::Write>::write_all(self, s.as_bytes())
