@@ -31,7 +31,7 @@
 /// let mut dbg_uart = UsartAdapter(serial);
 ///
 /// writeln!(dbg_uart, "Hello from embedded-io bridge!").unwrap();
-/// dbg_uart.write_all(&[0x01, 0x02, 0x03]).unwrap();
+/// embedded_io::Write::write_all(&mut dbg_uart, &[0x01, 0x02, 0x03]).unwrap();
 /// ```
 ///
 /// ## Using a custom serial-like type
