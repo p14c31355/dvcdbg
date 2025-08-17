@@ -54,13 +54,34 @@
 /// writeln!(uart, "Hello via custom serial").unwrap();
 /// uart.write_all(&[0xAA, 0xBB]).unwrap();
 /// ```
+/// Supports both embedded-hal 0.2.x (nb::Write<u8>) and 1.0.x (embedded_hal::serial::nb::Write<u8>).
 #[macro_export]
 macro_rules! adapt_serial {
     ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
         /// Serial adapter wrapper
         pub struct $name<T>(pub T);
 
-        /// Implement embedded-io Write for the wrapper
+        #[cfg(feature = "ehal_0_2")]
+        impl<T> embedded_io::Write for $name<T>
+        where
+            T: nb::Write<u8>,
+        {
+            type Error = $crate::AdaptError<T::Error>;
+
+            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+                for &b in buf {
+                    nb::block!(self.0.$write_fn(b)).map_err($crate::AdaptError::Other)?;
+                }
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> Result<(), Self::Error> {
+                $(nb::block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;)?
+                Ok(())
+            }
+        }
+
+        #[cfg(feature = "ehal_1_0")]
         impl<T> embedded_io::Write for $name<T>
         where
             T: embedded_hal::serial::nb::Write<u8>,
@@ -68,25 +89,24 @@ macro_rules! adapt_serial {
             type Error = $crate::AdaptError<T::Error>;
 
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-                use nb::block;
                 for &b in buf {
-                    block!(self.0.$write_fn(b)).map_err($crate::AdaptError::Other)?;
+                    nb::block!(self.0.$write_fn(b)).map_err($crate::AdaptError::Other)?;
                 }
                 Ok(buf.len())
             }
 
             fn flush(&mut self) -> Result<(), Self::Error> {
-                use nb::block;
-                $(
-                    block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;
-                )?
+                $(nb::block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;)?
                 Ok(())
             }
         }
 
-        /// Implement core::fmt::Write for writeln! / write!
+        /// core::fmt::Write for writeln!/write!
         impl<T> core::fmt::Write for $name<T>
         where
+            #[cfg(feature = "ehal_0_2")]
+            T: nb::Write<u8>,
+            #[cfg(feature = "ehal_1_0")]
             T: embedded_hal::serial::nb::Write<u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
