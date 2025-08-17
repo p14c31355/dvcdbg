@@ -15,7 +15,7 @@
 /// fn main() {
 ///     let mut i2c = /* your i2c interface */;
 ///     let mut logger = /* your logger */;
-/// 
+///
 ///     scan_i2c(&mut i2c, &mut logger);
 ///     scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
 /// }

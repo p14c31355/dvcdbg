@@ -43,14 +43,21 @@
 /// # Examples
 ///
 /// ## Arduino Uno (avr-hal)
+///
+/// First, enable the feature for your board in `Cargo.toml`:
+/// ```toml
+/// [dependencies]
+/// dvcdbg = { version = "0.1.2", features = ["arduino-uno"] }
+/// ```
+///
+/// Then, use the macro in your code:
 /// ```ignore
 /// use arduino_hal::prelude::*;
 /// use dvcdbg::adapt_serial;
 ///
 /// adapt_serial!(
 ///     avr_usart: UsartAdapter,
-///     write_byte,
-///     arduino_hal::pac::atmega328p
+///     write_byte
 /// );
 ///
 /// let dp = arduino_hal::Peripherals::take().unwrap();
@@ -105,15 +112,51 @@ macro_rules! adapt_serial {
         }
     };
 
-    // AVR-HAL USART (ATmega) - U removed, PAC fixed
-    (avr_usart: $wrapper:ident, $write_fn:ident, $pac:ty) => {
-        pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<$pac, RX, TX, CLOCK>
+    // AVR-HAL USART (ATmega) with automatic PAC selection
+    // Helper macro to define the USART wrapper struct for a specific PAC.
+    // This avoids repeating the struct definition.
+        (avr_usart: $wrapper:ident, $write_fn:ident) => {
+        #[cfg(not(any(
+            feature = "arduino-uno",
+            feature = "arduino-nano",
+            feature = "arduino-mega",
+            feature = "arduino-leonardo"
+        )))]
+        compile_error!(
+            "None of the AVR boards are enabled in Cargo.toml!"
         );
 
-        adapt_serial!(@impls $wrapper, $write_fn,
-            <RX, TX, CLOCK>,
-            where $pac: arduino_hal::usart::UsartOps<$pac, RX, TX>
+        macro_rules! __dvcdbg_define_usart_wrapper {
+            (
+                $pac_ty:ty,
+                [ $( $feature:meta ),* ]
+            ) => {
+                #[cfg(any( $( $feature ),* ))]
+                pub struct $wrapper<RX, TX, CLOCK>(
+                    pub arduino_hal::hal::usart::Usart<$pac_ty, RX, TX, CLOCK>
+                );
+
+                #[cfg(any( $( $feature ),* ))]
+                adapt_serial!(@impls $wrapper, $write_fn,
+                    <RX, TX, CLOCK>,
+                    where $pac_ty: arduino_hal::usart::UsartOps<$pac_ty, RX, TX>
+                );
+            };
+        }
+
+        __dvcdbg_define_usart_wrapper!(
+            arduino_hal::pac::atmega328p::Peripherals,
+            [feature = "arduino-uno", feature = "arduino-nano"]
+        );
+
+        __dvcdbg_define_usart_wrapper!(
+            arduino_hal::pac::atmega2560::Peripherals,
+            [feature = "arduino-mega"]
+        );
+
+        __dvcdbg_define_usart_wrapper!(
+            arduino_hal::pac::atmega32u4::Peripherals,
+            [feature = "arduino-leonardo"]
         );
     };
 
@@ -123,7 +166,6 @@ macro_rules! adapt_serial {
         adapt_serial!(@impls $wrapper, $write_fn, <>);
     };
 }
-
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
 ///
@@ -163,7 +205,6 @@ macro_rules! write_bin {
         }
     };
 }
-
 
 /// Measures execution cycles (or timestamps) for an expression using a timer.
 ///

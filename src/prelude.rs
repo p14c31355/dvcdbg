@@ -14,18 +14,8 @@ pub use crate::{
 
 #[cfg(feature = "macros")]
 pub use crate::{
-    adapt_serial,
-    write_hex,
-    write_bin,
-    measure_cycles,
-    loop_with_delay,
-    assert_log,
-    quick_diag,
+    adapt_serial, assert_log, loop_with_delay, measure_cycles, quick_diag, write_bin, write_hex,
 };
 
 #[cfg(feature = "scanner")]
-pub use crate::scanner::{
-    scan_i2c,
-    scan_i2c_with_ctrl,
-    scan_init_sequence,
-};
+pub use crate::scanner::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
