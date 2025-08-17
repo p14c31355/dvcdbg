@@ -63,7 +63,7 @@ macro_rules! adapt_serial {
         /// Implement embedded-io Write for the wrapper
         impl<T> embedded_io::Write for $name<T>
         where
-            T: core::ops::DerefMut,
+            T: nb::Write<u8>,
         {
             fn write(&mut self, buf: &[u8]) -> Result<usize, embedded_io::Error> {
                 for &b in buf {
