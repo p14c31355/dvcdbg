@@ -115,7 +115,18 @@ macro_rules! adapt_serial {
     // AVR-HAL USART (ATmega) with automatic PAC selection
     // Helper macro to define the USART wrapper struct for a specific PAC.
     // This avoids repeating the struct definition.
-    (avr_usart: $wrapper:ident, $write_fn:ident) => {
+        (avr_usart: $wrapper:ident, $write_fn:ident) => {
+        #[cfg(not(any(
+            feature = "arduino-uno",
+            feature = "arduino-nano",
+            feature = "arduino-mega",
+            feature = "arduino-leonardo"
+        )))]
+        compile_error!(
+            "When using `adapt_serial!(avr_usart: ...)` you must enable one of the board features in your Cargo.toml. \
+            Available features: `arduino-uno`, `arduino-nano`, `arduino-mega`, `arduino-leonardo`."
+        );
+
         macro_rules! __dvcdbg_define_usart_wrapper {
             (
                 $pac_ty:ty,
