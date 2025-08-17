@@ -123,8 +123,7 @@ macro_rules! adapt_serial {
             feature = "arduino-leonardo"
         )))]
         compile_error!(
-            "When using `adapt_serial!(avr_usart: ...)` you must enable one of the board features in your Cargo.toml. \
-            Available features: `arduino-uno`, `arduino-nano`, `arduino-mega`, `arduino-leonardo`."
+            "None of the AVR boards are enabled in Cargo.toml!"
         );
 
         macro_rules! __dvcdbg_define_usart_wrapper {
