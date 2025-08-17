@@ -88,7 +88,7 @@ macro_rules! adapt_serial {
             T: embedded_hal::serial::nb::Write<u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                <Self as embedded_io::Write>::write_all(self, s.as_bytes())
+                <Self as embedded_io::Write>::write_all(self, s.as_bytes()).map_err(|_| core::fmt::Error)
                     .map_err(|_| core::fmt::Error)
             }
         }
