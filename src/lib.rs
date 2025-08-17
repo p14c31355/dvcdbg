@@ -23,13 +23,21 @@ pub mod macros;
 /// ```
 pub mod prelude;
 
-/// error type and implementation
+/// Error type returned by [`adapt_serial!`] adapters.
 ///
+/// This type is part of the public API, but its exact variants may change
+/// in a minor release. Prefer matching with `_` to stay forward-compatible.
+///  
+/// This is public because wiring issues are common in prototyping,
+/// and users may want to handle them (e.g., retries, logging).
 #[derive(Debug)]
 pub enum AdaptError<E> {
-    /// The underlying I/O error.
+    /// Formatting failure (e.g., `core::fmt::Write`).
+    Fmt,
+    /// HAL-specific error.
     Other(E),
 }
+
 
 impl<E: core::fmt::Debug> embedded_io::Error for AdaptError<E> {
     fn kind(&self) -> embedded_io::ErrorKind {
