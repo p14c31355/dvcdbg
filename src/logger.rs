@@ -85,28 +85,6 @@ pub trait Logger {
     }
 }
 
-use embedded_io::Write;
-
-/// Our adapter trait for byte-oriented serial.
-/// This replaces the old embedded-hal blocking::serial::Write<u8>.
-pub trait WriteAdapter {
-    type Error;
-    fn write(&mut self, byte: u8) -> Result<(), Self::Error>;
-}
-
-impl<T> WriteAdapter for T
-where
-    T: Write,
-{
-    type Error = T::Error;
-    fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
-        // `Write::write_all` ensures the whole buffer is written.
-        self.write_all(&[byte])
-    }
-}
-
-
-
 /// Logger that writes directly to any `core::fmt::Write` target.
 pub struct SerialLogger<'a, W: core::fmt::Write>(&'a mut W);
 
