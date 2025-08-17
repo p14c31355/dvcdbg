@@ -57,26 +57,31 @@
 #[macro_export]
 macro_rules! adapt_serial {
     ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
+        /// Serial adapter wrapper
         pub struct $name<T>(pub T);
 
+        /// Implement embedded-io Write for the wrapper
         impl<T> embedded_io::Write for $name<T>
         where
             T: nb::Write<u8>,
             <T as nb::Write<u8>>::Error: core::fmt::Debug,
         {
-            fn write(&mut self, buf: &[u8]) -> Result<usize, impl embedded_io::Error> {
+            fn write(&mut self, buf: &[u8]) -> Result<usize, embedded_io::Error> {
                 for &b in buf {
-                    nb::block!(self.0.$write_fn(b)).map_err($crate::AdaptError::Other)?;
+                    nb::block!(self.0.$write_fn(b)).map_err(|_| embedded_io::ErrorKind::Other)?;
                 }
                 Ok(buf.len())
             }
 
-            fn flush(&mut self) -> Result<(), impl embedded_io::Error> {
-                $(nb::block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;)?
+            fn flush(&mut self) -> Result<(), embedded_io::Error> {
+                $(
+                    nb::block!(self.0.$flush_fn()).map_err(|_| embedded_io::ErrorKind::Other)?;
+                )?
                 Ok(())
             }
         }
 
+        /// Implement core::fmt::Write for writeln! / write!
         impl<T> core::fmt::Write for $name<T>
         where
             T: nb::Write<u8>,
