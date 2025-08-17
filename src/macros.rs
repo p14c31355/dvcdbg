@@ -65,7 +65,7 @@ macro_rules! adapt_serial {
         where
             T: embedded_hal::serial::nb::Write<u8>,
         {
-            type Error = $crate::AdaptError<<T as embedded_hal::serial::nb::Write<u8>>::Error>;
+            type Error = $crate::AdaptError<T::Error>;
 
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
