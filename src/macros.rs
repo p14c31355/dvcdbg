@@ -101,16 +101,8 @@ macro_rules! adapt_serial {
     };
 
     // AVR-HAL USART (ATmega) with board type argument
-    (avr_usart: $wrapper:ident, $write_fn:ident, atmega328p) => {
-        adapt_serial!(@avr_usart_impl $wrapper, $write_fn, atmega328p);
-    };
-
-    (avr_usart: $wrapper:ident, $write_fn:ident, atmega2560) => {
-        adapt_serial!(@avr_usart_impl $wrapper, $write_fn, atmega2560);
-    };
-
-    (avr_usart: $wrapper:ident, $write_fn:ident, atmega32u4) => {
-        adapt_serial!(@avr_usart_impl $wrapper, $write_fn, atmega32u4);
+        (avr_usart: $wrapper:ident, $write_fn:ident, $board:ident) => {
+        adapt_serial!(@avr_usart_impl $wrapper, $write_fn, $board);
     };
 
     // Generic serial type
