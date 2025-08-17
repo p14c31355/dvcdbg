@@ -101,7 +101,7 @@ macro_rules! adapt_serial {
     };
 
     // AVR-HAL USART (ATmega) with board type argument
-        (avr_usart: $wrapper:ident, $write_fn:ident, $board:ident) => {
+    (avr_usart: $wrapper:ident, $write_fn:ident, $board:ident) => {
         adapt_serial!(@avr_usart_impl $wrapper, $write_fn, $board);
     };
 
