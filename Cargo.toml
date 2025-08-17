@@ -25,3 +25,9 @@ logger = []
 scanner = []
 macros = []
 quick_diag = ["logger", "scanner", "macros"]
+
+# ... other features
+arduino-uno = []
+arduino-nano = []
+arduino-mega = []
+arduino-leonardo = []
