@@ -35,12 +35,7 @@
 ///
 /// Select the PAC type that matches your Arduino board:
 ///
-/// | Board          | PAC type                          |
-/// |----------------|-----------------------------------|
-/// | Arduino UNO    | `arduino_hal::pac::atmega328p`    |
-/// | Arduino Nano   | `arduino_hal::pac::atmega328p`    |
-/// | Arduino Mega   | `arduino_hal::pac::atmega2560`    |
-/// | Arduino Leonardo | `arduino_hal::pac::atmega32u4` |
+/// | Board              | PAC type                         |\n/// |--------------------|----------------------------------|\n/// | Arduino UNO        | `arduino_hal::pac::atmega328p`   |\n/// | Arduino Nano       | `arduino_hal::pac::atmega328p`   |\n/// | Arduino Mega       | `arduino_hal::pac::atmega2560`   |\n/// | Arduino Leonardo   | `arduino_hal::pac::atmega32u4`   |
 /// 
 /// # Examples
 ///
