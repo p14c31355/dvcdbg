@@ -74,8 +74,7 @@ macro_rules! adapt_serial {
             }
 
             fn flush(&mut self) -> Result<(), embedded_io::Error> {
-                $(nb::block!(self.0.$flush_fn())
-                    .map_err(|_| embedded_io::ErrorKind::Other)?;)?
+                $(nb::block!(self.0.$flush_fn()).map_err(|_| embedded_io::ErrorKind::Other)?;)?
                 Ok(())
             }
         }
