@@ -55,7 +55,6 @@
 #[macro_export]
 macro_rules! adapt_serial {
     ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
-        use core::convert::Infallible;
         use embedded_io::Write as IoWrite;
         use nb::block;
         use nb::serial::Write as NbWrite;
@@ -66,9 +65,9 @@ macro_rules! adapt_serial {
         /// Implement embedded-io Write for the wrapper
         impl<T> IoWrite for $name<T>
         where
-            T: NbWrite<u8, Error = Infallible>,
+            T: NbWrite<u8, Error = core::convert::Infallible>,
         {
-            type Error = Infallible;
+            type Error = core::convert::Infallible;
 
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
@@ -86,7 +85,7 @@ macro_rules! adapt_serial {
         /// Implement core::fmt::Write for writeln! / write!
         impl<T> core::fmt::Write for $name<T>
         where
-            $name<T>: IoWrite<Error = Infallible>,
+            $name<T>: IoWrite<Error = core::convert::Infallible>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 IoWrite::write_all(self, s.as_bytes()).map_err(|_| core::fmt::Error)
