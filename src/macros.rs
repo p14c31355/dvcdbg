@@ -57,7 +57,7 @@
 /// }
 ///
 /// // Adapt it with the macro
-/// adapt_serial!(MyAdapter, nb_write = write, error = Infallible, flush = flush);
+/// adapt_serial!(MyAdapter, nb_write = write, flush = flush);
 ///
 /// let mut uart = MyAdapter(MySerial);
 /// writeln!(uart, "Hello via custom serial").unwrap();
@@ -70,6 +70,7 @@ macro_rules! adapt_serial {
         use core::convert::Infallible;
         use embedded_io::Write as IoWrite;
         use nb::block;
+        use nb::serial::Write as NbWrite;
 
         /// Serial adapter wrapper
         pub struct $name<T>(pub T);
@@ -77,7 +78,7 @@ macro_rules! adapt_serial {
         /// Implement embedded-io Write for the wrapper
         impl<T> IoWrite for $name<T>
         where
-            T: $crate::prelude::_embedded_hal_serial_Write<u8>, // trait bound for Arduino HAL serial
+            T: NbWrite<u8, Error = Infallible>,
         {
             type Error = Infallible;
 
