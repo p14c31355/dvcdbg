@@ -91,7 +91,7 @@ macro_rules! adapt_serial {
 
             fn flush(&mut self) -> Result<(), Self::Error> {
                 $(
-                    block!(self.0.$flush_fn()).ok();
+                    block!(self.0.$flush_fn())?;
                 )?
                 Ok(())
             }
