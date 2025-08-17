@@ -102,7 +102,7 @@ macro_rules! adapt_serial {
 
     // AVR-HAL USART (ATmega)
     (avr_usart: $wrapper:ident, $write_fn:ident) => {
-        adapt_serial!(@avr_usart_impl $name: $wrapper, $write_fn);
+        adapt_serial!(@avr_usart_impl $wrapper, $write_fn);
     };
 
     // Generic serial type
