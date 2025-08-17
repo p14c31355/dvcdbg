@@ -85,13 +85,24 @@ pub trait Logger {
     }
 }
 
-/// Adapter trait for low-level byte writes.
-/// 
-/// Typically implemented by wrappers around `embedded_hal::serial::Write<u8>`.
+use embedded_io::Write;
+
+/// Our adapter trait for byte-oriented serial.
+/// This replaces the old embedded-hal blocking::serial::Write<u8>.
 pub trait WriteAdapter {
-    /// Writes a single byte (blocking).
     fn write(&mut self, byte: u8);
 }
+
+impl<T> WriteAdapter for T
+where
+    T: Write,
+{
+    fn write(&mut self, byte: u8) {
+        // `Write::write` takes a buffer, so we wrap the single byte
+        let _ = self.write(&[byte]);
+    }
+}
+
 
 
 /// Logger that writes directly to any `core::fmt::Write` target.

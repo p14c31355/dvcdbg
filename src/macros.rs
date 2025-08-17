@@ -25,7 +25,7 @@ macro_rules! adapt_serial {
 
         impl<T> core::fmt::Write for $name<T>
         where
-            T: embedded_hal::blocking::serial::Write<u8>,
+            T: embedded_io::Write,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 for b in s.as_bytes() {
@@ -37,7 +37,7 @@ macro_rules! adapt_serial {
 
         impl<T> dvcdbg::logger::WriteAdapter for $name<T>
         where
-            T: embedded_hal::blocking::serial::Write<u8>,
+            T: embedded_io::Write,
         {
             fn write(&mut self, byte: u8) {
                 let _ = nb::block!(self.0.write(byte));

@@ -16,9 +16,10 @@ exclude = [
 ]
 
 [dependencies]
-embedded-hal = "0.2.7"
+embedded-hal = "1.0.0"
 nb = "1.1"
-heapless = "0.7"
+heapless = "0.8.0"
+embedded-io = "0.6.1"
 
 [features]
 default = ["logger", "scanner", "macros"]
