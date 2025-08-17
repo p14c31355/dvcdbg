@@ -105,15 +105,27 @@ macro_rules! adapt_serial {
         }
     };
 
-    // AVR-HAL USART (ATmega) - U removed, PAC fixed
-    (avr_usart: $wrapper:ident, $write_fn:ident, $pac:ty) => {
+    // AVR-HAL USART (ATmega) with automatic PAC selection
+    (avr_usart: $wrapper:ident, $write_fn:ident) => {
+        #[cfg(feature = "arduino-uno", "arduino-nano")]
         pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<$pac, RX, TX, CLOCK>
+            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::atmega328p::Peripherals, RX, TX, CLOCK>
+        );
+
+        #[cfg(feature = "arduino-mega")]
+        pub struct $wrapper<RX, TX, CLOCK>(
+            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::atmega2560::Peripherals, RX, TX, CLOCK>
+        );
+
+        #[cfg(feature = "arduino-leonardo")]
+        pub struct $wrapper<RX, TX, CLOCK>(
+            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::atmega32u4::Peripherals, RX, TX, CLOCK>
         );
 
         adapt_serial!(@impls $wrapper, $write_fn,
             <RX, TX, CLOCK>,
-            where $pac: arduino_hal::usart::UsartOps<$pac, RX, TX>
+            where RX: arduino_hal::hal::usart::Read<u8>,
+                  TX: arduino_hal::hal::usart::Write<u8>
         );
     };
 
