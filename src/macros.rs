@@ -57,7 +57,7 @@
 #[macro_export]
 macro_rules! adapt_serial {
     // Impl helper
-    (@impls $wrapper:ident, $write_fn:ident, <$($generics:tt)*> $(, $where:tt)?) => {
+    (@impls $name:ident : $wrapper:ident, $write_fn:ident, <$($generics:tt)*> $(, $where:tt)?) => {
         impl<$($generics)*> embedded_hal::blocking::serial::Write<u8>
             for $wrapper<$($generics)*>
             $( $where )?
@@ -88,7 +88,7 @@ macro_rules! adapt_serial {
 
     // AVR-HAL USART (ATmega) with board type argument
     // Internal helper for AVR-HAL USARTs
-    (@avr_usart_impl $wrapper:ident, $write_fn:ident, $pac:ident) => {
+    (@avr_usart_impl $name:ident : $wrapper:ident, $write_fn:ident, $pac:ident) => {
         pub struct $wrapper<RX, TX, CLOCK>(
             pub arduino_hal::hal::usart::Usart<arduino_hal::pac::$pac::Peripherals, RX, TX, CLOCK>
         );
@@ -101,12 +101,12 @@ macro_rules! adapt_serial {
     };
 
     // AVR-HAL USART (ATmega) with board type argument
-    (avr_usart: $wrapper:ident, $write_fn:ident, $board:ident) => {
+    (avr_usart: $name:ident : $wrapper:ident, $write_fn:ident, $board:ident) => {
         adapt_serial!(@avr_usart_impl $wrapper, $write_fn, $board);
     };
 
     // Generic serial type
-    (generic: $wrapper:ident, $target:ty, $write_fn:ident) => {
+    (generic: $name:ident : $wrapper:ident, $target:ty, $write_fn:ident) => {
         pub struct $wrapper(pub $target);
         adapt_serial!(@impls $wrapper, $write_fn, <>);
     };
