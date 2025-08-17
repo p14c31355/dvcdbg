@@ -3,19 +3,6 @@
 /// Supports both embedded-hal 0.2.x and 1.0.x through feature flags:
 /// - `ehal_0_2` → uses `blocking::i2c::Write`
 /// - `ehal_1_0` → uses `i2c::I2c`
-///
-/// # Examples
-///
-/// ```ignore
-/// use dvcdbg::logger::{Logger, SerialLogger};
-///
-/// let mut i2c = /* your i2c interface */;
-/// let mut logger = /* your logger */;
-///
-/// scan_i2c(&mut i2c, &mut logger);
-/// scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
-/// scan_init_sequence(&mut i2c, &mut logger, &[0x00, 0xA5]);
-/// ```
 use crate::log;
 use crate::logger::Logger;
 use heapless::Vec;
@@ -24,155 +11,99 @@ use heapless::Vec;
 use embedded_hal_1::i2c::I2c;
 
 #[cfg(feature = "ehal_0_2")]
-use embedded_hal::blocking::i2c::Write;
+use embedded_hal_0_2::blocking::i2c::Write as I2cWrite;
 
-/// ==========================
-/// I2C 0.2.x implementations
-/// ==========================
-#[cfg(feature = "ehal_0_2")]
-pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
-where
-    I2C: Write<u8>,
+/// 内部共通処理
+fn scan_i2c_inner<I2C, L>(
+    i2c: &mut I2C,
+    logger: &mut L,
+    control_bytes: Option<&[u8]>,
+    init_sequence: Option<&[u8]>,
+) where
     L: Logger,
 {
-    log!(logger, "[scan] Scanning I2C bus...");
-
-    for addr in 0x03..=0x77 {
-        if i2c.write(addr, &[]).is_ok() {
-            log!(logger, "[ok] Found device at 0x{:02X}", addr);
-        }
+    #[cfg(feature = "ehal_0_2")]
+    fn write<I2C: I2cWrite>(i2c: &mut I2C, addr: u8, data: &[u8]) -> bool {
+        i2c.write(addr, data).is_ok()
     }
 
-    log!(logger, "[info] I2C scan complete.");
-}
-
-#[cfg(feature = "ehal_0_2")]
-pub fn scan_i2c_with_ctrl<I2C, L>(i2c: &mut I2C, logger: &mut L, control_bytes: &[u8])
-where
-    I2C: Write<u8>,
-    L: Logger,
-{
-    log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
-
-    for addr in 0x03..=0x77 {
-        if i2c.write(addr, control_bytes).is_ok() {
-            log!(logger, "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})", addr, control_bytes);
-        }
+    #[cfg(feature = "ehal_1_0")]
+    fn write<I2C: I2c>(i2c: &mut I2C, addr: u8, data: &[u8]) -> bool
+    where
+        I2C::Error: core::fmt::Debug,
+    {
+        i2c.write(addr, data).is_ok()
     }
 
-    log!(logger, "[info] I2C scan complete.");
-}
+    if let Some(seq) = init_sequence {
+        log!(logger, "[scan] Scanning I2C with init sequence {:02X?}", seq);
+        let mut detected_cmds = Vec::<u8, 64>::new();
 
-#[cfg(feature = "ehal_0_2")]
-pub fn scan_init_sequence<I2C, L>(i2c: &mut I2C, logger: &mut L, init_sequence: &[u8])
-where
-    I2C: Write<u8>,
-    L: Logger,
-{
-    log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
+        for &cmd in seq {
+            log!(logger, "-> Testing command 0x{:02X}", cmd);
 
-    let mut detected_cmds = Vec::<u8, 64>::new();
+            for addr in 0x03..=0x77 {
+                if write(i2c, addr, &[0x00, cmd]) {
+                    log!(logger, "[ok] Found device at 0x{:02X} responding to 0x{:02X}", addr, cmd);
+                }
+            }
 
-    for &cmd in init_sequence {
-        log!(logger, "-> Testing command 0x{:02X}", cmd);
-
-        for addr in 0x03..=0x77 {
-            if i2c.write(addr, &[0x00, cmd]).is_ok() {
-                log!(logger, "[ok] Found device at 0x{:02X} responding to command 0x{:02X}", addr, cmd);
+            if detected_cmds.push(cmd).is_err() {
+                log!(logger, "[warn] Detected commands buffer full, results may be incomplete!");
             }
         }
 
-        if detected_cmds.push(cmd).is_err() {
-            log!(logger, "[warn] Detected commands buffer is full, results may be incomplete!");
-        }
+        detected_cmds.sort_unstable();
+        let missing_cmds: Vec<u8, 64> = seq
+            .iter()
+            .filter(|&&c| detected_cmds.binary_search(&c).is_err())
+            .copied()
+            .collect();
+
+        log!(logger, "[info] Expected sequence: {:02X?}", seq);
+        log!(logger, "[info] Commands with response: {:02X?}", detected_cmds.as_slice());
+        log!(logger, "[info] Commands with no response: {:02X?}", missing_cmds.as_slice());
+        log!(logger, "[info] I2C scan with init sequence complete.");
+        return;
     }
 
-    log!(logger, "Expected sequence: {:02X?}", init_sequence);
-    log!(logger, "Commands with response: {:02X?}", detected_cmds.as_slice());
-
-    let mut missing_cmds: Vec<u8, 64> = Vec::new();
-    for &cmd in init_sequence {
-        if detected_cmds.iter().all(|&d| d != cmd) {
-            let _ = missing_cmds.push(cmd);
-        }
-    }
-    log!(logger, "Commands with no response: {:02X?}", missing_cmds.as_slice());
-    log!(logger, "[info] I2C scan with init sequence complete.");
-}
-
-/// ==========================
-/// I2C 1.0.x implementations
-/// ==========================
-#[cfg(feature = "ehal_1_0")]
-pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
-where
-    I2C: I2c,
-    I2C::Error: core::fmt::Debug,
-    L: Logger,
-{
-    log!(logger, "[scan] Scanning I2C bus...");
+    let ctrl = control_bytes.unwrap_or(&[]);
+    log!(logger, "[scan] Scanning I2C bus{}", if ctrl.is_empty() { "" } else { " with control bytes" });
 
     for addr in 0x03..=0x77 {
-        if i2c.write(addr, &[]).is_ok() {
-            log!(logger, "[ok] Found device at 0x{:02X}", addr);
-        }
-    }
-
-    log!(logger, "[info] I2C scan complete.");
-}
-
-#[cfg(feature = "ehal_1_0")]
-pub fn scan_i2c_with_ctrl<I2C, L>(i2c: &mut I2C, logger: &mut L, control_bytes: &[u8])
-where
-    I2C: I2c,
-    I2C::Error: core::fmt::Debug,
-    L: Logger,
-{
-    log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
-
-    for addr in 0x03..=0x77 {
-        if i2c.write(addr, control_bytes).is_ok() {
-            log!(logger, "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})", addr, control_bytes);
-        }
-    }
-
-    log!(logger, "[info] I2C scan complete.");
-}
-
-#[cfg(feature = "ehal_1_0")]
-pub fn scan_init_sequence<I2C, L>(i2c: &mut I2C, logger: &mut L, init_sequence: &[u8])
-where
-    I2C: I2c,
-    I2C::Error: core::fmt::Debug,
-    L: Logger,
-{
-    log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
-
-    let mut detected_cmds = Vec::<u8, 64>::new();
-
-    for &cmd in init_sequence {
-        log!(logger, "-> Testing command 0x{:02X}", cmd);
-
-        for addr in 0x03..=0x77 {
-            if i2c.write(addr, &[0x00, cmd]).is_ok() {
-                log!(logger, "[ok] Found device at 0x{:02X} responding to command 0x{:02X}", addr, cmd);
+        if write(i2c, addr, ctrl) {
+            if ctrl.is_empty() {
+                log!(logger, "[ok] Found device at 0x{:02X}", addr);
+            } else {
+                log!(logger, "[ok] Found device at 0x{:02X} (ctrl bytes: {:02X?})", addr, ctrl);
             }
         }
-
-        if detected_cmds.push(cmd).is_err() {
-            log!(logger, "[warn] Detected commands buffer is full, results may be incomplete!");
-        }
     }
 
-    log!(logger, "Expected sequence: {:02X?}", init_sequence);
-    log!(logger, "Commands with response: {:02X?}", detected_cmds.as_slice());
+    log!(logger, "[info] I2C scan complete.");
+}
 
-    let mut missing_cmds: Vec<u8, 64> = Vec::new();
-    for &cmd in init_sequence {
-        if detected_cmds.iter().all(|&d| d != cmd) {
-            let _ = missing_cmds.push(cmd);
-        }
-    }
-    log!(logger, "Commands with no response: {:02X?}", missing_cmds.as_slice());
-    log!(logger, "[info] I2C scan with init sequence complete.");
+/// パブリック API
+pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
+where
+    L: Logger,
+    I2C: ?Sized,
+{
+    scan_i2c_inner(i2c, logger, None, None);
+}
+
+pub fn scan_i2c_with_ctrl<I2C, L>(i2c: &mut I2C, logger: &mut L, control_bytes: &[u8])
+where
+    L: Logger,
+    I2C: ?Sized,
+{
+    scan_i2c_inner(i2c, logger, Some(control_bytes), None);
+}
+
+pub fn scan_init_sequence<I2C, L>(i2c: &mut I2C, logger: &mut L, init_sequence: &[u8])
+where
+    L: Logger,
+    I2C: ?Sized,
+{
+    scan_i2c_inner(i2c, logger, None, Some(init_sequence));
 }
