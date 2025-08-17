@@ -21,17 +21,39 @@
 ///
 /// # Arguments
 ///
+/// ## AVR-HAL (`avr_usart`)
 /// - `$wrapper`: Wrapper type name
-/// - `$target`: Target type (for `generic`)
-/// - `$write_fn`: Method on the target that writes a single byte
+/// - `$write_fn`: Method on the USART that writes a single byte
+/// - `$pac`: PAC type corresponding to your MCU (see MCU support table)
 ///
+/// ## Generic (`generic`)
+/// - `$wrapper`: Wrapper type name
+/// - `$target`: Target serial type
+/// - `$write_fn`: Method on the target that writes a single byte
+/// 
+/// # MCU support
+///
+/// Select the PAC type that matches your Arduino board:
+///
+/// | Board          | PAC type                          |
+/// |----------------|-----------------------------------|
+/// | Arduino UNO    | `arduino_hal::pac::atmega328p`    |
+/// | Arduino Nano   | `arduino_hal::pac::atmega328p`    |
+/// | Arduino Mega   | `arduino_hal::pac::atmega2560`    |
+/// | Arduino Leonardo | `arduino_hal::pac::atmega32u4` |
+/// 
 /// # Examples
 ///
 /// ## Arduino Uno (avr-hal)
 /// ```ignore
+/// use arduino_hal::prelude::*;
 /// use dvcdbg::adapt_serial;
 ///
-/// adapt_serial!(avr_usart: UsartAdapter, write_byte);
+/// adapt_serial!(
+///     avr_usart: UsartAdapter,
+///     write_byte,
+///     arduino_hal::pac::atmega328p
+/// );
 ///
 /// let dp = arduino_hal::Peripherals::take().unwrap();
 /// let mut serial = arduino_hal::default_serial!(dp, 57600);
@@ -86,19 +108,14 @@ macro_rules! adapt_serial {
     };
 
     // AVR-HAL USART (ATmega)
-    (avr_usart: $wrapper:ident, $write_fn:ident) => {
-        pub struct $wrapper<
-            U,
-            RX,
-            TX,
-            CLOCK
-        >(
+    (avr_usart: $wrapper:ident, $write_fn:ident, $pac:ty) => {
+        pub struct $wrapper<U, RX, TX, CLOCK>(
             pub arduino_hal::hal::usart::Usart<U, RX, TX, CLOCK>
         );
 
         adapt_serial!(@impls $wrapper, $write_fn,
             <U, RX, TX, CLOCK>,
-            where U: arduino_hal::usart::UsartOps<U, RX, TX>
+            where U: arduino_hal::usart::UsartOps<$pac, RX, TX>
         );
     };
 
