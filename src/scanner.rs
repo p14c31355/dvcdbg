@@ -1,21 +1,21 @@
-//! Scanner utilities for I2C bus device discovery and analysis.
-//!
-//! Supports both embedded-hal 0.2.x and 1.0.x through feature flags:
-//! - `ehal_0_2` → uses `blocking::i2c::Write`
-//! - `ehal_1_0` → uses `i2c::I2c`
-//!
-//! # Examples
-//!
-//! ```ignore
-//! use dvcdbg::logger::{Logger, SerialLogger};
-//!
-//! let mut i2c = /* your i2c interface */;
-//! let mut logger = /* your logger */;
-//!
-//! scan_i2c(&mut i2c, &mut logger);
-//! scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
-//! scan_init_sequence(&mut i2c, &mut logger, &[0x00, 0xA5]);
-//! ```
+/// Scanner utilities for I2C bus device discovery and analysis.
+///
+/// Supports both embedded-hal 0.2.x and 1.0.x through feature flags:
+/// - `ehal_0_2` → uses `blocking::i2c::Write`
+/// - `ehal_1_0` → uses `i2c::I2c`
+///
+/// # Examples
+///
+/// ```ignore
+/// use dvcdbg::logger::{Logger, SerialLogger};
+///
+/// let mut i2c = /* your i2c interface */;
+/// let mut logger = /* your logger */;
+///
+/// scan_i2c(&mut i2c, &mut logger);
+/// scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
+/// scan_init_sequence(&mut i2c, &mut logger, &[0x00, 0xA5]);
+/// ```
 use crate::log;
 use crate::logger::Logger;
 use heapless::Vec;
@@ -30,6 +30,12 @@ use embedded_hal::blocking::i2c::Write;
 pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
 where
     L: Logger,
+    #[cfg(feature = "ehal_1_0")]
+    I2C: I2c,
+    #[cfg(feature = "ehal_1_0")]
+    I2C::Error: core::fmt::Debug,
+    #[cfg(feature = "ehal_0_2")]
+    I2C: Write<u8>,
 {
     log!(logger, "[scan] Scanning I2C bus...");
 
@@ -37,9 +43,8 @@ where
         let ok = {
             #[cfg(feature = "ehal_1_0")]
             {
-                embedded_hal_1::i2c::I2c::write(i2c, addr, &[]).is_ok()
+                i2c.write(addr, &[]).is_ok()
             }
-
             #[cfg(feature = "ehal_0_2")]
             {
                 Write::write(i2c, addr, &[]).is_ok()
@@ -58,6 +63,12 @@ where
 pub fn scan_i2c_with_ctrl<I2C, L>(i2c: &mut I2C, logger: &mut L, control_bytes: &[u8])
 where
     L: Logger,
+    #[cfg(feature = "ehal_1_0")]
+    I2C: I2c,
+    #[cfg(feature = "ehal_1_0")]
+    I2C::Error: core::fmt::Debug,
+    #[cfg(feature = "ehal_0_2")]
+    I2C: Write<u8>,
 {
     log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
 
@@ -65,9 +76,8 @@ where
         let ok = {
             #[cfg(feature = "ehal_1_0")]
             {
-                embedded_hal_1::i2c::I2c::write(i2c, addr, control_bytes).is_ok()
+                i2c.write(addr, control_bytes).is_ok()
             }
-
             #[cfg(feature = "ehal_0_2")]
             {
                 Write::write(i2c, addr, control_bytes).is_ok()
@@ -91,6 +101,12 @@ where
 pub fn scan_init_sequence<I2C, L>(i2c: &mut I2C, logger: &mut L, init_sequence: &[u8])
 where
     L: Logger,
+    #[cfg(feature = "ehal_1_0")]
+    I2C: I2c,
+    #[cfg(feature = "ehal_1_0")]
+    I2C::Error: core::fmt::Debug,
+    #[cfg(feature = "ehal_0_2")]
+    I2C: Write<u8>,
 {
     log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
 
@@ -103,9 +119,8 @@ where
             let ok = {
                 #[cfg(feature = "ehal_1_0")]
                 {
-                    embedded_hal_1::i2c::I2c::write(i2c, addr, &[0x00, cmd]).is_ok()
+                    i2c.write(addr, &[0x00, cmd]).is_ok()
                 }
-
                 #[cfg(feature = "ehal_0_2")]
                 {
                     Write::write(i2c, addr, &[0x00, cmd]).is_ok()
