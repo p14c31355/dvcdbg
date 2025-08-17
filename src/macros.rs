@@ -67,31 +67,26 @@
 macro_rules! adapt_serial {
     // nb_write variant
     ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
-        use core::convert::Infallible;
-        use embedded_io::Write as IoWrite;
-        use nb::block;
-        use nb::serial::Write as NbWrite;
-
         /// Serial adapter wrapper
         pub struct $name<T>(pub T);
 
         /// Implement embedded-io Write for the wrapper
-        impl<T> IoWrite for $name<T>
+        impl<T> embedded_io::Write for $name<T>
         where
-            T: NbWrite<u8, Error = Infallible>,
+            T: nb::serial::Write<u8, Error = core::convert::Infallible>,
         {
-            type Error = Infallible;
+            type Error = core::convert::Infallible;
 
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
-                    block!(self.0.$write_fn(b))?;
+                    nb::block!(self.0.$write_fn(b))?;
                 }
                 Ok(buf.len())
             }
 
             fn flush(&mut self) -> Result<(), Self::Error> {
                 $(
-                    block!(self.0.$flush_fn())?;
+                    nb::block!(self.0.$flush_fn())?;
                 )?
                 Ok(())
             }
@@ -100,13 +95,14 @@ macro_rules! adapt_serial {
         /// Implement core::fmt::Write for use with writeln! / write!
         impl<T> core::fmt::Write for $name<T>
         where
-            $name<T>: IoWrite<Error = Infallible>,
+            T: nb::serial::Write<u8, Error = core::convert::Infallible>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                IoWrite::write_all(self, s.as_bytes()).map_err(|_| core::fmt::Error)
+                <Self as embedded_io::Write>::write_all(self, s.as_bytes())
+                    .map_err(|_| core::fmt::Error)
             }
         }
-    };
+    }
 }
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
