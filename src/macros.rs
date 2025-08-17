@@ -89,13 +89,13 @@ macro_rules! adapt_serial {
     // Internal helper for AVR-HAL USARTs
     (@avr_usart_impl $name:ident : $wrapper:ident, $write_fn:ident) => {
         pub struct $wrapper<RX, TX, CLOCK>(
-            pub arduino_hal::hal::usart::Usart<arduino_hal::pac::Peripherals, RX, TX, CLOCK>
+            pub arduino_hal::hal::usart::Usart<RX, TX, CLOCK>
         );
 
         adapt_serial!(@impls $name: $wrapper, $write_fn,
             <RX, TX, CLOCK>,
-            where arduino_hal::pac::Peripherals:
-                arduino_hal::usart::UsartOps<arduino_hal::pac::Peripherals, RX, TX>
+            where arduino_hal::hal::usart::Usart<RX, TX, CLOCK>:
+                arduino_hal::usart::UsartOps<RX, TX>
         );
     };
 
