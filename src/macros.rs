@@ -23,7 +23,7 @@
 ///
 /// - `$wrapper`: Wrapper type name
 /// - `$write_fn`: Method on the target that writes a single byte
-/// - `$board`: Board PAC type (`atmega328p`, `atmega2560`, `atmega32u4`) for AVR-HAL
+/// - `$usart`: Peripheral type from the PAC (e.g. `USART0`, `USART1`) for AVR-HAL
 ///
 /// # Examples
 ///
@@ -32,7 +32,8 @@
 /// use arduino_hal::prelude::*;
 /// use dvcdbg::adapt_serial;
 ///
-/// adapt_serial!(avr_usart: UsartAdapter, write_byte, atmega328p);
+/// // Wrap Arduino's USART0
+/// adapt_serial!(avr_usart: UsartAdapter, write_byte, USART0);
 ///
 /// let dp = arduino_hal::Peripherals::take().unwrap();
 /// let mut serial = arduino_hal::default_serial!(dp, 57600);
@@ -57,7 +58,7 @@
 #[macro_export]
 macro_rules! adapt_serial {
     // Impl helper
-    (@impls $name:ident : $wrapper:ident, $write_fn:ident, <$($generics:tt)*> $(, $where:tt)?) => {
+    (@impls $_name:ident : $wrapper:ident, $write_fn:ident, <$($generics:tt)*> $(, $where:tt)?) => {
         impl<$($generics)*> embedded_hal::blocking::serial::Write<u8>
             for $wrapper<$($generics)*>
             $( $where )?
