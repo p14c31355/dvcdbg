@@ -23,6 +23,17 @@ pub mod macros;
 /// ```
 pub mod prelude;
 
+/// Recursive log macro that enables log output within macros
+#[macro_export]
+macro_rules! recursive_log {
+    ($($arg:tt)*) => {{
+        use core::fmt::Write;
+        let mut buf: heapless::String<128> = heapless::String::new();
+        let _ = write!(buf, $($arg)*);
+        buf
+    }};
+}
+
 /// Error type returned by [`adapt_serial!`] adapters.
 ///
 /// This type is part of the public API, but its exact variants may change
