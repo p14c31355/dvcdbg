@@ -181,7 +181,7 @@ where
     found_devices
 }
 
-fn log_differences<L>(logger: &mut L, expected: &[u8], detected: &Vec<u8, 64>)
+fn log_differences<L>(logger: &mut L, expected: &[u8], mut detected: Vec<u8, 64>)
 where
     L: Logger,
 {
