@@ -197,8 +197,19 @@ macro_rules! define_scanner {
 #[cfg(feature = "ehal_0_2")]
 pub mod ehal_0_2 {
     use super::*;
-    use embedded_hal_0_2::blocking::i2c::Write as WriteI2c;
-    define_scanner!(WriteI2c, embedded_hal_0_2::blocking::i2c::Error);
+    define_scanner!(embedded_hal_0_2::blocking::i2c::Write, core::fmt::Debug);
+}
+
+#[cfg(feature = "ehal_0_2")]
+impl<I2C> I2cCompat for I2C
+where
+    I2C: embedded_hal_0_2::blocking::i2c::Write,
+{
+    type Error = <I2C as embedded_hal_0_2::blocking::i2c::Write>::Error;
+
+    fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> {
+        embedded_hal_0_2::blocking::i2c::Write::write(self, addr, bytes)
+    }
 }
 
 #[cfg(feature = "ehal_1_0")]
@@ -206,6 +217,18 @@ pub mod ehal_1_0 {
     use super::*;
     use embedded_hal_1::i2c::I2c as I2c1;
     define_scanner!(I2c1, embedded_hal_1::i2c::ErrorKind);
+}
+
+#[cfg(feature = "ehal_1_0")]
+impl<I2C> I2cCompat for I2C
+where
+    I2C: embedded_hal_1::i2c::I2c,
+{
+    type Error = I2C::Error;
+
+    fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> {
+        embedded_hal_1::i2c::I2c::write(self, addr, bytes)
+    }
 }
 
 // Re-export functions to maintain API compatibility for macros.
@@ -218,6 +241,12 @@ pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
 // -----------------------------------------------------------------------------
 //  Common utilities
 // -----------------------------------------------------------------------------
+pub trait I2cCompat {
+    type Error;
+
+    fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error>;
+}
+
 fn log_differences<L>(logger: &mut L, expected: &[u8], detected: &Vec<u8, 64>)
 where
     L: Logger,
