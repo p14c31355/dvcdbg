@@ -42,7 +42,10 @@ where
     L: Logger,
 {
     log!(logger, "[scan] Scanning I2C bus...");
-    internal_scan(i2c, logger, &[]);
+    let found_addrs = internal_scan(i2c, &[]);
+    for addr in found_addrs {
+        log!(logger, "[ok] Found device at 0x{:02X}", addr);
+    }
     log!(logger, "[info] I2C scan complete.");
 }
 
@@ -80,7 +83,15 @@ where
         "[scan] Scanning I2C bus with control bytes: {:?}",
         control_bytes
     );
-    internal_scan(i2c, logger, control_bytes);
+    let found_addrs = internal_scan(i2c, control_bytes);
+    for addr in found_addrs {
+        log!(
+            logger,
+            "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})",
+            addr,
+            control_bytes
+        );
+    }
     log!(logger, "[info] I2C scan complete.");
 }
 
@@ -119,6 +130,11 @@ where
     L: Logger,
 {
     // ... (initial logging)
+        log!(
+        logger,
+        "[scan] Scanning I2C bus with init sequence: {:02X?}",
+        init_sequence
+    );
     let mut detected_cmds = Vec::<u8, 64>::new();
 
     for &cmd in init_sequence {
