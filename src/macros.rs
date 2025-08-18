@@ -11,12 +11,13 @@
 ///
 /// # Arguments
 /// - `$name` → Name of the generated adapter struct
-/// - `nb_write` → Serial write method name required by HAL
+/// - `nb_write` → Serial write method name required by HAL (non-blocking API)
+/// - `blocking_write` → Serial write method name required by HAL (blocking API)
 /// - `flush` (optional) → Method for flushing non-blocking serial
 ///
 /// # Example
 ///
-/// ## Arduino HAL Serial
+/// ## Arduino HAL Serial (nb::Write)
 /// ```ignore
 /// use arduino_hal::prelude::*;
 /// use dvcdbg::adapt_serial;
@@ -34,7 +35,7 @@
 /// dbg_uart.write_all(&[0x01, 0x02, 0x03]).unwrap();
 /// ```
 ///
-/// ## Custom serial-like type
+/// ## Custom serial-like type (nb::Write)
 /// ```ignore
 /// use dvcdbg::adapt_serial;
 /// use core::fmt::Write;
@@ -44,7 +45,7 @@
 ///
 /// struct MySerial;
 /// impl nb::serial::Write<u8> for MySerial {
-///     type Error = Infallible; // Error type is not fixed to Infallible
+///     type Error = Infallible;
 ///     fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> { Ok(()) }
 ///     fn flush(&mut self) -> nb::Result<(), Self::Error> { Ok(()) }
 /// }
@@ -54,17 +55,38 @@
 /// writeln!(uart, "Hello via custom serial").unwrap();
 /// uart.write_all(&[0xAA, 0xBB]).unwrap();
 /// ```
-/// Supports both embedded-hal 0.2.x (nb::Write<u8>) and 1.0.x (embedded_hal::serial::nb::Write<u8>).
-/// Serial adapter wrapper macro compatible with e-hal 0.2.x and 1.0
+///
+/// ## Blocking serial-like type
+/// ```ignore
+/// use dvcdbg::adapt_serial;
+/// use core::fmt::Write;
+/// use embedded_io::Write;
+/// use core::convert::Infallible;
+///
+/// struct MyBlockingSerial;
+/// impl embedded_hal::blocking::serial::Write<u8> for MyBlockingSerial {
+///     type Error = Infallible;
+///     fn bwrite_all(&mut self, _buffer: &[u8]) -> Result<(), Self::Error> { Ok(()) }
+///     fn bflush(&mut self) -> Result<(), Self::Error> { Ok(()) }
+/// }
+///
+/// adapt_serial!(BlockingAdapter, blocking_write = write);
+/// let mut uart = BlockingAdapter(MyBlockingSerial);
+/// writeln!(uart, "Hello via blocking serial").unwrap();
+/// uart.write_all(&[0x11, 0x22]).unwrap();
+/// ```
 #[macro_export]
 macro_rules! adapt_serial {
+    // ==========================================================
+    // Non-blocking (nb::Write) version
+    // ==========================================================
     ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
         /// Adapter struct
         pub struct $name<T>(pub T);
 
-        // ========================
-        // embedded-hal 1.0 support
-        // ========================
+        // -------------------
+        // embedded-hal 1.0
+        // -------------------
         #[cfg(feature = "ehal_1_0")]
         impl<T> embedded_io::Write for $name<T>
         where
@@ -98,9 +120,9 @@ macro_rules! adapt_serial {
             }
         }
 
-        // ========================
-        // embedded-hal 0.2.x support
-        // ========================
+        // -------------------
+        // embedded-hal 0.2.x
+        // -------------------
         #[cfg(feature = "ehal_0_2")]
         impl<T> embedded_io::Write for $name<T>
         where
@@ -116,7 +138,7 @@ macro_rules! adapt_serial {
             }
 
             fn flush(&mut self) -> Result<(), Self::Error> {
-                $( 
+                $(
                     nb::block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;
                 )?
                 Ok(())
@@ -134,76 +156,39 @@ macro_rules! adapt_serial {
             }
         }
     };
-}
 
-/// Macro to adapt a serial peripheral into a fmt::Write + embedded_io::Write bridge.
-///
-/// # Arguments
-/// - `$name` → Name of the generated adapter struct
-/// - `nb_write` → Serial write method name required by HAL
-/// - `flush` (optional) → Method for flushing non-blocking serial
-///
-/// # Example
-///
-/// ## Arduino HAL Serial
-/// ```ignore
-/// use arduino_hal::prelude::*;
-/// use dvcdbg::adapt_serial;
-/// use core::fmt::Write;
-/// use embedded_io::Write;
-///
-/// adapt_serial!(UsartAdapter, nb_write = write, flush = flush);
-///
-/// let dp = arduino_hal::Peripherals::take().unwrap();
-/// let pins = arduino_hal::pins!(dp);
-/// let serial = arduino_hal::default_serial!(dp, pins, 57600);
-/// let mut dbg_uart = UsartAdapter(serial);
-///
-/// writeln!(dbg_uart, "Hello from embedded-io bridge!").unwrap();
-/// dbg_uart.write_all(&[0x01, 0x02, 0x03]).unwrap();
-/// ```
-///
-/// ## Custom serial-like type
-/// ```ignore
-/// use dvcdbg::adapt_serial;
-/// use core::fmt::Write;
-/// use core::convert::Infallible;
-/// use nb;
-/// use embedded_io::Write;
-///
-/// struct MySerial;
-/// impl nb::serial::Write<u8> for MySerial {
-///     type Error = Infallible; // Error type is not fixed to Infallible
-///     fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> { Ok(()) }
-///     fn flush(&mut self) -> nb::Result<(), Self::Error> { Ok(()) }
-/// }
-///
-/// adapt_serial!(MyAdapter, nb_write = write, flush = flush);
-/// let mut uart = MyAdapter(MySerial);
-/// writeln!(uart, "Hello via custom serial").unwrap();
-/// uart.write_all(&[0xAA, 0xBB]).unwrap();
-/// ```
-#[macro_export]
-macro_rules! adapt_serial_0_2 {
-    ($name:ident) => {
+    // ==========================================================
+    // Blocking (blocking::serial::Write) version
+    // ==========================================================
+    ($name:ident, blocking_write = $write_fn:ident) => {
+        /// Adapter struct
         pub struct $name<T>(pub T);
+
+        #[cfg(feature = "ehal_0_2")]
+        impl<T> embedded_io::Write for $name<T>
+        where
+            T: embedded_hal::blocking::serial::Write<u8>,
+        {
+            type Error = $crate::AdaptError<T::Error>;
+
+            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+                self.0.bwrite_all(buf).map_err($crate::AdaptError::Other)?;
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> Result<(), Self::Error> {
+                self.0.bflush().map_err($crate::AdaptError::Other)?;
+                Ok(())
+            }
+        }
+
+        #[cfg(feature = "ehal_0_2")]
         impl<T> core::fmt::Write for $name<T>
         where
             T: embedded_hal::blocking::serial::Write<u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                for b in s.as_bytes() {
-                    nb::block!(self.0.write(*b)).map_err(|_| core::fmt::Error)?;
-                }
-                Ok(())
-            }
-        }
-        impl<T> dvcdbg::logger::WriteAdapter for $name<T>
-        where
-            T: embedded_hal::blocking::serial::Write<u8>,
-        {
-            fn write(&mut self, byte: u8) {
-                let _ = nb::block!(self.0.write(byte));
+                self.0.bwrite_all(s.as_bytes()).map_err(|_| core::fmt::Error)
             }
         }
     };
