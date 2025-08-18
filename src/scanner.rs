@@ -237,7 +237,7 @@ macro_rules! define_scanner {
                             #[cfg(feature = "ehal_1_0")]
                             {
                                 use embedded_hal_1::i2c::ErrorKind;
-                                matches!(err.kind(), ErrorKind::NoAcknowledge(_))
+                                matches!(e.kind(), ErrorKind::NoAcknowledge(_))
                             }
                             #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
                             {
