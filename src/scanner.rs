@@ -22,7 +22,7 @@ pub mod ehal_0_2 {
 pub mod ehal_1_0 {
     use crate::define_scanner;
     use crate::log;
-    define_scanner!(crate::scanner::I2cCompat, embedded_hal_1::i2c::ErrorKind);
+    define_scanner!(crate::scanner::I2cCompat, &mut crate::logger::Logger::logger, embedded_hal_1::i2c::ErrorKind);
 }
 
 #[cfg(feature = "ehal_1_0")]
@@ -33,7 +33,7 @@ pub use crate::scanner::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_seque
 
 #[macro_export]
 macro_rules! define_scanner {
-    ($i2c_trait:path, $error_ty:ty) => {
+    ($i2c_trait:path, $logger_trait:ty, $error_ty:ty) => {
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
         ///
         /// This function probes each possible I2C device address by attempting to
@@ -64,7 +64,7 @@ macro_rules! define_scanner {
             L: $crate::logger::Logger,
         {
             log!(logger, "[scan] Scanning I2C bus...");
-            match internal_scan(i2c, &[]) {
+            match internal_scan(i2c, &mut logger, &[]) {
                 Ok(found_addrs) => {
                     for addr in found_addrs {
                         log!(logger, "[ok] Found device at 0x{:02X}", addr);
@@ -109,7 +109,7 @@ macro_rules! define_scanner {
             L: $crate::logger::Logger,
         {
             log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
-            match internal_scan(i2c, control_bytes) {
+            match internal_scan(i2c, &mut logger, control_bytes) {
                 Ok(found_addrs) => {
                     for addr in found_addrs {
                         log!(logger, "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})", addr, control_bytes);
@@ -163,7 +163,7 @@ macro_rules! define_scanner {
 
             for &cmd in init_sequence {
                 log!(logger, "-> Testing command 0x{:02X}", cmd);
-                match internal_scan(i2c, &[0x00, cmd]) {
+                match internal_scan(i2c, &mut logger, &[0x00, cmd]) {
                     Ok(found_addrs) => {
                         for addr in found_addrs {
                             log!(logger, "[ok] Found device at 0x{:02X} responding to command 0x{:02X}", addr, cmd);
@@ -183,13 +183,14 @@ macro_rules! define_scanner {
             log!(logger, "[info] I2C scan with init sequence complete.");
         }
 
-        fn internal_scan<I2C>(
+        fn internal_scan<I2C, L>(
             i2c: &mut I2C,
+            logger: &mut L,
             data: &[u8],
         ) -> Result<heapless::Vec<u8, 128>, <I2C as $i2c_trait>::Error>
         where
             I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: Into<$error_ty>,
+            <I2C as $i2c_trait>::Error: Into<$error_ty> + Copy,
         {
             let mut found_devices: heapless::Vec<u8, 128> = heapless::Vec::new();
 
@@ -242,7 +243,7 @@ where
 impl<I2C> I2cCompat for I2C
 where
     I2C: embedded_hal_1::i2c::I2c,
-    I2C::Error: Into<embedded_hal_1::i2c::ErrorKind> + Debug,
+    I2C::Error: Into<embedded_hal_1::i2c::ErrorKind> + Debug + Copy,
 {
     type Error = I2C::Error;
 
