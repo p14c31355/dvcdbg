@@ -1,3 +1,9 @@
+//! Scanner utilities for I2C bus device discovery and analysis.
+//!
+//! This module provides functions to scan the I2C bus for connected devices,
+//! optionally testing with control bytes or initialization command sequences,
+//! with detailed logging support.
+
 use crate::log;
 use crate::logger::Logger;
 use embedded_hal::i2c::I2c;
@@ -112,23 +118,28 @@ where
     I2C: I2c,
     L: Logger,
 {
-    log!(
-        logger,
-        "[scan] Scanning I2C bus with init sequence: {:02X?}",
-        init_sequence
-    );
-
+    // ... (initial logging)
     let mut detected_cmds = Vec::<u8, 64>::new();
 
     for &cmd in init_sequence {
         log!(logger, "-> Testing command 0x{:02X}", cmd);
-        internal_scan(i2c, logger, &[0x00, cmd]);
+        let found_addrs = internal_scan(i2c, &[0x00, cmd]);
 
-        if detected_cmds.push(cmd).is_err() {
-            log!(
-                logger,
-                "[warn] Detected commands buffer is full, results may be incomplete!"
-            );
+        if !found_addrs.is_empty() {
+            for addr in found_addrs {
+                log!(
+                    logger,
+                    "[ok] Found device at 0x{:02X} responding to command 0x{:02X}",
+                    addr,
+                    cmd
+                );
+            }
+            if detected_cmds.push(cmd).is_err() {
+                log!(
+                    logger,
+                    "[warn] Detected commands buffer is full, results may be incomplete!"
+                );
+            }
         }
     }
 
@@ -140,16 +151,19 @@ where
 //  Internal utilities (not exported as public API) 
 // -----------------------------------------------------------------------------
 
-fn internal_scan<I2C, L>(i2c: &mut I2C, logger: &mut L, data: &[u8])
+fn internal_scan<I2C>(i2c: &mut I2C, data: &[u8]) -> heapless::Vec<u8, 128>
 where
     I2C: I2c,
-    L: Logger,
 {
+    let mut found_devices = heapless::Vec::new();
     for addr in 0x03..=0x77 {
         if i2c.write(addr, data).is_ok() {
-            log!(logger, "[ok] Found device at 0x{:02X}", addr);
+            // The push can fail if the Vec is full, which is unlikely here.
+            // Consider handling the error if full capacity is a concern.
+            let _ = found_devices.push(addr);
         }
     }
+    found_devices
 }
 
 fn log_differences<L>(logger: &mut L, expected: &[u8], detected: &Vec<u8, 64>)
