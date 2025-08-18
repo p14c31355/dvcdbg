@@ -11,20 +11,23 @@ use heapless::Vec;
 const I2C_SCAN_ADDR_START: u8 = 0x03;
 const I2C_SCAN_ADDR_END: u8 = 0x77;
 
-#[cfg(feature = "ehal_0_2")]
+#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 pub mod ehal_0_2 {
-    use super::*;
     use crate::define_scanner;
     define_scanner!(I2cCompat, core::fmt::Debug);
 }
 
 #[cfg(feature = "ehal_1_0")]
 pub mod ehal_1_0 {
-    use super::*;
-    use embedded_hal_1::i2c::I2c;
     use crate::define_scanner;
     define_scanner!(I2cCompat, embedded_hal_1::i2c::ErrorKind);
 }
+
+#[cfg(feature = "ehal_1_0")]
+pub use ehal_1_0::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
+
+#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
+pub use ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
 
 #[macro_export]
 macro_rules! define_scanner {
