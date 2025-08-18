@@ -175,7 +175,7 @@ where
         if i2c.write(addr, data).is_ok() {
             // The push cannot fail because the address range (0x03..=0x77) has 117
             // possible addresses, and the vector's capacity is 128.
-            let _ = found_devices.push(addr);
+            found_devices.push(addr).unwrap();
         }
     }
     found_devices
