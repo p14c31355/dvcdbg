@@ -233,52 +233,31 @@ macro_rules! define_scanner {
                         found_devices.push(addr).unwrap(); // END - START < 128
                     }
                     Err(e) => {
-                        #[cfg(feature = "ehal_1_0")]
-                        {
-                            if match_nack(&e) {
-                                // Ignore unconnected devices
-                                continue;
-                            } else {
-                                let _msg = $crate::recursive_log!("write failed at 0x{:02X}: {:?}", addr, e);
-                                log!(logger, "[error] {}", _msg);
-                                return Err(e);
+                        let is_nack = {
+                            #[cfg(feature = "ehal_1_0")]
+                            {
+                                use embedded_hal_1::i2c::ErrorKind;
+                                matches!(err.kind(), ErrorKind::NoAcknowledge(_))
                             }
-                        }
+                            #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
+                            {
+                                let s = $crate::recursive_log!("{:?}", e);
+                                s.contains("NACK") || s.contains("NoAcknowledge")
+                            }
+                        };
 
-                        #[cfg(feature = "ehal_0_2")]
-                        {
-                            if or_nack(&e) {
-                                // Ignore unconnected devices
-                                continue;
-                            } else {
-                                let _msg = $crate::recursive_log!("write failed at 0x{:02X}: {:?}", addr, e);
-                                log!(logger, "[error] {}", _msg);
-                                return Err(e);
-                            }
+                        if is_nack {
+                            continue;
+                        } else {
+                            let _msg = $crate::recursive_log!("write failed at 0x{:02X}: {:?}", addr, e);
+                            log!(logger, "[error] {}", _msg);
+                            return Err(e);
                         }
                     }
                 }
             }
 
             Ok(found_devices)
-        }
-        
-        #[cfg(feature = "ehal_1_0")]
-        fn match_nack<E>(err: &E) -> bool
-        where
-            E: $($error_bound)*,
-        {
-            use embedded_hal_1::i2c::ErrorKind;
-            matches!(err.kind(), ErrorKind::NoAcknowledge(_))
-        }
-
-        #[cfg(feature = "ehal_0_2")]
-        fn or_nack<E>(err: &E) -> bool
-        where
-            E: $($error_bound)*,
-        {
-            let s = $crate::recursive_log!("{:?}", err);
-            s.contains("NACK") || s.contains("NoAcknowledge")
         }
     }
 }
