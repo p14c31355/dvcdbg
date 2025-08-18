@@ -7,7 +7,7 @@
 use crate::log;
 use crate::logger::Logger;
 #[cfg(feature = "ehal_0_2")]
-use embedded_hal::blocking::i2c::Write as I2c;
+use embedded_hal_0_2::blocking::i2c::Write as I2c;
 #[cfg(feature = "ehal_1_0")]
 use embedded_hal_1::i2c::I2c;
 use heapless::Vec;
