@@ -61,7 +61,7 @@ macro_rules! define_scanner {
         where
             I2C: $i2c_trait,
             <I2C as $i2c_trait>::Error: Into<$error_ty>,
-            L: crate::logger::Logger,
+            L: $crate::logger::Logger,
         {
             log!(logger, "[scan] Scanning I2C bus...");
             match internal_scan(i2c, &[]) {
@@ -106,7 +106,7 @@ macro_rules! define_scanner {
         ) where
             I2C: $i2c_trait,
             <I2C as $i2c_trait>::Error: Into<$error_ty>,
-            L: crate::logger::Logger,
+            L: $crate::logger::Logger,
         {
             log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
             match internal_scan(i2c, control_bytes) {
@@ -156,7 +156,7 @@ macro_rules! define_scanner {
         ) where
             I2C: $i2c_trait,
             <I2C as $i2c_trait>::Error: Into<$error_ty>,
-            L: crate::logger::Logger,
+            L: $crate::logger::Logger,
         {
             log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
             let mut detected_cmds: heapless::Vec<u8, 64> = heapless::Vec::new();
@@ -173,7 +173,7 @@ macro_rules! define_scanner {
                         }
                     }
                     Err(e) => {
-                        let _msg = crate::recursive_log!("scan failed for command 0x{:02X}: {:?}", cmd, e);
+                        let _msg = $crate::recursive_log!("scan failed for command 0x{:02X}: {:?}", cmd, e);
                         log!(logger, "[error] {}", _msg);
                     }
                 }
@@ -201,7 +201,7 @@ macro_rules! define_scanner {
                         }
                     }
                     Err(e) => {
-                        let _msg = crate::recursive_log!("[scan] write failed at 0x{:02X}: {:?}", addr, e);
+                        let _msg = $crate::recursive_log!("[scan] write failed at 0x{:02X}: {:?}", addr, e);
                         // It is also possible to pass msg to Logger on the calling side.
                         continue;
                     }
