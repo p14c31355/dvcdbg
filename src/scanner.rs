@@ -13,15 +13,15 @@ const I2C_SCAN_ADDR_END: u8 = 0x77;
 
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 pub mod ehal_0_2 {
-    use crate::log;
     use crate::define_scanner;
+    use crate::log;
     define_scanner!(crate::scanner::I2cCompat, core::fmt::Debug);
 }
 
 #[cfg(feature = "ehal_1_0")]
 pub mod ehal_1_0 {
-    use crate::log;
     use crate::define_scanner;
+    use crate::log;
     define_scanner!(crate::scanner::I2cCompat, embedded_hal_1::i2c::ErrorKind);
 }
 
@@ -230,7 +230,6 @@ where
     }
 }
 
-
 #[cfg(feature = "ehal_1_0")]
 impl<I2C> I2cCompat for I2C
 where
@@ -259,16 +258,31 @@ where
     L: Logger,
 {
     log!(logger, "Expected sequence: {:02X?}", expected);
-    log!(logger, "Commands with response: {:02X?}", detected.as_slice());
+    log!(
+        logger,
+        "Commands with response: {:02X?}",
+        detected.as_slice()
+    );
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
     let mut missing_cmds: Vec<u8, 64> = Vec::new();
-    for cmd in expected.iter().copied().filter(|c| sorted.binary_search(c).is_err()) {
+    for cmd in expected
+        .iter()
+        .copied()
+        .filter(|c| sorted.binary_search(c).is_err())
+    {
         if missing_cmds.push(cmd).is_err() {
-            log!(logger, "[warn] Missing commands buffer is full, list is truncated.");
+            log!(
+                logger,
+                "[warn] Missing commands buffer is full, list is truncated."
+            );
             break;
         }
     }
-    log!(logger, "Commands with no response: {:02X?}", missing_cmds.as_slice());
+    log!(
+        logger,
+        "Commands with no response: {:02X?}",
+        missing_cmds.as_slice()
+    );
 }
