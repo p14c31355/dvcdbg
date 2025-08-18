@@ -233,7 +233,7 @@ macro_rules! define_scanner {
                         found_devices.push(addr).unwrap(); // END - START < 128
                     }
                     Err(e) => {
-                        if super::is_expected_nack(&e) {
+                        if self::is_expected_nack(&e) {
                             // Not connect devices
                             continue;
                         } else {
@@ -247,21 +247,19 @@ macro_rules! define_scanner {
 
             Ok(found_devices)
         }
-
         
+        use embedded_hal_1::i2c::ErrorKind;
+        
+        fn is_expected_nack<E>(err: &E) -> bool
+        where
+            E: embedded_hal_1::i2c::Error,
+        {
+            match err.kind() {
+                ErrorKind::NoAcknowledge(_) => true, 
+                _ => false,
+            }
+        }
     };
-}
-
-use embedded_hal_1::i2c::ErrorKind;
-
-fn is_expected_nack<E>(err: &E) -> bool
-where
-    E: embedded_hal_1::i2c::Error,
-{
-    match err.kind() {
-        ErrorKind::NoAcknowledge(_) => true, 
-        _ => false,
-    }
 }
 
 // -----------------------------------------------------------------------------
