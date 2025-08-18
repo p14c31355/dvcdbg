@@ -12,7 +12,7 @@ const I2C_SCAN_ADDR_START: u8 = 0x03;
 const I2C_SCAN_ADDR_END: u8 = 0x77;
 
 macro_rules! define_scanner {
-    ($i2c_trait:path, $error_ty:path) => {
+    ($i2c_trait:ty, $error_ty:ty) => {
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
         ///
         /// This function probes each possible I2C device address by attempting to
@@ -39,8 +39,8 @@ macro_rules! define_scanner {
         pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
         where
             I2C: $i2c_trait,
+            <I2C as $i2c_trait>::Error: Into<$error_ty>,
             L: crate::logger::Logger,
-            $error_ty: core::fmt::Debug,
         {
             log!(logger, "[scan] Scanning I2C bus...");
             match internal_scan(i2c, &[]) {
@@ -84,8 +84,8 @@ macro_rules! define_scanner {
             control_bytes: &[u8],
         ) where
             I2C: $i2c_trait,
+            <I2C as $i2c_trait>::Error: Into<$error_ty>,
             L: crate::logger::Logger,
-            $error_ty: core::fmt::Debug,
         {
             log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
             match internal_scan(i2c, control_bytes) {
@@ -134,8 +134,8 @@ macro_rules! define_scanner {
             init_sequence: &[u8],
         ) where
             I2C: $i2c_trait,
+            <I2C as $i2c_trait>::Error: Into<$error_ty>,
             L: crate::logger::Logger,
-            $error_ty: core::fmt::Debug,
         {
             log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
             let mut detected_cmds: heapless::Vec<u8, 64> = heapless::Vec::new();
@@ -165,7 +165,7 @@ macro_rules! define_scanner {
         fn internal_scan<I2C>(
             i2c: &mut I2C,
             data: &[u8],
-        ) -> Result<heapless::Vec<u8, 128>, $error_ty>
+        ) -> Result<heapless::Vec<u8, 128>, <I2C as $i2c_trait>::Error: Into<$error_ty>>
         where
             I2C: $i2c_trait,
         {
@@ -215,8 +215,8 @@ where
 #[cfg(feature = "ehal_1_0")]
 pub mod ehal_1_0 {
     use super::*;
-    use embedded_hal_1::i2c::I2c as I2c1;
-    define_scanner!(I2c1, embedded_hal_1::i2c::ErrorKind);
+    use embedded_hal_1::i2c::I2c;
+    define_scanner!(I2cCompat, embedded_hal_1::i2c::ErrorKind);
 }
 
 #[cfg(feature = "ehal_1_0")]
