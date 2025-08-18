@@ -107,7 +107,7 @@ macro_rules! define_scanner {
         ///
         /// # Arguments
         ///
-        /// * `i2c` - Mutable reference to the I2C interface implementing [`embedded_hal::i2c::I2c`].
+        /// * `i2c` - Mutable reference to an I2C interface implementing the `write` method.
         /// * `logger` - Mutable reference to a logger implementing the [`Logger`] trait.
         /// * `init_sequence` - Slice of initialization commands to test.
         ///
