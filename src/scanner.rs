@@ -205,7 +205,7 @@ macro_rules! define_scanner {
                             // Not connect devices
                             continue;
                         } else {
-                            let _msg = $crate::recursive_log!("[scan] write failed at 0x{:02X}: {:?}", addr, e);
+                            let _msg = $crate::recursive_log!("write failed at 0x{:02X}: {:?}", addr, e);
                             log!(logger, "[error] {}", _msg);
                             return Err(e);
                         }

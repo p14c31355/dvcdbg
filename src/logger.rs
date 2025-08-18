@@ -89,7 +89,7 @@ pub trait Logger {
     }
 }
 
-impl<'a, L> Logger for &'a mut L
+impl<L> Logger for &mut L
 where
     L: Logger,
 {
