@@ -3,15 +3,33 @@ use crate::logger::Logger;
 use embedded_hal::i2c::I2c;
 use heapless::Vec;
 
-/// Scan the I2C bus for connected devices (addresses 0x03 to 0x77).
+// -----------------------------------------------------------------------------
+//  Public API (with Rustdoc) 
+// -----------------------------------------------------------------------------
+
+/// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
+///
+/// This function probes each possible I2C device address by attempting to
+/// write an empty buffer (`[]`). Devices that acknowledge are reported
+/// through the provided logger.
 ///
 /// # Arguments
 ///
-/// * `i2c` - Mutable reference to the I2C interface implementing `embedded_hal::i2c::I2c`.
-/// * `logger` - Mutable reference to a logger implementing the `Logger` trait.
+/// * `i2c` - Mutable reference to the I2C interface implementing [`embedded_hal::i2c::I2c`].
+/// * `logger` - Mutable reference to a logger implementing the [`Logger`] trait.
 ///
-/// This function attempts to write zero bytes to each possible device address on the I2C bus,
-/// logging addresses that respond successfully.
+/// # Example
+///
+/// ```ignore
+/// use embedded_hal::i2c::I2c;
+/// use dvcdbg::logger::SerialLogger;
+/// use dvcdbg::scanner::scan_i2c;
+///
+/// let mut i2c = /* your i2c interface */;
+/// let mut logger = SerialLogger::new(/* serial */);
+///
+/// scan_i2c(&mut i2c, &mut logger);
+/// ```
 pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
 where
     I2C: I2c,
@@ -24,14 +42,28 @@ where
 
 /// Scan the I2C bus for devices by sending specified control bytes.
 ///
+/// This variant allows specifying control bytes (e.g., `0x00`) to send
+/// alongside the probe. Devices that acknowledge the transmission are
+/// reported via the logger.
+///
 /// # Arguments
 ///
-/// * `i2c` - Mutable reference to the I2C interface implementing `embedded_hal::i2c::I2c`.
-/// * `logger` - Mutable reference to a logger implementing the `Logger` trait.
-/// * `control_bytes` - Byte slice to send as control bytes during the scan.
+/// * `i2c` - Mutable reference to the I2C interface implementing [`embedded_hal::i2c::I2c`].
+/// * `logger` - Mutable reference to a logger implementing the [`Logger`] trait.
+/// * `control_bytes` - Slice of bytes to send when probing each device.
 ///
-/// This function attempts to write the provided control bytes to each device address,
-/// logging those that respond successfully.
+/// # Example
+///
+/// ```ignore
+/// use embedded_hal::i2c::I2c;
+/// use dvcdbg::logger::SerialLogger;
+/// use dvcdbg::scanner::scan_i2c_with_ctrl;
+///
+/// let mut i2c = /* your i2c interface */;
+/// let mut logger = SerialLogger::new(/* serial */);
+///
+/// scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
+/// ```
 pub fn scan_i2c_with_ctrl<I2C, L>(i2c: &mut I2C, logger: &mut L, control_bytes: &[u8])
 where
     I2C: I2c,
@@ -46,17 +78,35 @@ where
     log!(logger, "[info] I2C scan complete.");
 }
 
-/// Scan the I2C bus by testing each command in an initialization sequence.
+/// Scan the I2C bus using an initialization sequence of commands.
+///
+/// Each command in the sequence is transmitted to all possible device
+/// addresses using the control byte `0x00`. The function records which
+/// commands receive responses and highlights any **differences** between
+/// the expected and observed responses.
+///
+/// This is useful for verifying whether a device supports the expected
+/// initialization commands (e.g., when testing display controllers).
 ///
 /// # Arguments
 ///
-/// * `i2c` - Mutable reference to the I2C interface implementing `embedded_hal::i2c::I2c`.
-/// * `logger` - Mutable reference to a logger implementing the `Logger` trait.
-/// * `init_sequence` - Byte slice of initialization commands to test.
+/// * `i2c` - Mutable reference to the I2C interface implementing [`embedded_hal::i2c::I2c`].
+/// * `logger` - Mutable reference to a logger implementing the [`Logger`] trait.
+/// * `init_sequence` - Slice of initialization commands to test.
 ///
-/// This function tries to send each command in `init_sequence` with a control byte (0x00)
-/// to all possible device addresses, logging which addresses respond to which commands.
-/// It also logs differences between expected and responding commands.
+/// # Example
+///
+/// ```ignore
+/// use embedded_hal::i2c::I2c;
+/// use dvcdbg::logger::SerialLogger;
+/// use dvcdbg::scanner::scan_init_sequence;
+///
+/// let mut i2c = /* your i2c interface */;
+/// let mut logger = SerialLogger::new(/* serial */);
+///
+/// let init_sequence: [u8; 3] = [0xAE, 0xA1, 0xAF]; // example init cmds
+/// scan_init_sequence(&mut i2c, &mut logger, &init_sequence);
+/// ```
 pub fn scan_init_sequence<I2C, L>(i2c: &mut I2C, logger: &mut L, init_sequence: &[u8])
 where
     I2C: I2c,
@@ -82,32 +132,12 @@ where
         }
     }
 
-    // Show differences
-    log!(logger, "Expected sequence: {:02X?}", init_sequence);
-    log!(
-        logger,
-        "Commands with response: {:02X?}",
-        detected_cmds.as_slice()
-    );
-
-    detected_cmds.sort_unstable();
-    let missing_cmds: Vec<u8, 64> = init_sequence
-        .iter()
-        .filter(|&&c| detected_cmds.binary_search(&c).is_err())
-        .copied()
-        .collect();
-
-    log!(
-        logger,
-        "Commands with no response: {:02X?}",
-        missing_cmds.as_slice()
-    );
-
+    log_differences(logger, init_sequence, &detected_cmds);
     log!(logger, "[info] I2C scan with init sequence complete.");
 }
 
 // -----------------------------------------------------------------------------
-// Internal utilities (not exported as public API)
+//  Internal utilities (not exported as public API) 
 // -----------------------------------------------------------------------------
 
 fn internal_scan<I2C, L>(i2c: &mut I2C, logger: &mut L, data: &[u8])
@@ -120,4 +150,26 @@ where
             log!(logger, "[ok] Found device at 0x{:02X}", addr);
         }
     }
+}
+
+fn log_differences<L>(logger: &mut L, expected: &[u8], detected: &Vec<u8, 64>)
+where
+    L: Logger,
+{
+    log!(logger, "Expected sequence: {:02X?}", expected);
+    log!(logger, "Commands with response: {:02X?}", detected.as_slice());
+
+    let mut sorted = detected.clone();
+    sorted.sort_unstable();
+    let missing_cmds: Vec<u8, 64> = expected
+        .iter()
+        .filter(|&&c| sorted.binary_search(&c).is_err())
+        .copied()
+        .collect();
+
+    log!(
+        logger,
+        "Commands with no response: {:02X?}",
+        missing_cmds.as_slice()
+    );
 }
