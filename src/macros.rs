@@ -77,30 +77,22 @@
 /// ```
 #[macro_export]
 macro_rules! adapt_serial {
-    // ==========================================================
-    // Non-blocking (nb::Write) version
-    // ==========================================================
-    ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
-        /// Adapter struct
+    ($name:ident, write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
         pub struct $name<T>(pub T);
 
-        // -------------------
-        // embedded-hal 1.0
-        // -------------------
-        #[cfg(feature = "ehal_1_0")]
+        // nb::Write
+        #[cfg(feature = "ehal_0_2")]
         impl<T> embedded_io::Write for $name<T>
         where
-            T: embedded_hal::serial::nb::Write<u8>,
+            T: embedded_hal::serial::Write<u8>,
         {
             type Error = $crate::AdaptError<T::Error>;
-
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
                     nb::block!(self.0.$write_fn(b)).map_err($crate::AdaptError::Other)?;
                 }
                 Ok(buf.len())
             }
-
             fn flush(&mut self) -> Result<(), Self::Error> {
                 $(
                     nb::block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;
@@ -109,86 +101,31 @@ macro_rules! adapt_serial {
             }
         }
 
-        #[cfg(feature = "ehal_1_0")]
-        impl<T> core::fmt::Write for $name<T>
-        where
-            T: embedded_hal::serial::nb::Write<u8>,
-        {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                <Self as embedded_io::Write>::write_all(self, s.as_bytes())
-                    .map_err(|_| core::fmt::Error)
-            }
-        }
-
-        // -------------------
-        // embedded-hal 0.2.x
-        // -------------------
-        #[cfg(feature = "ehal_0_2")]
-        impl<T> embedded_io::Write for $name<T>
-        where
-            T: embedded_hal::serial::Write<u8>,
-        {
-            type Error = $crate::AdaptError<T::Error>;
-
-            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-                for &b in buf {
-                    nb::block!(self.0.$write_fn(b)).map_err($crate::AdaptError::Other)?;
-                }
-                Ok(buf.len())
-            }
-
-            fn flush(&mut self) -> Result<(), Self::Error> {
-                $(
-                    nb::block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;
-                )?
-                Ok(())
-            }
-        }
-
-        #[cfg(feature = "ehal_0_2")]
-        impl<T> core::fmt::Write for $name<T>
-        where
-            T: embedded_hal::serial::Write<u8>,
-        {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                <Self as embedded_io::Write>::write_all(self, s.as_bytes())
-                    .map_err(|_| core::fmt::Error)
-            }
-        }
-    };
-
-    // ==========================================================
-    // Blocking (blocking::serial::Write) version
-    // ==========================================================
-    ($name:ident, blocking_write = $write_fn:ident) => {
-        /// Adapter struct
-        pub struct $name<T>(pub T);
-
+        // blocking::Write
         #[cfg(feature = "ehal_0_2")]
         impl<T> embedded_io::Write for $name<T>
         where
             T: embedded_hal::blocking::serial::Write<u8>,
         {
             type Error = $crate::AdaptError<T::Error>;
-
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 self.0.bwrite_all(buf).map_err($crate::AdaptError::Other)?;
                 Ok(buf.len())
             }
-
             fn flush(&mut self) -> Result<(), Self::Error> {
                 self.0.bflush().map_err($crate::AdaptError::Other)?;
                 Ok(())
             }
         }
 
-        #[cfg(feature = "ehal_0_2")]
+        // common core::fmt::Write
         impl<T> core::fmt::Write for $name<T>
         where
-            T: embedded_hal::blocking::serial::Write<u8>,
+            Self: embedded_io::Write,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                self.0.bwrite_all(s.as_bytes()).map_err(|_| core::fmt::Error)
+                <Self as embedded_io::Write>::write_all(self, s.as_bytes())
+                    .map_err(|_| core::fmt::Error)
             }
         }
     };
