@@ -89,6 +89,15 @@ pub trait Logger {
     }
 }
 
+impl<'a, L> Logger for &'a mut L
+where
+    L: Logger,
+{
+    fn log_fmt(&mut self, args: core::fmt::Arguments) {
+        (**self).log_fmt(args);
+    }
+}
+
 /// Adapter trait for low-level byte writes.
 ///
 /// Typically implemented by wrappers around `embedded_hal::serial::Write<u8>`.

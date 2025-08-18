@@ -30,6 +30,7 @@ pub use self::ehal_1_0::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
 
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
+
 #[macro_export]
 macro_rules! define_scanner {
     ($i2c_trait:path, $logger_trait:path, $error_ty:ty) => {
@@ -63,7 +64,7 @@ macro_rules! define_scanner {
             L: $logger_trait,
         {
             log!(logger, "[scan] Scanning I2C bus...");
-            match internal_scan(i2c, &mut logger, &[]) {
+            match internal_scan(i2c, logger, &[]) {
                 Ok(found_addrs) => {
                     for addr in found_addrs {
                         log!(logger, "[ok] Found device at 0x{:02X}", addr);
@@ -108,7 +109,7 @@ macro_rules! define_scanner {
             L: $logger_trait,
         {
             log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
-            match internal_scan(i2c, &mut logger, control_bytes) {
+            match internal_scan(i2c, logger, control_bytes) {
                 Ok(found_addrs) => {
                     for addr in found_addrs {
                         log!(logger, "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})", addr, control_bytes);
@@ -162,7 +163,7 @@ macro_rules! define_scanner {
 
             for &cmd in init_sequence {
                 log!(logger, "-> Testing command 0x{:02X}", cmd);
-                match internal_scan(i2c, &mut logger, &[0x00, cmd]) {
+                match internal_scan(i2c, logger, &[0x00, cmd]) {
                     Ok(found_addrs) => {
                         for addr in found_addrs {
                             log!(logger, "[ok] Found device at 0x{:02X} responding to command 0x{:02X}", addr, cmd);
@@ -190,6 +191,7 @@ macro_rules! define_scanner {
         where
             I2C: $i2c_trait,
             <I2C as $i2c_trait>::Error: Into<$error_ty>,
+            L: $logger_trait,
         {
             let mut found_devices: heapless::Vec<u8, 128> = heapless::Vec::new();
 
