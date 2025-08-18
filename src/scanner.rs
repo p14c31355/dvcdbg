@@ -248,15 +248,21 @@ macro_rules! define_scanner {
             Ok(found_devices)
         }
         
-        use embedded_hal_1::i2c::ErrorKind;
-        
         fn is_expected_nack<E>(err: &E) -> bool
         where
-            E: embedded_hal_1::i2c::Error,
+            E: $($error_bound)*,
         {
-            match err.kind() {
-                ErrorKind::NoAcknowledge(_) => true, 
-                _ => false,
+            #[cfg(feature = "ehal_1_0")]
+            {
+                use embedded_hal_1::i2c::ErrorKind;
+                // v1.0.x
+                matches!(err.kind(), ErrorKind::NoAcknowledge(_))
+            }
+            #[cfg(feature = "ehal_0_2")]
+            {
+                // v0.2.x
+                let s = format!("{:?}", err);
+                s.contains("NACK") || s.contains("NoAcknowledge")
             }
         }
     };
