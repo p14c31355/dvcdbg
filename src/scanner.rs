@@ -255,13 +255,11 @@ macro_rules! define_scanner {
             #[cfg(feature = "ehal_1_0")]
             {
                 use embedded_hal_1::i2c::ErrorKind;
-                // v1.0.x
                 matches!(err.kind(), ErrorKind::NoAcknowledge(_))
             }
             #[cfg(feature = "ehal_0_2")]
             {
-                // v0.2.x
-                let s = format!("{:?}", err);
+                let s = $crate::recursive_log!("{:?}", err);
                 s.contains("NACK") || s.contains("NoAcknowledge")
             }
         }
