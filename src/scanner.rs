@@ -12,7 +12,7 @@ const I2C_SCAN_ADDR_START: u8 = 0x03;
 const I2C_SCAN_ADDR_END: u8 = 0x77;
 
 macro_rules! define_scanner {
-    ($i2c_trait:path) => {
+    ($i2c_trait:path, $error_ty:path) => {
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
         ///
         /// This function probes each possible I2C device address by attempting to
@@ -40,7 +40,7 @@ macro_rules! define_scanner {
         where
             I2C: $i2c_trait,
             L: Logger,
-            <I2C as $i2c_trait>::Error: core::fmt::Debug,
+            $error_ty: core::fmt::Debug,
         {
             log!(logger, "[scan] Scanning I2C bus...");
             match internal_scan(i2c, &[]) {
@@ -85,7 +85,7 @@ macro_rules! define_scanner {
         ) where
             I2C: $i2c_trait,
             L: Logger,
-            <I2C as $i2c_trait>::Error: core::fmt::Debug,
+            $error_ty: core::fmt::Debug,
         {
             log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
             match internal_scan(i2c, control_bytes) {
@@ -128,48 +128,41 @@ macro_rules! define_scanner {
         /// let init_sequence: [u8; 3] = [0xAE, 0xA1, 0xAF]; // example init cmds
         /// scan_init_sequence(&mut i2c, &mut logger, &init_sequence);
         /// ```
-        pub fn scan_init_sequence<I2C, L>(i2c: &mut I2C, logger: &mut L, init_sequence: &[u8])
-        where
+        pub fn scan_init_sequence<I2C, L>(
+            i2c: &mut I2C,
+            logger: &mut L,
+            init_sequence: &[u8],
+        ) where
             I2C: $i2c_trait,
             L: Logger,
+            $error_ty: core::fmt::Debug,
         {
-            log!(
-                logger,
-                "[scan] Scanning I2C bus with init sequence: {:02X?}",
-                init_sequence
-            );
-            let mut detected_cmds = Vec::<u8, 64>::new();
+            log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
+            let mut detected_cmds: Vec<u8, 64> = Vec::new();
 
             for &cmd in init_sequence {
                 log!(logger, "-> Testing command 0x{:02X}", cmd);
-                let found_addrs = internal_scan(i2c, &[0x00, cmd]);
-
-                if !found_addrs.is_empty() {
-                    for addr in found_addrs {
-                        log!(
-                            logger,
-                            "[ok] Found device at 0x{:02X} responding to command 0x{:02X}",
-                            addr,
-                            cmd
-                        );
+                match internal_scan(i2c, &[0x00, cmd]) {
+                    Ok(found_addrs) => {
+                        for addr in found_addrs {
+                            log!(logger, "[ok] Found device at 0x{:02X} responding to command 0x{:02X}", addr, cmd);
+                        }
+                        if detected_cmds.push(cmd).is_err() {
+                            log!(logger, "[warn] Detected commands buffer is full, results may be incomplete!");
+                        }
                     }
-                    if detected_cmds.push(cmd).is_err() {
-                        log!(
-                            logger,
-                            "[warn] Detected commands buffer is full, results may be incomplete!"
-                        );
-                    }
+                    Err(e) => log!(logger, "[error] scan failed for command 0x{:02X}: {:?}", cmd, e),
                 }
             }
 
-            log_differences(logger, init_sequence, &detected_cmds);
+            super::log_differences(logger, init_sequence, &detected_cmds);
             log!(logger, "[info] I2C scan with init sequence complete.");
         }
 
         fn internal_scan<I2C>(
             i2c: &mut I2C,
             data: &[u8],
-        ) -> Result<Vec<u8, 128>, <I2C as $i2c_trait>::Error>
+        ) -> Result<Vec<u8, 128>, $error_ty>
         where
             I2C: $i2c_trait,
         {
@@ -182,8 +175,7 @@ macro_rules! define_scanner {
                         }
                     }
                     Err(e) => {
-                        
-                        log!("[warn] write failed at 0x{:02X}: {:?}", addr, e);
+                        log!("[scan] write failed at 0x{:02X}: {:?}", addr, e);
                         continue;
                     }
                 }
@@ -200,14 +192,14 @@ macro_rules! define_scanner {
 pub mod ehal_0_2 {
     use super::*;
     use embedded_hal_0_2::blocking::i2c::Write as WriteI2c;
-    define_scanner!(WriteI2c);
+    define_scanner!(WriteI2c, <WriteI2c as embedded_hal_0_2::blocking::i2c::Write>::Error);
 }
 
 #[cfg(feature = "ehal_1_0")]
 pub mod ehal_1_0 {
     use super::*;
     use embedded_hal_1::i2c::I2c as I2c1;
-    define_scanner!(I2c1);
+    define_scanner!(I2c1, embedded_hal_1::i2c::ErrorKind);
 }
 
 // Re-export functions to maintain API compatibility for macros.
