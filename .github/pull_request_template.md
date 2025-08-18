@@ -24,13 +24,9 @@ $ cargo test      # ✅ / ❌
 
 ## Target board with confirmed operation
  - [ ] ATmega328p
-
  - [ ] ESP32
-
  - [ ] STM32
-
  - [ ] Linux mock
-
  - [ ] Other: ___
 
 ## Screenshots / Demos (optional)
