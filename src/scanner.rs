@@ -173,8 +173,8 @@ where
     let mut found_devices = heapless::Vec::new();
     for addr in 0x03..=0x77 {
         if i2c.write(addr, data).is_ok() {
-            // The push can fail if the Vec is full, which is unlikely here.
-            // Consider handling the error if full capacity is a concern.
+            // The push cannot fail because the address range (0x03..=0x77) has 120
+            // possible addresses, and the vector's capacity is 128.
             let _ = found_devices.push(addr);
         }
     }
