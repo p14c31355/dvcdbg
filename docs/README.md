@@ -35,6 +35,8 @@ cargo add dvcdbg --features "macros"
 
 ## 📄 Usage Example (Arduino)
 
+- [Detailed settings](docs/USAGE.md)
+
 ```rust
 use arduino_hal::default_serial;
 use dvcdbg::prelude::*;
