@@ -9,6 +9,9 @@ use crate::logger::Logger;
 use embedded_hal::i2c::I2c;
 use heapless::Vec;
 
+const I2C_SCAN_ADDR_START: u8 = 0x03;
+const I2C_SCAN_ADDR_END: u8 = 0x77;
+
 // -----------------------------------------------------------------------------
 //  Public API (with Rustdoc) 
 // -----------------------------------------------------------------------------
