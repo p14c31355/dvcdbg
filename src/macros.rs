@@ -114,9 +114,8 @@ macro_rules! adapt_serial {
                 }
                 Ok(buf.len())
             }
-
             fn flush(&mut self) -> Result<(), Self::Error> {
-                $( 
+                $(
                     nb::block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;
                 )?
                 Ok(())
@@ -131,79 +130,6 @@ macro_rules! adapt_serial {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 <Self as embedded_io::Write>::write_all(self, s.as_bytes())
                     .map_err(|_| core::fmt::Error)
-            }
-        }
-    };
-}
-
-/// Macro to adapt a serial peripheral into a fmt::Write + embedded_io::Write bridge.
-///
-/// # Arguments
-/// - `$name` → Name of the generated adapter struct
-/// - `nb_write` → Serial write method name required by HAL
-/// - `flush` (optional) → Method for flushing non-blocking serial
-///
-/// # Example
-///
-/// ## Arduino HAL Serial
-/// ```ignore
-/// use arduino_hal::prelude::*;
-/// use dvcdbg::adapt_serial;
-/// use core::fmt::Write;
-/// use embedded_io::Write;
-///
-/// adapt_serial!(UsartAdapter, nb_write = write, flush = flush);
-///
-/// let dp = arduino_hal::Peripherals::take().unwrap();
-/// let pins = arduino_hal::pins!(dp);
-/// let serial = arduino_hal::default_serial!(dp, pins, 57600);
-/// let mut dbg_uart = UsartAdapter(serial);
-///
-/// writeln!(dbg_uart, "Hello from embedded-io bridge!").unwrap();
-/// dbg_uart.write_all(&[0x01, 0x02, 0x03]).unwrap();
-/// ```
-///
-/// ## Custom serial-like type
-/// ```ignore
-/// use dvcdbg::adapt_serial;
-/// use core::fmt::Write;
-/// use core::convert::Infallible;
-/// use nb;
-/// use embedded_io::Write;
-///
-/// struct MySerial;
-/// impl nb::serial::Write<u8> for MySerial {
-///     type Error = Infallible; // Error type is not fixed to Infallible
-///     fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> { Ok(()) }
-///     fn flush(&mut self) -> nb::Result<(), Self::Error> { Ok(()) }
-/// }
-///
-/// adapt_serial!(MyAdapter, nb_write = write, flush = flush);
-/// let mut uart = MyAdapter(MySerial);
-/// writeln!(uart, "Hello via custom serial").unwrap();
-/// uart.write_all(&[0xAA, 0xBB]).unwrap();
-/// ```
-#[macro_export]
-macro_rules! adapt_serial_0_2 {
-    ($name:ident) => {
-        pub struct $name<T>(pub T);
-        impl<T> core::fmt::Write for $name<T>
-        where
-            T: embedded_hal::blocking::serial::Write<u8>,
-        {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                for b in s.as_bytes() {
-                    nb::block!(self.0.write(*b)).map_err(|_| core::fmt::Error)?;
-                }
-                Ok(())
-            }
-        }
-        impl<T> dvcdbg::logger::WriteAdapter for $name<T>
-        where
-            T: embedded_hal::blocking::serial::Write<u8>,
-        {
-            fn write(&mut self, byte: u8) {
-                let _ = nb::block!(self.0.write(byte));
             }
         }
     };

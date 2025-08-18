@@ -35,6 +35,8 @@ cargo add dvcdbg --features "macros"
 
 ## 📄 Usage Example (Arduino)
 
+- [Detailed settings](docs/USAGE.md)
+
 ```rust
 use arduino_hal::default_serial;
 use dvcdbg::prelude::*;
@@ -69,6 +71,11 @@ fn your_test_code() {
 }
 
 ```
+---
+
+## Architecture
+
+![](docs/assets/architecture20250815.png)
 
 ---
 
@@ -118,10 +125,10 @@ strip = true
 ## 🤝 Contributing
 
 Bug reports, feature suggestions, and pull requests are welcome!
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
 
 ---
 
 ## 📄 License
 
-[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)
+[MIT](docs/LICENSE-MIT) OR [Apache-2.0](docs/LICENSE-APACHE)
