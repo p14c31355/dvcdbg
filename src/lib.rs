@@ -23,7 +23,11 @@ pub mod macros;
 /// ```
 pub mod prelude;
 
-/// Recursive log macro that enables log output within macros
+/// Recursive log macro that enables log output within macros.
+///
+/// Formats arguments into a temporary `heapless::String` of a fixed size (128 bytes).
+/// If the formatted output exceeds the buffer capacity, it will be silently truncated.
+/// This is useful for preparing a string to be passed to another logging macro.
 #[macro_export]
 macro_rules! recursive_log {
     ($($arg:tt)*) => {{
