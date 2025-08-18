@@ -11,6 +11,19 @@ use heapless::Vec;
 const I2C_SCAN_ADDR_START: u8 = 0x03;
 const I2C_SCAN_ADDR_END: u8 = 0x77;
 
+#[cfg(feature = "ehal_0_2")]
+pub mod ehal_0_2 {
+    use super::*;
+    define_scanner!(I2cCompat, core::fmt::Debug);
+}
+
+#[cfg(feature = "ehal_1_0")]
+pub mod ehal_1_0 {
+    use super::*;
+    use embedded_hal_1::i2c::I2c;
+    define_scanner!(I2cCompat, embedded_hal_1::i2c::ErrorKind);
+}
+
 macro_rules! define_scanner {
     ($i2c_trait:ty, $error_ty:ty) => {
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
@@ -194,13 +207,8 @@ macro_rules! define_scanner {
 // -----------------------------------------------------------------------------
 //  Version branching
 // -----------------------------------------------------------------------------
-#[cfg(feature = "ehal_0_2")]
-pub mod ehal_0_2 {
-    use super::*;
-    define_scanner!(embedded_hal_0_2::blocking::i2c::Write, core::fmt::Debug);
-}
 
-#[cfg(feature = "ehal_0_2")]
+#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 impl<I2C> I2cCompat for I2C
 where
     I2C: embedded_hal_0_2::blocking::i2c::Write,
@@ -212,12 +220,6 @@ where
     }
 }
 
-#[cfg(feature = "ehal_1_0")]
-pub mod ehal_1_0 {
-    use super::*;
-    use embedded_hal_1::i2c::I2c;
-    define_scanner!(I2cCompat, embedded_hal_1::i2c::ErrorKind);
-}
 
 #[cfg(feature = "ehal_1_0")]
 impl<I2C> I2cCompat for I2C
@@ -230,13 +232,6 @@ where
         embedded_hal_1::i2c::I2c::write(self, addr, bytes)
     }
 }
-
-// Re-export functions to maintain API compatibility for macros.
-#[cfg(feature = "ehal_1_0")]
-pub use self::ehal_1_0::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
-
-#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
-pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
 
 // -----------------------------------------------------------------------------
 //  Common utilities

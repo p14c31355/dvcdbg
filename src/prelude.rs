@@ -19,3 +19,10 @@ pub use crate::{
 
 #[cfg(feature = "scanner")]
 pub use crate::scanner::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
+
+// Re-export functions to maintain API compatibility for macros.
+#[cfg(feature = "ehal_1_0")]
+pub use self::ehal_1_0::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
+
+#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
+pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
