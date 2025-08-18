@@ -190,12 +190,13 @@ where
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
-    let missing_cmds: Vec<u8, 64> = expected
-        .iter()
-        .filter(|&&c| sorted.binary_search(&c).is_err())
-        .copied()
-        .collect();
-
+    let mut missing_cmds: Vec<u8, 64> = Vec::new();
+    for cmd in expected.iter().copied().filter(|c| sorted.binary_search(c).is_err()) {
+        if missing_cmds.push(cmd).is_err() {
+            log!(logger, "[warn] Missing commands buffer is full, list is truncated.");
+            break;
+        }
+    }
     log!(
         logger,
         "Commands with no response: {:02X?}",
