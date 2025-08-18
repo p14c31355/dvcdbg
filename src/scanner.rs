@@ -14,6 +14,7 @@ const I2C_SCAN_ADDR_END: u8 = 0x77;
 #[cfg(feature = "ehal_0_2")]
 pub mod ehal_0_2 {
     use super::*;
+    use crate::define_scanner;
     define_scanner!(I2cCompat, core::fmt::Debug);
 }
 
@@ -21,9 +22,11 @@ pub mod ehal_0_2 {
 pub mod ehal_1_0 {
     use super::*;
     use embedded_hal_1::i2c::I2c;
+    use crate::define_scanner;
     define_scanner!(I2cCompat, embedded_hal_1::i2c::ErrorKind);
 }
 
+#[macro_export]
 macro_rules! define_scanner {
     ($i2c_trait:ty, $error_ty:ty) => {
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
@@ -178,9 +181,10 @@ macro_rules! define_scanner {
         fn internal_scan<I2C>(
             i2c: &mut I2C,
             data: &[u8],
-        ) -> Result<heapless::Vec<u8, 128>, <I2C as $i2c_trait>::Error: Into<$error_ty>>
+        ) -> Result<heapless::Vec<u8, 128>, <I2C as $i2c_trait>::Error>
         where
             I2C: $i2c_trait,
+            <I2C as $i2c_trait>::Error: Into<$error_ty>,
         {
             let mut found_devices: heapless::Vec<u8, 128> = heapless::Vec::new();
 
