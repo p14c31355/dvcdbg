@@ -233,13 +233,28 @@ macro_rules! define_scanner {
                         found_devices.push(addr).unwrap(); // END - START < 128
                     }
                     Err(e) => {
-                        if self::is_expected_nack(&e) {
-                            // Not connect devices
-                            continue;
-                        } else {
-                            let _msg = $crate::recursive_log!("write failed at 0x{:02X}: {:?}", addr, e);
-                            log!(logger, "[error] {}", _msg);
-                            return Err(e);
+                        #[cfg(feature = "ehal_1_0")]
+                        {
+                            if match_nack(&e) {
+                                // Ignore unconnected devices
+                                continue;
+                            } else {
+                                let _msg = $crate::recursive_log!("write failed at 0x{:02X}: {:?}", addr, e);
+                                log!(logger, "[error] {}", _msg);
+                                return Err(e);
+                            }
+                        }
+
+                        #[cfg(feature = "ehal_0_2")]
+                        {
+                            if or_nack(&e) {
+                                // Ignore unconnected devices
+                                continue;
+                            } else {
+                                let _msg = $crate::recursive_log!("write failed at 0x{:02X}: {:?}", addr, e);
+                                log!(logger, "[error] {}", _msg);
+                                return Err(e);
+                            }
                         }
                     }
                 }
@@ -248,20 +263,23 @@ macro_rules! define_scanner {
             Ok(found_devices)
         }
         
-        fn is_expected_nack<E>(err: &E) -> bool
+        #[cfg(feature = "ehal_1_0")]
+        fn match_nack<E>(err: &E) -> bool
         where
             E: $($error_bound)*,
-        {   
-            #[cfg(feature = "ehal_1_0")]
+        {
             use embedded_hal_1::i2c::ErrorKind;
-            #[cfg(feature = "ehal_1_0")]
             matches!(err.kind(), ErrorKind::NoAcknowledge(_))
+        }
 
-            #[cfg(feature = "ehal_0_2")]
+        #[cfg(feature = "ehal_0_2")]
+        fn or_nack<E>(err: &E) -> bool
+        where
+            E: $($error_bound)*,
+        {
             let s = $crate::recursive_log!("{:?}", err);
-            #[cfg(feature = "ehal_0_2")]
             s.contains("NACK") || s.contains("NoAcknowledge")
-        }       
+        }
     }
 }
 
