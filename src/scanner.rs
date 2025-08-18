@@ -13,7 +13,6 @@ const I2C_SCAN_ADDR_END: u8 = 0x77;
 
 macro_rules! define_scanner {
     ($i2c_trait:path) => {
-
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
         ///
         /// This function probes each possible I2C device address by attempting to
@@ -203,14 +202,25 @@ where
     L: Logger,
 {
     log!(logger, "Expected sequence: {:02X?}", expected);
-    log!(logger, "Commands with response: {:02X?}", detected.as_slice());
+    log!(
+        logger,
+        "Commands with response: {:02X?}",
+        detected.as_slice()
+    );
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
     let mut missing_cmds: Vec<u8, 64> = Vec::new();
-    for cmd in expected.iter().copied().filter(|c| sorted.binary_search(c).is_err()) {
+    for cmd in expected
+        .iter()
+        .copied()
+        .filter(|c| sorted.binary_search(c).is_err())
+    {
         if missing_cmds.push(cmd).is_err() {
-            log!(logger, "[warn] Missing commands buffer is full, list is truncated.");
+            log!(
+                logger,
+                "[warn] Missing commands buffer is full, list is truncated."
+            );
             break;
         }
     }
