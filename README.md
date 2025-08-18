@@ -73,7 +73,7 @@ fn your_test_code() {
 ```
 ---
 
-## Architechture
+## Architecture
 
 ![](docs/assets/architecture20250815.png)
 
