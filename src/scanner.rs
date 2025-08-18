@@ -15,7 +15,7 @@ const I2C_SCAN_ADDR_END: u8 = 0x77;
 pub mod ehal_0_2 {
     use crate::define_scanner;
     use crate::log;
-    define_scanner!(crate::scanner::I2cCompat, core::fmt::Debug, embedded_hal_0_2::blocking::i2c::Error);
+    define_scanner!(crate::scanner::I2cCompat, crate::logger::Logger, embedded_hal_0_2::blocking::i2c::Error);
 }
 
 #[cfg(feature = "ehal_1_0")]
