@@ -236,6 +236,7 @@ macro_rules! define_scanner {
                         let is_nack = {
                             #[cfg(feature = "ehal_1_0")]
                             {
+                                use embedded_hal_1::i2c::Error;
                                 use embedded_hal_1::i2c::ErrorKind;
                                 matches!(e.kind(), ErrorKind::NoAcknowledge(_))
                             }
