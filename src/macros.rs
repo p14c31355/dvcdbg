@@ -110,14 +110,13 @@ macro_rules! adapt_serial {
 
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 for &b in buf {
-                    self.0.$write_fn(b).map_err($crate::AdaptError::Other)?;
+                    nb::block!(self.0.$write_fn(b)).map_err($crate::AdaptError::Other)?;
                 }
                 Ok(buf.len())
             }
-
             fn flush(&mut self) -> Result<(), Self::Error> {
                 $(
-                    self.0.$flush_fn().map_err($crate::AdaptError::Other)?;
+                    nb::block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;
                 )?
                 Ok(())
             }
