@@ -247,12 +247,21 @@ macro_rules! define_scanner {
 
             Ok(found_devices)
         }
+
+        
     };
 }
 
-fn is_expected_nack<E>(_err: &E) -> bool {
-    // TODO: return bus error, arbitration loss etc.
-    true
+use embedded_hal_1::i2c::ErrorKind;
+
+fn is_expected_nack<E>(err: &E) -> bool
+where
+    E: embedded_hal_1::i2c::Error,
+{
+    match err.kind() {
+        ErrorKind::NoAcknowledge(_) => true, 
+        _ => false,
+    }
 }
 
 // -----------------------------------------------------------------------------
