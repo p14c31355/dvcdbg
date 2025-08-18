@@ -221,6 +221,7 @@ macro_rules! define_scanner {
 impl<I2C> I2cCompat for I2C
 where
     I2C: embedded_hal_0_2::blocking::i2c::Write,
+    <I2C as embedded_hal_0_2::blocking::i2c::Write>::Error: Debug,
 {
     type Error = <I2C as embedded_hal_0_2::blocking::i2c::Write>::Error;
 
@@ -234,6 +235,7 @@ where
 impl<I2C> I2cCompat for I2C
 where
     I2C: embedded_hal_1::i2c::I2c,
+    I2C::Error: Into<embedded_hal_1::i2c::ErrorKind> + Debug,
 {
     type Error = I2C::Error;
 
@@ -245,9 +247,10 @@ where
 // -----------------------------------------------------------------------------
 //  Common utilities
 // -----------------------------------------------------------------------------
-pub trait I2cCompat {
-    type Error;
+use core::fmt::Debug;
 
+pub trait I2cCompat {
+    type Error: Debug;
     fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error>;
 }
 
