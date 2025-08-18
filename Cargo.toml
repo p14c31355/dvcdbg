@@ -16,14 +16,21 @@ exclude = [
 ]
 
 [dependencies]
-embedded-hal = "1.0.0"
-nb = "1.1"
 heapless = "0.8.0"
 embedded-io = "0.6.1"
 
+embedded-hal-0_2 = { package = "embedded-hal", version = "0.2.7", optional = true }
+embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", optional = true }
+nb = { version = "1.1", optional = true }
+
 [features]
-default = ["logger", "scanner", "macros"]
+default = ["logger", "scanner", "macros", "ehal_1_0"]
+
 logger = []
 scanner = []
 macros = []
 quick_diag = ["logger", "scanner", "macros"]
+
+# HAL switching feature
+ehal_0_2 = ["embedded-hal-0_2"]
+ehal_1_0 = ["embedded-hal-1", "nb"]
