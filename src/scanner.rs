@@ -129,8 +129,7 @@ where
     I2C: I2c,
     L: Logger,
 {
-    // ... (initial logging)
-        log!(
+    log!(
         logger,
         "[scan] Scanning I2C bus with init sequence: {:02X?}",
         init_sequence
