@@ -27,7 +27,7 @@ nb = { version = "1.1", optional = true }
 default = ["logger", "scanner", "macros", "ehal_1_0"]
 
 logger = []
-scanner = []
+scanner = ["logger"]
 macros = []
 quick_diag = ["logger", "scanner", "macros"]
 

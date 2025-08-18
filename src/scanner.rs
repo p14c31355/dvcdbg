@@ -39,7 +39,7 @@ macro_rules! define_scanner {
         pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
         where
             I2C: $i2c_trait,
-            L: Logger,
+            L: crate::logger::Logger,
             $error_ty: core::fmt::Debug,
         {
             log!(logger, "[scan] Scanning I2C bus...");
@@ -84,7 +84,7 @@ macro_rules! define_scanner {
             control_bytes: &[u8],
         ) where
             I2C: $i2c_trait,
-            L: Logger,
+            L: crate::logger::Logger,
             $error_ty: core::fmt::Debug,
         {
             log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
@@ -134,11 +134,11 @@ macro_rules! define_scanner {
             init_sequence: &[u8],
         ) where
             I2C: $i2c_trait,
-            L: Logger,
+            L: crate::logger::Logger,
             $error_ty: core::fmt::Debug,
         {
             log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
-            let mut detected_cmds: Vec<u8, 64> = Vec::new();
+            let mut detected_cmds: heapless::Vec<u8, 64> = heapless::Vec::new();
 
             for &cmd in init_sequence {
                 log!(logger, "-> Testing command 0x{:02X}", cmd);
@@ -151,7 +151,10 @@ macro_rules! define_scanner {
                             log!(logger, "[warn] Detected commands buffer is full, results may be incomplete!");
                         }
                     }
-                    Err(e) => log!(logger, "[error] scan failed for command 0x{:02X}: {:?}", cmd, e),
+                    Err(e) => {
+                        let _msg = crate::recursive_log!("scan failed for command 0x{:02X}: {:?}", cmd, e);
+                        log!(logger, "[error] {}", _msg);
+                    }
                 }
             }
 
@@ -162,12 +165,13 @@ macro_rules! define_scanner {
         fn internal_scan<I2C>(
             i2c: &mut I2C,
             data: &[u8],
-        ) -> Result<Vec<u8, 128>, $error_ty>
+        ) -> Result<heapless::Vec<u8, 128>, $error_ty>
         where
             I2C: $i2c_trait,
         {
-            let mut found_devices = Vec::new();
-            for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+            let mut found_devices: heapless::Vec<u8, 128> = heapless::Vec::new();
+
+            for addr in super::I2C_SCAN_ADDR_START..=super::I2C_SCAN_ADDR_END {
                 match i2c.write(addr, data) {
                     Ok(_) => {
                         if found_devices.push(addr).is_err() {
@@ -175,11 +179,13 @@ macro_rules! define_scanner {
                         }
                     }
                     Err(e) => {
-                        log!("[scan] write failed at 0x{:02X}: {:?}", addr, e);
+                        let _msg = crate::recursive_log!("[scan] write failed at 0x{:02X}: {:?}", addr, e);
+                        // It is also possible to pass msg to Logger on the calling side.
                         continue;
                     }
                 }
             }
+
             Ok(found_devices)
         }
     };
@@ -192,7 +198,7 @@ macro_rules! define_scanner {
 pub mod ehal_0_2 {
     use super::*;
     use embedded_hal_0_2::blocking::i2c::Write as WriteI2c;
-    define_scanner!(WriteI2c, <WriteI2c as embedded_hal_0_2::blocking::i2c::Write>::Error);
+    define_scanner!(WriteI2c, embedded_hal_0_2::blocking::i2c::Error);
 }
 
 #[cfg(feature = "ehal_1_0")]
