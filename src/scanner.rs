@@ -183,16 +183,18 @@ macro_rules! define_scanner {
 //  Version branching
 // -----------------------------------------------------------------------------
 #[cfg(feature = "ehal_0_2")]
-use embedded_hal_0_2::blocking::i2c::Write as WriteI2c;
+pub mod ehal_0_2 {
+    use super::*;
+    use embedded_hal_0_2::blocking::i2c::Write as WriteI2c;
+    define_scanner!(WriteI2c);
+}
 
-#[cfg(all(not(feature = "ehal_0_2"), feature = "ehal_1_0"))]
-use embedded_hal_1::i2c::I2c as I2c1;
-
-#[cfg(feature = "ehal_0_2")]
-define_scanner!(WriteI2c);
-
-#[cfg(all(not(feature = "ehal_0_2"), feature = "ehal_1_0"))]
-define_scanner!(I2c1);
+#[cfg(feature = "ehal_1_0")]
+pub mod ehal_1_0 {
+    use super::*;
+    use embedded_hal_1::i2c::I2c as I2c1;
+    define_scanner!(I2c1);
+}
 
 // -----------------------------------------------------------------------------
 //  Common utilities
