@@ -186,7 +186,7 @@ macro_rules! define_scanner {
 #[cfg(feature = "ehal_0_2")]
 use embedded_hal_0_2::blocking::i2c::Write as WriteI2c;
 
-#[cfg(feature = "ehal_1_0")]
+#[cfg(all(not(feature = "ehal_0_2"), feature = "ehal_1_0"))]
 use embedded_hal_1::i2c::I2c as I2c1;
 
 #[cfg(feature = "ehal_0_2")]
