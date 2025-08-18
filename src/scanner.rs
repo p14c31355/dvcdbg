@@ -15,14 +15,14 @@ const I2C_SCAN_ADDR_END: u8 = 0x77;
 pub mod ehal_0_2 {
     use crate::define_scanner;
     use crate::log;
-    define_scanner!(crate::scanner::I2cCompat, core::fmt::Debug);
+    define_scanner!(crate::scanner::I2cCompat, core::fmt::Debug, embedded_hal_0_2::blocking::i2c::Error);
 }
 
 #[cfg(feature = "ehal_1_0")]
 pub mod ehal_1_0 {
     use crate::define_scanner;
     use crate::log;
-    define_scanner!(crate::scanner::I2cCompat, crate::logger::Logger, embedded_hal_1::i2c::ErrorKind);
+    define_scanner!(crate::scanner::I2cCompat, crate::logger::Logger, embedded_hal_1::i2c::Error);
 }
 
 #[cfg(feature = "ehal_1_0")]
@@ -60,7 +60,7 @@ macro_rules! define_scanner {
         pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
         where
             I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: Into<$error_ty>,
+            <I2C as $i2c_trait>::Error: $($error_bound)*,
             L: $logger_trait,
         {
             log!(logger, "[scan] Scanning I2C bus...");
@@ -105,7 +105,7 @@ macro_rules! define_scanner {
             control_bytes: &[u8],
         ) where
             I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: Into<$error_ty>,
+            <I2C as $i2c_trait>::Error: $($error_bound)*,
             L: $logger_trait,
         {
             log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
@@ -155,7 +155,7 @@ macro_rules! define_scanner {
             init_sequence: &[u8],
         ) where
             I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: Into<$error_ty>,
+            <I2C as $i2c_trait>::Error: $($error_bound)*,
             L: $logger_trait,
         {
             log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
@@ -165,11 +165,13 @@ macro_rules! define_scanner {
                 log!(logger, "-> Testing command 0x{:02X}", cmd);
                 match internal_scan(i2c, logger, &[0x00, cmd]) {
                     Ok(found_addrs) => {
-                        for addr in found_addrs {
-                            log!(logger, "[ok] Found device at 0x{:02X} responding to command 0x{:02X}", addr, cmd);
-                        }
-                        if detected_cmds.push(cmd).is_err() {
-                            log!(logger, "[warn] Detected commands buffer is full, results may be incomplete!");
+                        if !found_addrs.is_empty() {
+                            for addr in found_addrs {
+                                log!(logger, "[ok] Found device at 0x{:02X} responding to command 0x{:02X}", addr, cmd);
+                            }
+                            if detected_cmds.push(cmd).is_err() {
+                                log!(logger, "[warn] Detected commands buffer is full, results may be incomplete!");
+                            }
                         }
                     }
                     Err(e) => {
@@ -190,7 +192,7 @@ macro_rules! define_scanner {
         ) -> Result<heapless::Vec<u8, 128>, <I2C as $i2c_trait>::Error>
         where
             I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: Into<$error_ty>,
+            <I2C as $i2c_trait>::Error: $($error_bound)*,
             L: $logger_trait,
         {
             let mut found_devices: heapless::Vec<u8, 128> = heapless::Vec::new();
@@ -231,7 +233,7 @@ fn is_expected_nack<E>(_err: &E) -> bool {
 impl<I2C> I2cCompat for I2C
 where
     I2C: embedded_hal_0_2::blocking::i2c::Write,
-    <I2C as embedded_hal_0_2::blocking::i2c::Write>::Error: Debug,
+    <I2C as embedded_hal_0_2::blocking::i2c::Write>::Error: Debug + Copy,
 {
     type Error = <I2C as embedded_hal_0_2::blocking::i2c::Write>::Error;
 
@@ -244,7 +246,7 @@ where
 impl<I2C> I2cCompat for I2C
 where
     I2C: embedded_hal_1::i2c::I2c,
-    I2C::Error: Into<embedded_hal_1::i2c::ErrorKind> + Debug,
+    I2C::Error: Into<embedded_hal_1::i2c::ErrorKind> + Debug + Copy,
 {
     type Error = I2C::Error;
 
