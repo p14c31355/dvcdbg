@@ -118,10 +118,10 @@ strip = true
 ## 🤝 Contributing
 
 Bug reports, feature suggestions, and pull requests are welcome!
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
 
 ---
 
 ## 📄 License
 
-[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)
+[MIT](docs/LICENSE-MIT) OR [Apache-2.0](docs/LICENSE-APACHE)
