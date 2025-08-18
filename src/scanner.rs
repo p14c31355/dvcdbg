@@ -196,14 +196,17 @@ macro_rules! define_scanner {
             for addr in super::I2C_SCAN_ADDR_START..=super::I2C_SCAN_ADDR_END {
                 match i2c.write(addr, data) {
                     Ok(_) => {
-                        if found_devices.push(addr).is_err() {
-                            break;
-                        }
+                        found_devices.push(addr).unwrap(); // END - START < 128
                     }
                     Err(e) => {
-                        let _msg = $crate::recursive_log!("[scan] write failed at 0x{:02X}: {:?}", addr, e);
-                        // It is also possible to pass msg to Logger on the calling side.
-                        continue;
+                        if super::is_expected_nack(&e) {
+                            // Not connect devices
+                            continue;
+                        } else {
+                            let _msg = $crate::recursive_log!("[scan] write failed at 0x{:02X}: {:?}", addr, e);
+                            log!(logger, "[error] {}", _msg);
+                            return Err(e);
+                        }
                     }
                 }
             }
@@ -211,6 +214,11 @@ macro_rules! define_scanner {
             Ok(found_devices)
         }
     };
+}
+
+fn is_expected_nack<E>(_err: &E) -> bool {
+    // TODO: return bus error, arbitration loss etc.
+    true
 }
 
 // -----------------------------------------------------------------------------
