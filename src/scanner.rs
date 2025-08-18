@@ -6,7 +6,7 @@
 
 use crate::log;
 use crate::logger::Logger;
-use embedded_hal::i2c::I2c;
+use embedded_hal_1::i2c::I2c;
 use heapless::Vec;
 
 const I2C_SCAN_ADDR_START: u8 = 0x03;
