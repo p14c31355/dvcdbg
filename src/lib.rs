@@ -33,13 +33,12 @@ pub mod prelude;
 #[derive(Debug)]
 pub enum AdaptError<E> {
     /// Formatting failure (e.g., `core::fmt::Write`).
-    /// This variant is not currently used, 
+    /// This variant is not currently used,
     /// but is reserved for compatibility absorption in the event of future disruptive changes.
     Fmt,
     /// HAL-specific error.
     Other(E),
 }
-
 
 impl<E: core::fmt::Debug> embedded_io::Error for AdaptError<E> {
     fn kind(&self) -> embedded_io::ErrorKind {
