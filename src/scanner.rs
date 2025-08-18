@@ -1,25 +1,3 @@
-/// Scanner utilities for I2C bus device discovery and analysis.
-///
-/// This module provides functions to scan the I2C bus for connected devices,
-/// optionally testing with control bytes or initialization command sequences,
-/// with detailed logging support.
-///
-/// # Examples
-///
-/// ```ignore
-/// use embedded_hal::i2c::I2c;
-/// use dvcdbg::logger::{Logger, SerialLogger};
-///
-/// // `i2c` must implement `embedded_hal::i2c::I2c`
-/// // `logger` must implement `Logger` trait from dvcdbg
-/// fn main() {
-///     let mut i2c = /* your i2c interface */;
-///     let mut logger = /* your logger */;
-///
-///     scan_i2c(&mut i2c, &mut logger);
-///     scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
-/// }
-/// ```
 use crate::log;
 use crate::logger::Logger;
 use embedded_hal::i2c::I2c;
@@ -40,11 +18,7 @@ where
     L: Logger,
 {
     log!(logger, "[scan] Scanning I2C bus...");
-    for addr in 0x03..=0x77 {
-        if i2c.write(addr, &[]).is_ok() {
-            log!(logger, "[ok] Found device at 0x{:02X}", addr);
-        }
-    }
+    internal_scan(i2c, logger, &[]);
     log!(logger, "[info] I2C scan complete.");
 }
 
@@ -68,16 +42,7 @@ where
         "[scan] Scanning I2C bus with control bytes: {:?}",
         control_bytes
     );
-    for addr in 0x03..=0x77 {
-        if i2c.write(addr, control_bytes).is_ok() {
-            log!(
-                logger,
-                "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})",
-                addr,
-                control_bytes
-            );
-        }
-    }
+    internal_scan(i2c, logger, control_bytes);
     log!(logger, "[info] I2C scan complete.");
 }
 
@@ -107,18 +72,7 @@ where
 
     for &cmd in init_sequence {
         log!(logger, "-> Testing command 0x{:02X}", cmd);
-
-        for addr in 0x03..=0x77 {
-            let res = i2c.write(addr, &[0x00, cmd]); // 0x00 = control byte for command
-            if res.is_ok() {
-                log!(
-                    logger,
-                    "[ok] Found device at 0x{:02X} responding to command 0x{:02X}",
-                    addr,
-                    cmd
-                );
-            }
-        }
+        internal_scan(i2c, logger, &[0x00, cmd]);
 
         if detected_cmds.push(cmd).is_err() {
             log!(
@@ -150,4 +104,20 @@ where
     );
 
     log!(logger, "[info] I2C scan with init sequence complete.");
+}
+
+// -----------------------------------------------------------------------------
+// Internal utilities (not exported as public API)
+// -----------------------------------------------------------------------------
+
+fn internal_scan<I2C, L>(i2c: &mut I2C, logger: &mut L, data: &[u8])
+where
+    I2C: I2c,
+    L: Logger,
+{
+    for addr in 0x03..=0x77 {
+        if i2c.write(addr, data).is_ok() {
+            log!(logger, "[ok] Found device at 0x{:02X}", addr);
+        }
+    }
 }
