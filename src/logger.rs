@@ -29,14 +29,18 @@
 //! log!(logger, "Hello {}!", "world");
 //! ```
 
+#[cfg(feature = "logger")]
 #[macro_export]
 macro_rules! log {
     ($logger:expr, $($arg:tt)*) => {
-        #[cfg(feature = "logger")]
-        {
-            $logger.log_fmt(core::format_args!($($arg)*));
-        }
+        $logger.log_fmt(format_args!($($arg)*))
     };
+}
+
+#[cfg(not(feature = "logger"))]
+#[macro_export]
+macro_rules! log {
+    ($logger:expr, $($arg:tt)*) => {};
 }
 
 /// Common logging interface.
