@@ -40,11 +40,16 @@ macro_rules! define_scanner {
         where
             I2C: $i2c_trait,
             L: Logger,
+            <I2C as $i2c_trait>::Error: core::fmt::Debug,
         {
             log!(logger, "[scan] Scanning I2C bus...");
-            let found_addrs = internal_scan(i2c, &[]);
-            for addr in found_addrs {
-                log!(logger, "[ok] Found device at 0x{:02X}", addr);
+            match internal_scan(i2c, &[]) {
+                Ok(found_addrs) => {
+                    for addr in found_addrs {
+                        log!(logger, "[ok] Found device at 0x{:02X}", addr);
+                    }
+                }
+                Err(e) => log!(logger, "[error] I2C scan failed: {:?}", e),
             }
             log!(logger, "[info] I2C scan complete.");
         }
@@ -73,24 +78,23 @@ macro_rules! define_scanner {
         ///
         /// scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
         /// ```
-        pub fn scan_i2c_with_ctrl<I2C, L>(i2c: &mut I2C, logger: &mut L, control_bytes: &[u8])
-        where
+        pub fn scan_i2c_with_ctrl<I2C, L>(
+            i2c: &mut I2C,
+            logger: &mut L,
+            control_bytes: &[u8],
+        ) where
             I2C: $i2c_trait,
             L: Logger,
+            <I2C as $i2c_trait>::Error: core::fmt::Debug,
         {
-            log!(
-                logger,
-                "[scan] Scanning I2C bus with control bytes: {:?}",
-                control_bytes
-            );
-            let found_addrs = internal_scan(i2c, control_bytes);
-            for addr in found_addrs {
-                log!(
-                    logger,
-                    "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})",
-                    addr,
-                    control_bytes
-                );
+            log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
+            match internal_scan(i2c, control_bytes) {
+                Ok(found_addrs) => {
+                    for addr in found_addrs {
+                        log!(logger, "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})", addr, control_bytes);
+                    }
+                }
+                Err(e) => log!(logger, "[error] I2C scan failed: {:?}", e),
             }
             log!(logger, "[info] I2C scan complete.");
         }
@@ -162,19 +166,29 @@ macro_rules! define_scanner {
             log!(logger, "[info] I2C scan with init sequence complete.");
         }
 
-        fn internal_scan<I2C>(i2c: &mut I2C, data: &[u8]) -> heapless::Vec<u8, 128>
+        fn internal_scan<I2C>(
+            i2c: &mut I2C,
+            data: &[u8],
+        ) -> Result<Vec<u8, 128>, <I2C as $i2c_trait>::Error>
         where
             I2C: $i2c_trait,
         {
-            let mut found_devices = heapless::Vec::new();
+            let mut found_devices = Vec::new();
             for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                if i2c.write(addr, data).is_ok() {
-                    // The push cannot fail because the address range (0x03..=0x77) has 117
-                    // possible addresses, and the vector's capacity is 128.
-                    found_devices.push(addr).unwrap();
+                match i2c.write(addr, data) {
+                    Ok(_) => {
+                        if found_devices.push(addr).is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        
+                        log!("[warn] write failed at 0x{:02X}: {:?}", addr, e);
+                        continue;
+                    }
                 }
             }
-            found_devices
+            Ok(found_devices)
         }
     };
 }
@@ -211,31 +225,16 @@ where
     L: Logger,
 {
     log!(logger, "Expected sequence: {:02X?}", expected);
-    log!(
-        logger,
-        "Commands with response: {:02X?}",
-        detected.as_slice()
-    );
+    log!(logger, "Commands with response: {:02X?}", detected.as_slice());
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
     let mut missing_cmds: Vec<u8, 64> = Vec::new();
-    for cmd in expected
-        .iter()
-        .copied()
-        .filter(|c| sorted.binary_search(c).is_err())
-    {
+    for cmd in expected.iter().copied().filter(|c| sorted.binary_search(c).is_err()) {
         if missing_cmds.push(cmd).is_err() {
-            log!(
-                logger,
-                "[warn] Missing commands buffer is full, list is truncated."
-            );
+            log!(logger, "[warn] Missing commands buffer is full, list is truncated.");
             break;
         }
     }
-    log!(
-        logger,
-        "Commands with no response: {:02X?}",
-        missing_cmds.as_slice()
-    );
+    log!(logger, "Commands with no response: {:02X?}", missing_cmds.as_slice());
 }
