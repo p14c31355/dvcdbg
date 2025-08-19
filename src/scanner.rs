@@ -14,7 +14,10 @@ const I2C_SCAN_ADDR_END: u8 = 0x77;
 
 pub trait I2cCompat {
     type Error: Debug;
+
     fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error>;
+    fn read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), Self::Error>;
+    fn write_read(&mut self, addr: u8, bytes: &[u8], buffer: &mut [u8]) -> Result<(), Self::Error>;
 }
 
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
