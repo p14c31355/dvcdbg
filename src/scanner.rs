@@ -6,8 +6,8 @@
 
 use crate::log;
 use crate::logger::Logger;
-use heapless::Vec;
 use core::fmt::Debug;
+use heapless::Vec;
 
 const I2C_SCAN_ADDR_START: u8 = 0x03;
 const I2C_SCAN_ADDR_END: u8 = 0x77;
