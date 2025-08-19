@@ -250,6 +250,9 @@ macro_rules! define_scanner {
                             }
                             #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
                             {
+                                // HACK: For ehal 0.2, we rely on string matching the Debug output to detect
+                                // NACKs, as there is no standardized error kind. This may not be reliable
+                                // for all HAL implementations.
                                 let s = $crate::recursive_log!("{:?}", e);
                                 s.contains("NACK") || s.contains("NoAcknowledge")
                             }

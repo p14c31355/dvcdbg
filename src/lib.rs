@@ -31,8 +31,9 @@ pub mod prelude;
 #[macro_export]
 macro_rules! recursive_log {
     ($($arg:tt)*) => {{
+        const RECURSIVE_LOG_BUF_SIZE: usize = 128;
         use core::fmt::Write;
-        let mut buf: heapless::String<128> = heapless::String::new();
+        let mut buf: heapless::String<RECURSIVE_LOG_BUF_SIZE> = heapless::String::new();
         let _ = write!(buf, $($arg)*);
         buf
     }};
