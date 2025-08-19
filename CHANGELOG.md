@@ -1,4 +1,42 @@
 ## [0.2.0] - 2025-08-19
+
+### Added
+
+- Implementing a macro that absorbs HAL generic types
+- Implementation of internal macros and interface macros
+- #41 PR review respond & Diversification of compatible models
+- #43 Boundary conditions are no longer required.
+- Support HAL trait path for examples revision
+- Support embedded-hal,io latest
+- Embedded-hal 1.0.0 support
+- Embedded-hal 1.0.0 support
+- Adapt_serial macro into add attribute branching
+- Adapt_serial macro into add attribute branching
+- Refactoring scanner.rs
+- Scanner.rs into add attribute branching
+- Refactoring scanner.rs
+- Refactoring scanner.rs
+- Refactoring macros.rs
+- Adapt_serial macro supports embedded-hal 1.0
+
+### Chores
+
+- *(release)* Update changelog and version to
+- HAL compatibility support
+- Support latest HAL trait path
+- Support latest HAL trait path?
+- Support latest HAL trait path?
+- Support latest HAL trait path?
+
+### Fix
+
+- The avr-hal Usart requires the UsartOps<H, RX, TX> trait boundary for generic type U, but the macro-generated UsartAdapter<U, RX, TX, CLOCK> does not have the boundary, resulting in a compile error.
+- Macro failed to resolve
+- Macro failed to resolve
+- Macro failed to resolve
+- #43 fix Type parameters are not expanded in the impl block.
+- The trait boundary of generic U in the macro does not match the MCU type.
+
 ## [0.1.2] - 2025-08-14
 
 ### Added
