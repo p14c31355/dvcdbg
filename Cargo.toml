@@ -1,6 +1,6 @@
 [package]
 name = "dvcdbg"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 authors = ["p14c31355 <thinkoverheat@gmail.com>"]
 description = "Lightweight logging and diagnostics toolkit for embedded (no_std, I2C scan, quick tests)"
