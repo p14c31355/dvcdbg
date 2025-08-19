@@ -7,13 +7,15 @@
 use crate::log;
 use crate::logger::Logger;
 use heapless::Vec;
+use core::fmt::Debug;
 
 const I2C_SCAN_ADDR_START: u8 = 0x03;
 const I2C_SCAN_ADDR_END: u8 = 0x77;
 
-// -----------------------------------------------------------------------------
-//  Version branching
-// -----------------------------------------------------------------------------
+pub trait I2cCompat {
+    type Error: Debug;
+    fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error>;
+}
 
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 impl<I2C> I2cCompat for I2C
@@ -102,13 +104,10 @@ macro_rules! define_scanner {
             L: $logger_trait,
         {
             log!(logger, "[scan] Scanning I2C bus...");
-            match internal_scan(i2c, logger, &[]) {
-                Ok(found_addrs) => {
-                    for addr in found_addrs {
-                        log!(logger, "[ok] Found device at 0x{:02X}", addr);
-                    }
+            if let Ok(found_addrs) = internal_scan(i2c, logger, &[]) {
+                for addr in found_addrs {
+                    log!(logger, "[ok] Found device at 0x{:02X}", addr);
                 }
-                Err(e) => log!(logger, "[error] I2C scan failed: {:?}", e),
             }
             log!(logger, "[info] I2C scan complete.");
         }
@@ -147,13 +146,10 @@ macro_rules! define_scanner {
             L: $logger_trait,
         {
             log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
-            match internal_scan(i2c, logger, control_bytes) {
-                Ok(found_addrs) => {
-                    for addr in found_addrs {
-                        log!(logger, "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})", addr, control_bytes);
-                    }
+            if let Ok(found_addrs) = internal_scan(i2c, logger, control_bytes) {
+                for addr in found_addrs {
+                    log!(logger, "[ok] Found device at 0x{:02X} (ctrl bytes: {:?})", addr, control_bytes);
                 }
-                Err(e) => log!(logger, "[error] I2C scan failed: {:?}", e),
             }
             log!(logger, "[info] I2C scan complete.");
         }
@@ -272,16 +268,6 @@ macro_rules! define_scanner {
             Ok(found_devices)
         }
     }
-}
-
-// -----------------------------------------------------------------------------
-//  Common utilities
-// -----------------------------------------------------------------------------
-use core::fmt::Debug;
-
-pub trait I2cCompat {
-    type Error: Debug;
-    fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error>;
 }
 
 fn log_differences<L>(logger: &mut L, expected: &[u8], detected: &Vec<u8, 64>)
