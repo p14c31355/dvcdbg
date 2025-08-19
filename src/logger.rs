@@ -29,14 +29,18 @@
 //! log!(logger, "Hello {}!", "world");
 //! ```
 
+#[cfg(feature = "logger")]
 #[macro_export]
 macro_rules! log {
     ($logger:expr, $($arg:tt)*) => {
-        #[cfg(feature = "logger")]
-        {
-            $logger.log_fmt(core::format_args!($($arg)*));
-        }
+        $logger.log_fmt(format_args!($($arg)*))
     };
+}
+
+#[cfg(not(feature = "logger"))]
+#[macro_export]
+macro_rules! log {
+    ($logger:expr, $($arg:tt)*) => {};
 }
 
 /// Common logging interface.
@@ -82,6 +86,15 @@ pub trait Logger {
     #[cfg(feature = "logger")]
     fn log_cmd(&mut self, cmd: u8) {
         self.log_fmt(format_args!("0x{cmd:02X}"));
+    }
+}
+
+impl<L> Logger for &mut L
+where
+    L: Logger,
+{
+    fn log_fmt(&mut self, args: core::fmt::Arguments) {
+        (**self).log_fmt(args);
     }
 }
 
