@@ -30,7 +30,7 @@
 /// struct MySerial;
 /// impl SerialCompat for MySerial {
 ///     type Error = ();
-    fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> { Ok(()) }
+///     fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> { Ok(()) }
 ///     fn flush(&mut self) -> Result<(), Self::Error> { Ok(()) }
 /// }
 ///
