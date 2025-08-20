@@ -81,9 +81,7 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-                for byte in buf {
-                    self.0.write(*byte).map_err($crate::compat::serial_compat::CompatErr)?;
-                }
+                self.0.write(buf).map_err($crate::compat::serial_compat::CompatErr)?;
                 Ok(buf.len())
             }
 
