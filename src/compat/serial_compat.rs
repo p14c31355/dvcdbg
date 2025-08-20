@@ -5,10 +5,11 @@ use nb;
 use embedded_io;
 
 /// common Serial Write trait
+/// The `write` method is now slice-oriented.
 pub trait SerialCompat {
-    type Error: Debug;
+    type Error: embedded_io::Error + Debug;
 
-    fn write(&mut self, byte: u8) -> Result<(), Self::Error>;
+    fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error>;
     fn flush(&mut self) -> Result<(), Self::Error>;
 }
 
@@ -29,7 +30,7 @@ where
     <S as embedded_io::ErrorType>::Error: Debug + Copy,
 {
     type Error = <S as embedded_io::ErrorType>::Error;
-    
+
     fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
         embedded_io::Write::write_all(self, buf)
     }
@@ -48,8 +49,11 @@ where
 {
     type Error = <S as embedded_hal_0_2::serial::Write<u8>>::Error;
 
-    fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
-        nb::block!(embedded_hal_0_2::serial::Write::write(self, byte))
+    fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        for byte in buf {
+            nb::block!(embedded_hal_0_2::serial::Write::write(self, *byte))?;
+        }
+        Ok(())
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
