@@ -103,52 +103,6 @@ macro_rules! adapt_serial {
     };
 }
 
-/// # adapt_i2c! macro
-///
-/// Wraps an I2C peripheral that implements `embedded-hal::blocking::i2c`
-/// (0.2) or `embedded-hal::i2c` (1.0) and provides `I2cCompat`.
-/// 
-/// Use the adapt_i2c! macro to implement your own HAL I2C → I2cCompat conversion.
-/// This will allow you to pass it to common processes such as scan_i2c in dvcdbg.
-///
-/// # Example
-/// ```ignore
-/// adapt_i2c!(MyI2cAdapter);
-/// ```
-#[macro_export]
-macro_rules! adapt_i2c {
-    ($adapter:ident) => {
-        pub struct $adapter<'a, T: 'a>(&'a mut T)
-        where
-            T: $crate::compat::i2c_compat::I2cCompat;
-
-        impl<'a, T> $crate::compat::i2c_compat::I2cCompat for $adapter<'a, T>
-        where
-            T: $crate::compat::i2c_compat::I2cCompat,
-        {
-            type Error = T::Error;
-
-            fn write_read(
-                &mut self,
-                addr: u8,
-                bytes: &[u8],
-                buffer: &mut [u8],
-            ) -> Result<(), Self::Error> {
-                self.0.write_read(addr, bytes, buffer)
-            }
-
-            fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> {
-                self.0.write(addr, bytes)
-            }
-
-            fn read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), Self::Error> {
-                self.0.read(addr, buffer)
-            }
-        }
-    };
-}
-
-
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
 ///
 /// # Example
