@@ -81,9 +81,9 @@ struct MySerial;
 
 // Example implementation of nb::serial::Write<u8> for embedded-hal 0.2
 impl nb::serial::Write<u8> for MySerial {
-type Error = Infallible;
-fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> { Ok(()) }
-fn flush(&mut self) -> nb::Result<(), Self::Error> { Ok(()) }
+    type Error = Infallible;
+    fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> { Ok(()) }
+    fn flush(&mut self) -> nb::Result<(), Self::Error> { Ok(()) }
 }
 
 // adapt_serial! Just wrap it in a macro
