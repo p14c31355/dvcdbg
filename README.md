@@ -37,15 +37,34 @@ cargo add dvcdbg --no-default-features --features "logger,macros,ehal_0_2"
 
 ---
 
-## 📚 Macros Included
+## Provided Macros
 
-* `adapt_serial!` → implement `core::fmt::Write` for any serial type
-* `write_hex!` → print byte slices in hexadecimal format
-* `measure_cycles!` → measure execution cycles or timestamps
-* `loop_with_delay!` → loop with fixed delay for testing
-* `assert_log!` → log assertions without panicking
-* `scan_i2c!` → scan I²C bus for connected devices
-* `quick_diag!` → all-in-one diagnostic workflow
+- **Logging & Formatting**
+  - `write_hex!(dst, &buf)`  
+    Write a byte slice in **hexadecimal** (`12 AB FF `).
+  - `write_bin!(dst, &buf)`  
+    Write a byte slice in **binary** (`10101010 11110000 `).
+  - `assert_log!(cond, logger, "msg")`  
+    Log an assertion failure without panicking.
+
+- **Diagnostics**
+  - `scan_i2c!(i2c, logger)`  
+    Scan I²C bus and log found devices.
+  - `quick_diag!(logger, i2c, timer [, { expr }])`  
+    Run a quick diagnostic workflow: serial check, I²C scan, optional cycle measurement.
+
+- **Timing & Control**
+  - `measure_cycles!(expr, timer)`  
+    Measure execution cycles (or timestamps) for an expression.
+  - `loop_with_delay!(delay, ms, { body })`  
+    Run a loop with a fixed delay between iterations.
+
+- **Adapters**
+  - `adapt_serial!(AdapterName)`  
+    Wrap a custom serial-like type to implement:
+    - [`core::fmt::Write`]  
+    - [`embedded_io::Write`]  
+    - [`nb::serial::Write<u8>`]  
 
 ---
 
