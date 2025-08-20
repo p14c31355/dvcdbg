@@ -28,7 +28,7 @@
 ## 📦 Quickstart
 
 ```sh
-cargo add dvcdbg --version "0.2.0" --no-default-features --features "logger,macros,ehal_0_2"
+cargo add dvcdbg --no-default-features --features "logger,macros,ehal_0_2"
 ```
 
 ---
