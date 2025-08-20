@@ -69,7 +69,7 @@ macro_rules! adapt_i2c {
     ($name:ident : $adapter:ident) => {
         pub struct $adapter<'a>(&'a mut $name);
 
-        impl<'a> $crate::scanner::I2cCompat for $adapter<'a> {
+        impl<'a> $self::I2cCompat for $adapter<'a> {
             fn write_read(
                 &mut self,
                 addr: u8,

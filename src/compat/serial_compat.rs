@@ -1,3 +1,4 @@
+//! serial_compat.rs
 use core::fmt::Debug;
 use nb;
 
