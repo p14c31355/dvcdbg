@@ -21,7 +21,7 @@
 - ✅ Feature flags allow selective compilation:
   - `logger` → logging utilities
   - `scanner` → I2C scanning utilities
-  - `macros` → helper macros (`impl_fmt_write_for_serial!`, `quick_diag!`, etc.)
+  - `macros` → helper macros (`adapt_serial!`, `quick_diag!`, etc.)
 
 ---
 
@@ -33,46 +33,13 @@ cargo add dvcdbg --features "macros"
 
 ---
 
-## 📄 Usage Example (Arduino)
-
-- [Detailed settings](docs/USAGE.md)
-
-```rust
-#![no_std]
-#![no_main]
-
-use arduino_hal::prelude::*;
-use panic_halt as _;
-use core::fmt::Write;
-
-use dvcdbg::prelude::*;
-
-adapt_serial!(UnoSerial);
-
-#[arduino_hal::entry]
-fn main() -> ! {
-
-    let dp = arduino_hal::Peripherals::take().unwrap();
-    let pins = arduino_hal::pins!(dp);
-
-    let serial = arduino_hal::default_serial!(dp, pins, 57600);
-
-    let mut serial_logger = UnoSerial(serial);
-
-    writeln!(serial_logger, "Hello from dvcdbg on Arduino Uno!");
-
-    loop {
-        // your code
-    }
-}
-
-```
+## [Detailed settings](docs/USAGE.md)
 
 ---
 
 ## 📚 Macros Included
 
-* `impl_fmt_write_for_serial!` → implement `core::fmt::Write` for any serial type
+* `adapt_serial!` → implement `core::fmt::Write` for any serial type
 * `write_hex!` → print byte slices in hexadecimal format
 * `measure_cycles!` → measure execution cycles or timestamps
 * `loop_with_delay!` → loop with fixed delay for testing
