@@ -20,7 +20,7 @@ jobs:
 
       # separate clippy step
       - name: Run cargo clippy
-        run: cargo clippy --all-features -- -D warnings
+        run: cargo +nightly clippy --all-features -- -D warnings
 
       # auto test step
       - name: Run cargo fix and tests
@@ -28,7 +28,7 @@ jobs:
           cargo fix --allow-dirty --allow-staged
           if [[ -n $(git status --porcelain) ]]; then
             echo "::notice::Automatic fixes applied. Running tests..."
-            if cargo test --all-features; then
+            if cargo +nightly test --all-features; then
               git config user.name "github-actions[bot]"
               git config user.email "github-actions[bot]@users.noreply.github.com"
               git add .
