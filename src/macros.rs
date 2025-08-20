@@ -12,10 +12,8 @@
 /// # Purpose
 ///
 /// The `adapt_serial!` macro generates a newtype wrapper around a type `T` that implements
-/// [`SerialCompat`]. This wrapper allows you to:
-/// 
-/// 1. Access a `CoreWriteAdapter` via `as_core_write()` for integration with `core::fmt::Write`.
-/// 2. Directly use the wrapper as a `core::fmt::Write` object for formatted output.
+/// [`SerialCompat`]. This wrapper can be used directly as a `core::fmt::Write` object
+/// for formatted output.
 ///
 /// This is useful for logging or printing to serial peripherals in a `no_std` context
 /// without depending directly on HAL-specific traits.
