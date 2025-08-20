@@ -1,8 +1,8 @@
 //! serial_compat.rs
 use core::fmt::Debug;
+use embedded_io;
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 use nb;
-use embedded_io;
 
 /// common Serial Write trait
 /// The `write` method is now slice-oriented.
