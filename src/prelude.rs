@@ -19,3 +19,5 @@ pub use crate::{
 
 #[cfg(feature = "scanner")]
 pub use crate::scanner::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
+
+pub use crate::compat::*;

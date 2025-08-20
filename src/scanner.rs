@@ -6,49 +6,17 @@
 
 use crate::log;
 use crate::logger::Logger;
-use core::fmt::Debug;
 use heapless::Vec;
 
-const I2C_SCAN_ADDR_START: u8 = 0x03;
-const I2C_SCAN_ADDR_END: u8 = 0x77;
-
-pub trait I2cCompat {
-    type Error: Debug;
-    fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error>;
-}
-
-#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
-impl<I2C> I2cCompat for I2C
-where
-    I2C: embedded_hal_0_2::blocking::i2c::Write,
-    <I2C as embedded_hal_0_2::blocking::i2c::Write>::Error: Debug + Copy,
-{
-    type Error = <I2C as embedded_hal_0_2::blocking::i2c::Write>::Error;
-
-    fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> {
-        embedded_hal_0_2::blocking::i2c::Write::write(self, addr, bytes)
-    }
-}
-
-#[cfg(feature = "ehal_1_0")]
-impl<I2C> I2cCompat for I2C
-where
-    I2C: embedded_hal_1::i2c::I2c,
-    I2C::Error: Into<embedded_hal_1::i2c::ErrorKind> + Debug + Copy,
-{
-    type Error = I2C::Error;
-
-    fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> {
-        embedded_hal_1::i2c::I2c::write(self, addr, bytes)
-    }
-}
+pub const I2C_SCAN_ADDR_START: u8 = 0x03;
+pub const I2C_SCAN_ADDR_END: u8 = 0x77;
 
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 pub mod ehal_0_2 {
     use crate::define_scanner;
     use crate::log;
     define_scanner!(
-        crate::scanner::I2cCompat,
+        crate::compat::I2cCompat,
         crate::logger::Logger,
         embedded_hal_0_2::blocking::i2c::Error
     );
@@ -59,7 +27,7 @@ pub mod ehal_1_0 {
     use crate::define_scanner;
     use crate::log;
     define_scanner!(
-        crate::scanner::I2cCompat,
+        crate::compat::I2cCompat,
         crate::logger::Logger,
         embedded_hal_1::i2c::Error
     );
