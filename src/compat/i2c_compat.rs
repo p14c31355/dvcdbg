@@ -16,7 +16,7 @@ where
     I2C: embedded_hal_0_2::blocking::i2c::Write<Error = E>
         + embedded_hal_0_2::blocking::i2c::Read<Error = E>
         + embedded_hal_0_2::blocking::i2c::WriteRead<Error = E>,
-    E: Debug + Copy,
+    E: Debug,
 {
     type Error = E;
 
