@@ -6,7 +6,7 @@ where
     W: embedded_io::Write,
 {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        // `embedded_io::Write::write_all` に委譲
+        // Delegate to `embedded_io::Write::write_all`
         self.0.write_all(s.as_bytes()).map_err(|_| core::fmt::Error)
     }
 }
