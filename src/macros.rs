@@ -43,10 +43,6 @@
 /// // Use core::fmt macros
 /// use core::fmt::Write;
 /// writeln!(wrapper, "Hello, world!").unwrap();
-///
-/// // Or get a CoreWriteAdapter directly
-/// let mut adapter: CoreWriteAdapter<_> = wrapper.as_core_write();
-/// writeln!(adapter, "Direct CoreWriteAdapter usage").unwrap();
 /// ```
 ///
 /// # Notes
@@ -58,16 +54,6 @@
 macro_rules! adapt_serial {
     ($name:ident) => {
         pub struct $name<T>(pub T);
-
-        impl<T> $name<T>
-        where
-            T: $crate::compat::serial_compat::SerialCompat,
-        {
-            /// Return a `CoreWriteAdapter` that implements `core::fmt::Write`.
-            pub fn as_core_write(&mut self) -> $crate::compat::adapt::CoreWriteAdapter<&mut Self> {
-                $crate::compat::adapt::CoreWriteAdapter(self)
-            }
-        }
 
         impl<T> embedded_io::ErrorType for $name<T>
         where
