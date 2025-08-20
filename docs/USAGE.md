@@ -44,7 +44,7 @@ The `adapt_serial!` macro creates a bridge between a serial peripheral and the `
 use panic_halt as _;
 use arduino_hal::prelude::*;
 use core::fmt::Write;
-
+use embedded_io::Write;
 use dvcdbg::prelude::*;
 adapt_serial!(UnoSerial);
 
