@@ -38,36 +38,32 @@ cargo add dvcdbg --features "macros"
 - [Detailed settings](docs/USAGE.md)
 
 ```rust
-use arduino_hal::default_serial;
+#![no_std]
+#![no_main]
+
+use arduino_hal::prelude::*;
+use panic_halt as _;
+use core::fmt::Write;
+
 use dvcdbg::prelude::*;
 
-fn main() {
+adapt_serial!(UnoSerial);
+
+#[arduino_hal::entry]
+fn main() -> ! {
+
     let dp = arduino_hal::Peripherals::take().unwrap();
     let pins = arduino_hal::pins!(dp);
 
-    let mut serial = default_serial!(dp, pins, 57600);
-    let mut logger = SerialLogger::new(&mut serial);
+    let serial = arduino_hal::default_serial!(dp, pins, 57600);
 
-    #[cfg(feature = "macros")]
-    {
-        // Initialization I2C instance and timer
-        let i2c = arduino_hal::I2c::new(
-            dp.TWI,
-            pins.a4.into_pull_up_input(),
-            pins.a5.into_pull_up_input(),
-            100_000,
-        );
-        let timer = arduino_hal::hal::timer::Timer1::new(dp.TC1, arduino_hal::hal::clock::Clock::new());
+    let mut serial_logger = UnoSerial(serial);
 
-        // Quick diagnostic: scans I2C bus and measures cycles for test code
-        quick_diag!(logger, i2c, timer, {
-            your_test_code();
-        });
+    writeln!(serial_logger, "Hello from dvcdbg on Arduino Uno!");
+
+    loop {
+        // your code
     }
-}
-
-fn your_test_code() {
-    // 
 }
 
 ```
