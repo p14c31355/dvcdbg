@@ -38,7 +38,6 @@ where
 impl<I2C> I2cCompat for I2C
 where
     I2C: embedded_hal_1::i2c::I2c,
-    I2C::Error: Into<embedded_hal_1::i2c::ErrorKind> + Debug + Copy,
 {
     type Error = I2C::Error;
 
