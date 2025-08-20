@@ -20,7 +20,14 @@ impl<E: Debug> embedded_io::Error for CompatErr<E> {
     }
 }
 
-impl<S: SerialCompat> embedded_io::Write for S {
+// ========== ehal 1.0 ==========
+#[cfg(feature = "ehal_1_0")]
+impl<S> SerialCompat for S
+where
+    S: embedded_io::Write<u8>,
+    <S as embedded_io::Write<u8>>::Error: Debug + Copy,
+{
+    type Error = <S as embedded_io::Write<u8>>::Error;
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
         for byte in buf {
             SerialCompat::write(self, *byte)?;
@@ -48,23 +55,5 @@ where
 
     fn flush(&mut self) -> Result<(), Self::Error> {
         nb::block!(embedded_hal_0_2::serial::Write::flush(self))
-    }
-}
-
-// ========== ehal 1.0 ==========
-#[cfg(feature = "ehal_1_0")]
-impl<S> SerialCompat for S
-where
-    S: embedded_hal_1::serial::nb::Write<u8>,
-    <S as embedded_hal_1::serial::nb::Write<u8>>::Error: Debug + Copy,
-{
-    type Error = <S as embedded_hal_1::serial::nb::Write<u8>>::Error;
-
-    fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
-        nb::block!(embedded_hal_1::serial::nb::Write::write(self, byte))
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        nb::block!(embedded_hal_1::serial::nb::Write::flush(self))
     }
 }
