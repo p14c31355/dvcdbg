@@ -23,6 +23,11 @@ embedded-hal-0_2 = { package = "embedded-hal", version = "0.2.7", optional = tru
 embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", optional = true }
 nb = { version = "1.1", optional = true }
 
+[dependencies.arduino-hal]
+git = "https://github.com/rahix/avr-hal"
+features = ["arduino-uno"]
+optional = true
+
 [features]
 default = ["logger", "scanner", "macros", "ehal_1_0"]
 
@@ -33,3 +38,5 @@ macros = []
 # HAL switching feature
 ehal_0_2 = ["embedded-hal-0_2"]
 ehal_1_0 = ["embedded-hal-1", "nb"]
+
+arduino = ["arduino-hal"]
