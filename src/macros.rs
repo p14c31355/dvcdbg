@@ -81,9 +81,7 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-                for &byte in buf {
-                    self.0.write(byte).map_err($crate::compat::serial_compat::CompatErr)?;
-                }
+                self.0.write(buf).map_err($crate::compat::serial_compat::CompatErr)?;
                 Ok(buf.len())
             }
 
@@ -115,7 +113,7 @@ macro_rules! adapt_serial {
 ///
 /// # Example
 /// ```ignore
-/// adapt_i2c!(avr_i2c: I2cAdapter);
+/// adapt_i2c!(MyI2cAdapter);
 /// ```
 #[macro_export]
 macro_rules! adapt_i2c {
