@@ -59,6 +59,7 @@ fn main() -> ! {
     let mut logger = UnoSerial(serial);
 
     writeln!(logger, "Hello from dvcdbg on Arduino Uno!").unwrap();
+    logger.write_all(&[0xDE, 0xAD, 0xBE, 0xEF]).unwrap();
 
     loop {}
 }
