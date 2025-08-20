@@ -47,7 +47,7 @@ where
     S: embedded_hal_0_2::serial::Write<u8>,
     <S as embedded_hal_0_2::serial::Write<u8>>::Error: Debug + Copy,
 {
-    type Error = <S as embedded_hal_0_2::serial::Write<u8>>::Error;
+    type Error = CompatErr<<S as embedded_hal_0_2::serial::Write<u8>>::Error>;
 
     fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
         for byte in buf {
@@ -58,5 +58,6 @@ where
 
     fn flush(&mut self) -> Result<(), Self::Error> {
         nb::block!(embedded_hal_0_2::serial::Write::flush(self)).map_err(CompatErr)?;
+        Ok(())
     }
 }
