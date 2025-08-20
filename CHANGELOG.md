@@ -1,4 +1,23 @@
 ## [0.2.1] - 2025-08-20
+
+### Added
+
+- Implement WriteAdapter
+- Delete unnecessary feature
+- Bridge to Arduino
+
+### Chores
+
+- *(release)* Update changelog and version to
+
+### Docs
+
+- Edit README.md: Usage Example
+- Edit README.md: Integrated USAGE.md
+- Edit README.md: Edit Quickstart
+- Edit USAGE.md
+- Edit README.md: Edit Quickstart
+
 ## [0.2.0] - 2025-08-19
 
 ### Added
