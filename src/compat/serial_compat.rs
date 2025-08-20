@@ -30,8 +30,8 @@ where
 {
     type Error = <S as embedded_io::ErrorType>::Error;
     
-    fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
-        embedded_io::Write::write_all(self, &[byte])
+    fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        embedded_io::Write::write_all(self, buf)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
