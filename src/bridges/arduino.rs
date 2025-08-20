@@ -3,6 +3,6 @@
 #![cfg(feature = "arduino")]
 
 use arduino_hal::Usart;
-use dvcdbg::prelude::*;
+use crate::prelude::*;
 
 adapt_serial!(UnoSerial: Usart);
