@@ -31,5 +31,5 @@ scanner = []
 macros = []
 
 # HAL switching feature
-ehal_0_2 = ["embedded-hal-0_2"]
+ehal_0_2 = ["embedded-hal-0_2", "nb"]
 ehal_1_0 = ["embedded-hal-1"]
