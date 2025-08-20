@@ -28,7 +28,7 @@
 ## 📦 Quickstart
 
 ```sh
-cargo add dvcdbg --features "ehal_0_2"
+cargo add dvcdbg --git https://github.com/p14c31355/dvcdbg.git --no-default-features --features "logger,macros,ehal_0_2"
 ```
 
 ---
