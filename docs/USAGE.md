@@ -79,8 +79,8 @@ use embedded_io::Write;
 // Any Serial-Compatible Type
 struct MySerial;
 
-// Example implementation of nb::serial::Write<u8> for embedded-hal 0.2
-impl nb::serial::Write<u8> for MySerial {
+// Example implementation of `embedded_hal_0_2::serial::Write`
+impl embedded_hal_0_2::serial::Write<u8> for MySerial {
     type Error = Infallible;
     fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> { Ok(()) }
     fn flush(&mut self) -> nb::Result<(), Self::Error> { Ok(()) }
