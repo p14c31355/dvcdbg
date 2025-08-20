@@ -67,24 +67,31 @@ where
 #[macro_export]
 macro_rules! adapt_i2c {
     ($name:ident : $adapter:ident) => {
-        pub struct $adapter<'a>(&'a mut $name);
+        pub struct $adapter<'a, T: 'a>(&'a mut T)
+        where
+            T: $crate::compat::i2c_compat::I2cCompat;
 
-        impl<'a> $self::I2cCompat for $adapter<'a> {
+        impl<'a, T> $crate::compat::i2c_compat::I2cCompat for $adapter<'a, T>
+        where
+            T: $crate::compat::i2c_compat::I2cCompat,
+        {
+            type Error = T::Error;
+
             fn write_read(
                 &mut self,
                 addr: u8,
                 bytes: &[u8],
                 buffer: &mut [u8],
-            ) -> Result<(), ()> {
-                self.0.write_read(addr, bytes, buffer).map_err(|_| ())
+            ) -> Result<(), Self::Error> {
+                self.0.write_read(addr, bytes, buffer)
             }
 
-            fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), ()> {
-                self.0.write(addr, bytes).map_err(|_| ())
+            fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> {
+                self.0.write(addr, bytes)
             }
 
-            fn read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), ()> {
-                self.0.read(addr, buffer).map_err(|_| ())
+            fn read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), Self::Error> {
+                self.0.read(addr, buffer)
             }
         }
     };
