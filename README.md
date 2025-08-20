@@ -71,11 +71,6 @@ fn your_test_code() {
 }
 
 ```
----
-
-## Architecture
-
-![](docs/assets/architecture20250815.png)
 
 ---
 
