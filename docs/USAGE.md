@@ -58,7 +58,7 @@ fn main() -> ! {
 
     let mut logger = UnoSerial(serial);
 
-    writeln!(logger, "Hello from dvcdbg on Arduino Uno!").ok();
+    writeln!(logger, "Hello from dvcdbg on Arduino Uno!").unwrap();
 
     loop {}
 }
