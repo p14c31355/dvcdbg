@@ -51,7 +51,7 @@ where
 
     fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
         for byte in buf {
-            nb::block!(self.write(*byte))?;
+            nb::block!(embedded_hal_0_2::serial::Write::write(self, *byte))?;
         }
         Ok(())
     }
