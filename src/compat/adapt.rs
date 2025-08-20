@@ -18,8 +18,3 @@ where
     }
 }
 
-pub trait AdaptWrite {
-    type Error;
-    fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error>;
-    fn flush(&mut self) -> Result<(), Self::Error>;
-}
