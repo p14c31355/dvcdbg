@@ -11,14 +11,14 @@ pub trait I2cCompat {
 
 // ========== ehal 0.2.x ==========
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
-impl<I2C> I2cCompat for I2C
+impl<I2C, E> I2cCompat for I2C
 where
-    I2C: embedded_hal_0_2::blocking::i2c::Write + embedded_hal_0_2::blocking::i2c::Read + embedded_hal_0_2::blocking::i2c::WriteRead,
-    <I2C as embedded_hal_0_2::blocking::i2c::Write>::Error: Debug + Copy,
-    <I2C as embedded_hal_0_2::blocking::i2c::Read>::Error: Debug + Copy,
-    <I2C as embedded_hal_0_2::blocking::i2c::WriteRead>::Error: Debug + Copy,
+    I2C: embedded_hal_0_2::blocking::i2c::Write<Error = E>
+        + embedded_hal_0_2::blocking::i2c::Read<Error = E>
+        + embedded_hal_0_2::blocking::i2c::WriteRead<Error = E>,
+    E: Debug + Copy,
 {
-    type Error = <I2C as embedded_hal_0_2::blocking::i2c::Write>::Error; 
+    type Error = E;
 
     fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> {
         embedded_hal_0_2::blocking::i2c::Write::write(self, addr, bytes)
