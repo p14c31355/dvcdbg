@@ -21,68 +21,50 @@
 - ✅ Feature flags allow selective compilation:
   - `logger` → logging utilities
   - `scanner` → I2C scanning utilities
-  - `macros` → helper macros (`impl_fmt_write_for_serial!`, `quick_diag!`, etc.)
+  - `macros` → helper macros (`adapt_serial!`, `quick_diag!`, etc.)
 
 ---
 
 ## 📦 Quickstart
 
 ```sh
-cargo add dvcdbg --features "macros"
+cargo add dvcdbg --no-default-features --features "logger,macros,ehal_0_2"
 ```
 
 ---
 
-## 📄 Usage Example (Arduino)
-
-- [Detailed settings](docs/USAGE.md)
-
-```rust
-use arduino_hal::default_serial;
-use dvcdbg::prelude::*;
-
-fn main() {
-    let dp = arduino_hal::Peripherals::take().unwrap();
-    let pins = arduino_hal::pins!(dp);
-
-    let mut serial = default_serial!(dp, pins, 57600);
-    let mut logger = SerialLogger::new(&mut serial);
-
-    #[cfg(feature = "macros")]
-    {
-        // Initialization I2C instance and timer
-        let i2c = arduino_hal::I2c::new(
-            dp.TWI,
-            pins.a4.into_pull_up_input(),
-            pins.a5.into_pull_up_input(),
-            100_000,
-        );
-        let timer = arduino_hal::hal::timer::Timer1::new(dp.TC1, arduino_hal::hal::clock::Clock::new());
-
-        // Quick diagnostic: scans I2C bus and measures cycles for test code
-        quick_diag!(logger, i2c, timer, {
-            your_test_code();
-        });
-    }
-}
-
-fn your_test_code() {
-    // 
-}
-
-```
+## [Detailed settings](docs/USAGE.md)
 
 ---
 
-## 📚 Macros Included
+## Provided Macros
 
-* `impl_fmt_write_for_serial!` → implement `core::fmt::Write` for any serial type
-* `write_hex!` → print byte slices in hexadecimal format
-* `measure_cycles!` → measure execution cycles or timestamps
-* `loop_with_delay!` → loop with fixed delay for testing
-* `assert_log!` → log assertions without panicking
-* `scan_i2c!` → scan I²C bus for connected devices
-* `quick_diag!` → all-in-one diagnostic workflow
+- **Logging & Formatting**
+  - `write_hex!(dst, &buf)`  
+    Write a byte slice in **hexadecimal** (`12 AB FF `).
+  - `write_bin!(dst, &buf)`  
+    Write a byte slice in **binary** (`10101010 11110000 `).
+  - `assert_log!(cond, logger, "msg")`  
+    Log an assertion failure without panicking.
+
+- **Diagnostics**
+  - `scan_i2c!(i2c, logger)`  
+    Scan I²C bus and log found devices.
+  - `quick_diag!(logger, i2c, timer [, { expr }])`  
+    Run a quick diagnostic workflow: serial check, I²C scan, optional cycle measurement.
+
+- **Timing & Control**
+  - `measure_cycles!(expr, timer)`  
+    Measure execution cycles (or timestamps) for an expression.
+  - `loop_with_delay!(delay, ms, { body })`  
+    Run a loop with a fixed delay between iterations.
+
+- **Adapters**
+  - `adapt_serial!(AdapterName)`  
+    Wrap a custom serial-like type to implement:
+    - [`core::fmt::Write`]  
+    - [`embedded_io::Write`]  
+    - [`nb::serial::Write<u8>`]  
 
 ---
 
