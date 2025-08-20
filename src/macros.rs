@@ -58,82 +58,76 @@
 /// Serial adapter wrapper macro compatible with e-hal 0.2.x and 1.0
 #[macro_export]
 macro_rules! adapt_serial {
-    ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
-        /// Adapter struct
+    ($name:ident) => {
         pub struct $name<T>(pub T);
 
-        // ========================
-        // embedded-hal 1.0 support
-        // ========================
-        #[cfg(feature = "ehal_1_0")]
-        impl<T> embedded_io::Write for $name<T>
+        impl<T> $name<T>
         where
-            T: embedded_hal::serial::nb::Write<u8>,
+            T: $crate::compat::serial_compat::SerialCompat,
         {
-            type Error = $crate::AdaptError<T::Error>;
-
-            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-                for &b in buf {
-                    nb::block!(self.0.$write_fn(b)).map_err($crate::AdaptError::Other)?;
-                }
-                Ok(buf.len())
-            }
-
-            fn flush(&mut self) -> Result<(), Self::Error> {
-                $(
-                    nb::block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;
-                )?
-                Ok(())
+            /// Return a `CoreWriteAdapter` that implements `core::fmt::Write`.
+            pub fn as_core_write(&mut self) -> $crate::compat::adapt::CoreWriteAdapter<&mut T> {
+                $crate::compat::adapt::CoreWriteAdapter(&mut self.0)
             }
         }
 
-        #[cfg(feature = "ehal_1_0")]
         impl<T> core::fmt::Write for $name<T>
         where
-            T: embedded_hal::serial::nb::Write<u8>,
+            T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                <Self as embedded_io::Write>::write_all(self, s.as_bytes())
-                    .map_err(|_| core::fmt::Error)
-            }
-        }
-
-        // ========================
-        // embedded-hal 0.2.x support
-        // ========================
-        #[cfg(feature = "ehal_0_2")]
-        impl<T> embedded_io::Write for $name<T>
-        where
-            T: embedded_hal::serial::Write<u8>,
-        {
-            type Error = $crate::AdaptError<T::Error>;
-
-            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-                for &b in buf {
-                    nb::block!(self.0.$write_fn(b)).map_err($crate::AdaptError::Other)?;
-                }
-                Ok(buf.len())
-            }
-            fn flush(&mut self) -> Result<(), Self::Error> {
-                $(
-                    nb::block!(self.0.$flush_fn()).map_err($crate::AdaptError::Other)?;
-                )?
-                Ok(())
-            }
-        }
-
-        #[cfg(feature = "ehal_0_2")]
-        impl<T> core::fmt::Write for $name<T>
-        where
-            T: embedded_hal::serial::Write<u8>,
-        {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                <Self as embedded_io::Write>::write_all(self, s.as_bytes())
-                    .map_err(|_| core::fmt::Error)
+                let mut adapter = $crate::compat::adapt::CoreWriteAdapter(&mut self.0);
+                adapter.write_str(s)
             }
         }
     };
 }
+
+/// # adapt_i2c! macro
+///
+/// Wraps an I2C peripheral that implements `embedded-hal::blocking::i2c`
+/// (0.2) or `embedded-hal::i2c` (1.0) and provides `I2cCompat`.
+/// 
+/// Use the adapt_i2c! macro to implement your own HAL I2C → I2cCompat conversion.
+/// This will allow you to pass it to common processes such as scan_i2c in dvcdbg.
+///
+/// # Example
+/// ```ignore
+/// adapt_i2c!(avr_i2c: I2cAdapter);
+/// ```
+#[macro_export]
+macro_rules! adapt_i2c {
+    ($adapter:ident) => {
+        pub struct $adapter<'a, T: 'a>(&'a mut T)
+        where
+            T: $crate::compat::i2c_compat::I2cCompat;
+
+        impl<'a, T> $crate::compat::i2c_compat::I2cCompat for $adapter<'a, T>
+        where
+            T: $crate::compat::i2c_compat::I2cCompat,
+        {
+            type Error = T::Error;
+
+            fn write_read(
+                &mut self,
+                addr: u8,
+                bytes: &[u8],
+                buffer: &mut [u8],
+            ) -> Result<(), Self::Error> {
+                self.0.write_read(addr, bytes, buffer)
+            }
+
+            fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> {
+                self.0.write(addr, bytes)
+            }
+
+            fn read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), Self::Error> {
+                self.0.read(addr, buffer)
+            }
+        }
+    };
+}
+
 
 /// Writes a byte slice in hexadecimal format to a `fmt::Write` target.
 ///

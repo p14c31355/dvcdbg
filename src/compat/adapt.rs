@@ -19,4 +19,3 @@ where
         f.debug_struct("CoreWriteAdapter").finish()
     }
 }
-
