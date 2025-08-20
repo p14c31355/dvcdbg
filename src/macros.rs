@@ -7,55 +7,53 @@
 //! - Debugging assistance (assert, delayed loop, cycle measurement)
 //!
 
-/// Macro to adapt a serial peripheral into a fmt::Write + embedded_io::Write bridge.
+/// Wrap a type implementing `SerialCompat` and provide a `core::fmt::Write` adapter.
 ///
-/// # Arguments
-/// - `$name` → Name of the generated adapter struct
-/// - `nb_write` → Serial write method name required by HAL
-/// - `flush` (optional) → Method for flushing non-blocking serial
+/// # Purpose
+///
+/// The `adapt_serial!` macro generates a newtype wrapper around a type `T` that implements
+/// [`SerialCompat`]. This wrapper allows you to:
+/// 
+/// 1. Access a `CoreWriteAdapter` via `as_core_write()` for integration with `core::fmt::Write`.
+/// 2. Directly use the wrapper as a `core::fmt::Write` object for formatted output.
+///
+/// This is useful for logging or printing to serial peripherals in a `no_std` context
+/// without depending directly on HAL-specific traits.
 ///
 /// # Example
 ///
-/// ## Arduino HAL Serial
 /// ```ignore
-/// use arduino_hal::prelude::*;
-/// use dvcdbg::adapt_serial;
-/// use core::fmt::Write;
-/// use embedded_io::Write;
-///
-/// adapt_serial!(UsartAdapter, nb_write = write, flush = flush);
-///
-/// let dp = arduino_hal::Peripherals::take().unwrap();
-/// let pins = arduino_hal::pins!(dp);
-/// let serial = arduino_hal::default_serial!(dp, pins, 57600);
-/// let mut dbg_uart = UsartAdapter(serial);
-///
-/// writeln!(dbg_uart, "Hello from embedded-io bridge!").unwrap();
-/// dbg_uart.write_all(&[0x01, 0x02, 0x03]).unwrap();
-/// ```
-///
-/// ## Custom serial-like type
-/// ```ignore
-/// use dvcdbg::adapt_serial;
-/// use core::fmt::Write;
-/// use core::convert::Infallible;
-/// use nb;
-/// use embedded_io::Write;
-///
+/// use dvcdbg::compat::serial_compat::SerialCompat;
+/// use dvcdbg::compat::adapt::CoreWriteAdapter;
+/// 
+/// // Suppose `MySerial` implements `SerialCompat`
 /// struct MySerial;
-/// impl nb::serial::Write<u8> for MySerial {
-///     type Error = Infallible; // Error type is not fixed to Infallible
-///     fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> { Ok(()) }
-///     fn flush(&mut self) -> nb::Result<(), Self::Error> { Ok(()) }
+/// impl SerialCompat for MySerial {
+///     type Error = ();
+///     fn write(&mut self, byte: u8) -> Result<(), Self::Error> { Ok(()) }
+///     fn flush(&mut self) -> Result<(), Self::Error> { Ok(()) }
 /// }
 ///
-/// adapt_serial!(MyAdapter, nb_write = write, flush = flush);
-/// let mut uart = MyAdapter(MySerial);
-/// writeln!(uart, "Hello via custom serial").unwrap();
-/// uart.write_all(&[0xAA, 0xBB]).unwrap();
+/// // Generate a wrapper type
+/// adapt_serial!(MySerialAdapter);
+///
+/// let mut serial = MySerial;
+/// let mut wrapper = MySerialAdapter(serial);
+///
+/// // Use core::fmt macros
+/// use core::fmt::Write;
+/// writeln!(wrapper, "Hello, world!").unwrap();
+///
+/// // Or get a CoreWriteAdapter directly
+/// let mut adapter: CoreWriteAdapter<_> = wrapper.as_core_write();
+/// writeln!(adapter, "Direct CoreWriteAdapter usage").unwrap();
 /// ```
-/// Supports both embedded-hal 0.2.x (nb::Write<u8>) and 1.0.x (embedded_hal::serial::nb::Write<u8>).
-/// Serial adapter wrapper macro compatible with e-hal 0.2.x and 1.0
+///
+/// # Notes
+///
+/// - The generated wrapper struct is generic over `T` and requires `T: SerialCompat`.
+/// - This macro is `#[macro_export]` so it can be used across crates.
+/// - Provides zero-cost abstraction over `SerialCompat` for `core::fmt::Write` output.
 #[macro_export]
 macro_rules! adapt_serial {
     ($name:ident) => {
