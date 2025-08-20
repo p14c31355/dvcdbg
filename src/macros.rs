@@ -64,8 +64,31 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             /// Return a `CoreWriteAdapter` that implements `core::fmt::Write`.
-            pub fn as_core_write(&mut self) -> $crate::compat::adapt::CoreWriteAdapter<&mut T> {
-                $crate::compat::adapt::CoreWriteAdapter(&mut self.0)
+            pub fn as_core_write(&mut self) -> $crate::compat::adapt::CoreWriteAdapter<&mut Self> {
+                $crate::compat::adapt::CoreWriteAdapter(self)
+            }
+        }
+
+        impl<T> embedded_io::ErrorType for $name<T>
+        where
+            T: $crate::compat::serial_compat::SerialCompat,
+        {
+            type Error = $crate::compat::serial_compat::CompatErr<T::Error>;
+        }
+
+        impl<T> embedded_io::Write for $name<T>
+        where
+            T: $crate::compat::serial_compat::SerialCompat,
+        {
+            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+                for byte in buf {
+                    self.0.write(*byte).map_err($crate::compat::serial_compat::CompatErr)?;
+                }
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> Result<(), Self::Error> {
+                self.0.flush().map_err($crate::compat::serial_compat::CompatErr)
             }
         }
 
@@ -74,8 +97,9 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                let mut adapter = $crate::compat::adapt::CoreWriteAdapter(&mut self.0);
-                adapter.write_str(s)
+                // Now that the adapter implements `embedded_io::Write`, we can use `write_all`.
+                use embedded_io::Write;
+                self.write_all(s.as_bytes()).map_err(|_| core::fmt::Error)
             }
         }
     };
