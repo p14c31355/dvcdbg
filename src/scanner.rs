@@ -6,8 +6,8 @@
 
 use crate::log;
 use crate::logger::Logger;
-use core::fmt::Debug;
 use heapless::Vec;
+use compat::i2c_compat::I2cCompat;
 
 const I2C_SCAN_ADDR_START: u8 = 0x03;
 const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -29,7 +29,7 @@ pub mod ehal_1_0 {
     use crate::define_scanner;
     use crate::log;
     define_scanner!(
-        crate::scanner::I2cCompat,
+        crate::compat::i2c_compat::I2cCompat,
         crate::logger::Logger,
         embedded_hal_1::i2c::Error
     );

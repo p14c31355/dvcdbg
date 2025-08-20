@@ -23,6 +23,8 @@ pub mod macros;
 /// ```
 pub mod prelude;
 
+pub mod compat;
+
 /// Recursive log macro that enables log output within macros.
 ///
 /// Formats arguments into a temporary `heapless::String` of a fixed size (128 bytes).
