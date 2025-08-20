@@ -27,7 +27,7 @@ impl<E: Debug> embedded_io::Error for CompatErr<E> {
 impl<S> SerialCompat for S
 where
     S: embedded_io::Write,
-    <S as embedded_io::ErrorType>::Error: Debug + Copy,
+    <S as embedded_io::ErrorType>::Error: Debug,
 {
     type Error = <S as embedded_io::ErrorType>::Error;
 
@@ -45,7 +45,7 @@ where
 impl<S> SerialCompat for S
 where
     S: embedded_hal_0_2::serial::Write<u8>,
-    <S as embedded_hal_0_2::serial::Write<u8>>::Error: Debug + Copy,
+    <S as embedded_hal_0_2::serial::Write<u8>>::Error: Debug,
 {
     type Error = CompatErr<<S as embedded_hal_0_2::serial::Write<u8>>::Error>;
 
