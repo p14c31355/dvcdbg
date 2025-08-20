@@ -57,6 +57,6 @@ where
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        nb::block!(self.flush())
+        nb::block!(embedded_hal_0_2::serial::Write::flush(self))
     }
 }
