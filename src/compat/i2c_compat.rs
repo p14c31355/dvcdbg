@@ -66,7 +66,7 @@ where
 /// ```
 #[macro_export]
 macro_rules! adapt_i2c {
-    ($name:ident : $adapter:ident) => {
+    ($adapter:ident) => {
         pub struct $adapter<'a, T: 'a>(&'a mut T)
         where
             T: $crate::compat::i2c_compat::I2cCompat;
