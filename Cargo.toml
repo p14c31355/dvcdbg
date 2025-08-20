@@ -29,7 +29,6 @@ default = ["logger", "scanner", "macros", "ehal_1_0"]
 logger = []
 scanner = []
 macros = []
-quick_diag = ["logger", "scanner", "macros"]
 
 # HAL switching feature
 ehal_0_2 = ["embedded-hal-0_2"]
