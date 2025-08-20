@@ -25,6 +25,7 @@ nb = { version = "1.1", optional = true }
 
 [dependencies.arduino-hal]
 git = "https://github.com/rahix/avr-hal"
+rev = "fafaf587a32a4500239fd073f89d1b9c36b48092"
 features = ["arduino-uno"]
 optional = true
 
