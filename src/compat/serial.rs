@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! adapt_serial {
-    ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
+    ($name:ident) => {
         pub struct $name<T>(pub T);
 
         impl<T> $name<T>
