@@ -20,7 +20,7 @@ jobs:
 
       # separate clippy step
       - name: Run cargo clippy
-        run: cargo +nightly clippy --all-features -- -D warnings
+        run: rustup component add clippy && cargo +nightly clippy --all-features -- -D warnings
 
       # auto test step
       - name: Run cargo fix and tests
