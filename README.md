@@ -28,7 +28,7 @@
 ## 📦 Quickstart
 
 ```sh
-cargo add dvcdbg --features "macros"
+cargo add dvcdbg --features "ehal_0_2"
 ```
 
 ---
