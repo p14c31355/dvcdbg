@@ -59,6 +59,9 @@ where
 ///
 /// Wraps an I2C peripheral that implements `embedded-hal::blocking::i2c`
 /// (0.2) or `embedded-hal::i2c` (1.0) and provides `I2cCompat`.
+/// 
+/// Use the adapt_i2c! macro to implement your own HAL I2C → I2cCompat conversion.
+/// This will allow you to pass it to common processes such as scan_i2c in dvcdbg.
 ///
 /// # Example
 /// ```ignore

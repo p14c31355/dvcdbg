@@ -1,6 +1,7 @@
 //! serial_compat.rs
 use core::fmt::Debug;
 use nb;
+use embedded_io;
 
 /// common Serial Write trait
 pub trait SerialCompat {
@@ -8,6 +9,25 @@ pub trait SerialCompat {
 
     fn write(&mut self, byte: u8) -> Result<(), Self::Error>;
     fn flush(&mut self) -> Result<(), Self::Error>;
+}
+
+impl<S: SerialCompat> embedded_io::Error for S::Error {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        embedded_io::ErrorKind::Other
+    }
+}
+
+impl<S: SerialCompat> embedded_io::Write for S {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        for byte in buf {
+            SerialCompat::write(self, *byte)?;
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        SerialCompat::flush(self)
+    }
 }
 
 // ========== ehal 0.2.x ==========
