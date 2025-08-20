@@ -1,3 +1,4 @@
+/// Adapter that converts any `embedded_io::Write` into a `core::fmt::Write`.
 pub struct CoreWriteAdapter<W>(pub W);
 
 impl<W> core::fmt::Write for CoreWriteAdapter<W>
@@ -5,7 +6,8 @@ where
     W: embedded_io::Write,
 {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        W::write_all(&mut self.0, s.as_bytes()).map_err(|_| core::fmt::Error)
+        // `embedded_io::Write::write_all` に委譲
+        self.0.write_all(s.as_bytes()).map_err(|_| core::fmt::Error)
     }
 }
 
