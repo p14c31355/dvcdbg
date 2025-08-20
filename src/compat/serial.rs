@@ -1,9 +1,3 @@
-/// Error wrapper for adapter
-#[derive(Debug)]
-pub enum AdaptError<E> {
-    Other(E),
-}
-
 #[macro_export]
 macro_rules! adapt_serial {
     ($name:ident, nb_write = $write_fn:ident $(, flush = $flush_fn:ident)?) => {
