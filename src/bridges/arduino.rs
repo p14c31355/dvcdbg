@@ -5,4 +5,4 @@
 use arduino_hal::Usart;
 use crate::prelude::*;
 
-adapt_serial!(UnoSerial: Usart);
+adapt_serial!(UnoSerial);

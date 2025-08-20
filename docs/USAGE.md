@@ -47,7 +47,7 @@ use arduino_hal::prelude::*;
 use core::fmt::Write;
 
 use dvcdbg::prelude::*;
-use dvcdbg::bridges::arduino::UnoSerial; // bridges:: is convenient
+adapt_serial!(UnoSerial);
 
 #[arduino_hal::entry]
 fn main() -> ! {
