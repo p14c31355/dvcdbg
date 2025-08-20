@@ -25,19 +25,18 @@ impl<E: Debug> embedded_io::Error for CompatErr<E> {
 #[cfg(feature = "ehal_1_0")]
 impl<S> SerialCompat for S
 where
-    S: embedded_io::Write<u8>,
-    <S as embedded_io::Write<u8>>::Error: Debug + Copy,
+    S: embedded_io::Write,
+    <S as embedded_io::ErrorType>::Error: Debug + Copy,
 {
-    type Error = <S as embedded_io::Write<u8>>::Error;
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        for byte in buf {
-            SerialCompat::write(self, *byte)?;
-        }
-        Ok(buf.len())
+    type Error = <S as embedded_io::ErrorType>::Error;
+    
+    fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
+        embedded_io::Write::write(self, &[byte])?;
+        Ok(())
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        SerialCompat::flush(self)
+        embedded_io::Write::flush(self)
     }
 }
 
