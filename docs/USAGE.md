@@ -15,9 +15,8 @@ The crate uses **Cargo features** to enable different functionality and HAL vers
 | `logger`     | Enables logging support via serial adapters      |
 | `scanner`    | Enables I2C scanner utilities                    |
 | `macros`     | Enables macros like `adapt_serial!`              |
-| `quick_diag` | Enables `logger + scanner + macros` together     |
-| `ehal_0_2`   | Use `embedded-hal` 0.2.x (blocking/non-blocking) |
-| `ehal_1_0`   | Use `embedded-hal` 1.0.x + `nb` (non-blocking)   |
+| `ehal_0_2`   | Use `embedded-hal` 0.2.x                         |
+| `ehal_1_0`   | Use `embedded-hal` 1.0.x                         |
 
 **Default features**: `logger, scanner, macros, ehal_1_0`
 
@@ -66,7 +65,9 @@ fn main() -> ! {
 
 ```
 
-### Custom Serial-Like Type
+---
+
+### Custom Serial-Compatible Types
 
 ```rust,no_run
 use dvcdbg::adapt_serial;
@@ -75,40 +76,43 @@ use core::convert::Infallible;
 use nb;
 use embedded_io::Write;
 
+// Any Serial-Compatible Type
 struct MySerial;
 
+// Example implementation of nb::serial::Write<u8> for embedded-hal 0.2
 impl nb::serial::Write<u8> for MySerial {
-    type Error = Infallible;
-    fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> { Ok(()) }
-    fn flush(&mut self) -> nb::Result<(), Self::Error> { Ok(()) }
+type Error = Infallible;
+fn write(&mut self, _byte: u8) -> nb::Result<(), Self::Error> { Ok(()) }
+fn flush(&mut self) -> nb::Result<(), Self::Error> { Ok(()) }
 }
 
-adapt_serial!(MyAdapter, write = write, flush = flush);
+// adapt_serial! Just wrap it in a macro
+adapt_serial!(MyAdapter);
 
 let mut uart = MyAdapter(MySerial);
+
+// Write using core::fmt::Write
 writeln!(uart, "Hello via custom serial").unwrap();
+
+// Write to the buffer using embedded_io::Write
 uart.write_all(&[0xAA, 0xBB]).unwrap();
 ```
 
 ---
 
-## 3. Notes and Caveats
+## Notes
 
-* **Optional `flush`**: You may omit the `flush` argument if your peripheral does not implement it.
-* **AVR and e-hal 1.0**: AVR HALs may require a **wrapper** to implement the 1.0 traits (`nb::Write<u8>`), because the original HAL only implements 0.2 traits.
-* **0.2 / 1.0 internal switching**: The macro automatically selects the correct trait implementation based on the enabled feature flag.
+* **AVR HAL / e-hal 1.0**: The AVR HAL's `Usart` only implements the 0.2 traits, but `adapt_serial!` internally selects the appropriate SerialCompat implementation.
+* **0.2 / 1.0 Internal Switching**: The appropriate trait is automatically selected based on the `ehal_0_2` / `ehal_1_0` feature flags.
 
 ---
 
-## 4. FAQ
+## FAQ
 
-**Q: Is `flush` mandatory?**
-A: No, it is optional. Only needed if your HAL exposes a flush method.
+**Q: How do I switch between blocking and non-blocking?**
+A: `adapt_serial!` automatically switches between them depending on the feature flag. Users don't need to worry about it.
 
-**Q: How do I know if I should use blocking or non-blocking?**
-A: `adapt_serial!` handles both automatically via feature flags. For `ehal_1_0`, non-blocking is assumed.
-
-**Q: Can I mix features?**
-A: You should enable exactly one HAL feature: either `ehal_0_2` or `ehal_1_0`. Other features like `logger`, `scanner`, `macros` can be combined freely.
+**Q: Can I specify multiple features?**
+A: Only enable one HAL, either `ehal_0_2` or `ehal_1_0`. Other `logger` / `scanner` / `macros` can be combined.
 
 ---
