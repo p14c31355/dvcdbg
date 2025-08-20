@@ -59,20 +59,18 @@ macro_rules! adapt_serial {
         where
             T: $crate::compat::serial_compat::SerialCompat,
         {
-            type Error = $crate::compat::serial_compat::CompatErr<T::Error>;
+            type Error = T::Error;
         }
-
         impl<T> embedded_io::Write for $name<T>
         where
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-                self.0.write(buf).map_err($crate::compat::serial_compat::CompatErr)?;
+                self.0.write(buf)?;
                 Ok(buf.len())
             }
-
             fn flush(&mut self) -> Result<(), Self::Error> {
-                self.0.flush().map_err($crate::compat::serial_compat::CompatErr)
+                self.0.flush()
             }
         }
 
