@@ -11,7 +11,10 @@ pub trait SerialCompat {
     fn flush(&mut self) -> Result<(), Self::Error>;
 }
 
-impl<S: SerialCompat> embedded_io::Error for S::Error {
+#[derive(Debug)]
+pub struct CompatErr<E>(pub E);
+
+impl<E: Debug> embedded_io::Error for CompatErr<E> {
     fn kind(&self) -> embedded_io::ErrorKind {
         embedded_io::ErrorKind::Other
     }
