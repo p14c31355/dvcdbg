@@ -39,20 +39,31 @@ The `adapt_serial!` macro creates a bridge between a serial peripheral and the `
 ### Arduino HAL (AVR)
 
 ```rust,no_run
+#![no_std]
+#![no_main]
+
+use panic_halt as _;
 use arduino_hal::prelude::*;
-use dvcdbg::adapt_serial;
 use core::fmt::Write;
-use embedded_io::Write;
 
-adapt_serial!(UsartAdapter, write = write, flush = flush);
+use dvcdbg::prelude::*;
+adapt_serial!(UnoSerial);
 
-let dp = arduino_hal::Peripherals::take().unwrap();
-let pins = arduino_hal::pins!(dp);
-let serial = arduino_hal::default_serial!(dp, pins, 57600);
-let mut dbg_uart = UsartAdapter(serial);
+#[arduino_hal::entry]
+fn main() -> ! {
+    let dp = arduino_hal::Peripherals::take().unwrap();
+    let pins = arduino_hal::pins!(dp);
 
-writeln!(dbg_uart, "Hello from embedded-io bridge!").unwrap();
-dbg_uart.write_all(&[0x01, 0x02, 0x03]).unwrap();
+    let serial = arduino_hal::default_serial!(dp, pins, 57600);
+
+    let mut logger = UnoSerial(serial);
+
+    writeln!(logger, "Hello from dvcdbg on Arduino Uno!").unwrap();
+    logger.write_all(&[0xDE, 0xAD, 0xBE, 0xEF]).unwrap();
+
+    loop {}
+}
+
 ```
 
 ### Custom Serial-Like Type
