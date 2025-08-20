@@ -21,9 +21,6 @@
 /// # Example
 ///
 /// ```ignore
-/// use dvcdbg::compat::serial_compat::SerialCompat;
-/// use dvcdbg::compat::adapt::CoreWriteAdapter;
-/// 
 /// // Suppose `MySerial` implements `SerialCompat`
 /// struct MySerial;
 /// impl SerialCompat for MySerial {
