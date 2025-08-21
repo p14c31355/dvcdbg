@@ -58,10 +58,16 @@ where
     }
 }
 
-/// Traits that wrap HAL-specific behavior such as I2C/NACK detection
+/// Traits that wrap HAL-specific behavior such as I2C/NACK/Serial detection
 pub trait HalErrorExt: Debug {
-    /// Determine if device is not present (NACK)
-    fn is_nack(&self) -> bool;
+    /// Determine if device is not present (NACK) (I2C)
+    fn is_nack(&self) -> bool {
+        false
+    }
+    /// Check whether serial writing is possible (Serial)
+    fn is_would_block(&self) -> bool {
+        false
+    }
 }
 
 /// Default implementation of I2C errors in 0.2 series
@@ -89,10 +95,21 @@ where
     }
 }
 
+/// Default implementation of embedded-hal 0.2 Serial errors
+#[cfg(feature = "ehal_0_2")]
+impl<E> HalErrorExt for E
+where
+    E: nb::ErrorKind + Debug,
+{
+    fn is_would_block(&self) -> bool {
+        matches!(self.kind(), nb::ErrorKind::WouldBlock)
+    }
+}
+
 /// Macro to convert any HAL error to ErrorCompat
 #[macro_export]
 macro_rules! hal_err {
     ($e:expr) => {
-        $crate::compat::err_compat::HalErrorCompat::from_hal_error($e)
+        $crate::compat::err_compat::ErrorCompat::from_hal_error($e)
     };
 }
