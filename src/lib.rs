@@ -22,8 +22,8 @@ pub mod macros;
 /// use dvcdbg::prelude::*;
 /// ```
 pub mod prelude;
-
 pub mod compat;
+pub mod error;
 
 /// Recursive log macro that enables log output within macros.
 ///
