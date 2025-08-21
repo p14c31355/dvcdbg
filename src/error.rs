@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)] // Clone, Copy, PartialEqを追加
 pub enum ErrorKind {
     UartFraming,
     UartParity,

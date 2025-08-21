@@ -40,7 +40,7 @@ pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
 #[macro_export]
 macro_rules! define_scanner {
     ($i2c_trait:path, $logger_trait:path) => {
-        use $crate::compat::err_compat::ErrorCompat;
+        use $crate::compat::err_compat::{ErrorCompat, HalErrorExt}; // HalErrorExtを追加
         use $crate::error::ErrorKind;
         use $crate::log;
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
@@ -70,6 +70,7 @@ macro_rules! define_scanner {
         where
             I2C: $i2c_trait,
             L: $logger_trait,
+            <I2C as $i2c_trait>::Error: Into<ErrorCompat>,
         {
             log!(logger, "[scan] Scanning I2C bus...");
             if let Ok(found_addrs) = internal_scan(i2c, logger, &[]) {
@@ -111,6 +112,7 @@ macro_rules! define_scanner {
         ) where
             I2C: $i2c_trait,
             L: $logger_trait,
+            <I2C as $i2c_trait>::Error: Into<ErrorCompat>,
         {
             log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
             if let Ok(found_addrs) = internal_scan(i2c, logger, control_bytes) {
@@ -157,6 +159,7 @@ macro_rules! define_scanner {
         ) where
             I2C: $i2c_trait,
             L: $logger_trait,
+            <I2C as $i2c_trait>::Error: Into<ErrorCompat>,
         {
             log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
             let mut detected_cmds: heapless::Vec<u8, 64> = heapless::Vec::new();
@@ -193,6 +196,7 @@ macro_rules! define_scanner {
         where
             I2C: $i2c_trait,
             L: $logger_trait,
+            <I2C as $i2c_trait>::Error: Into<ErrorCompat>,
         {
             let mut found_devices: heapless::Vec<u8, 128> = heapless::Vec::new();
 
@@ -202,7 +206,7 @@ macro_rules! define_scanner {
                         found_devices.push(addr).unwrap();
                     }
                     Err(e) => {
-                        let e = ErrorCompat::from(e);
+                        let e = ErrorCompat::from(e); // Fromトレイトを使用
                         if e.kind() == ErrorKind::I2cNack {
                             continue;
                         } else {
