@@ -162,6 +162,7 @@ macro_rules! define_scanner {
             L: $logger_trait,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
+            log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
             let mut detected_cmds: Vec<u8, 64> = Vec::new();
 
             for &cmd in init_sequence {
