@@ -18,7 +18,7 @@ pub mod ehal_0_2 {
     define_scanner!(
         crate::compat::I2cCompat,
         crate::logger::Logger,
-        embedded_hal_0_2::blocking::i2c::Error
+        core::fmt::Debug
     );
 }
 
