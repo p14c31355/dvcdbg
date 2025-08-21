@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub enum ErrorKind {
     UartFraming,
     UartParity,
@@ -5,9 +6,9 @@ pub enum ErrorKind {
     UartUnderrun,
     UartTimeout,
 
-    BusNack,
-    BusArbitrationLost,
-    Bus,
+    I2cNack,
+    I2cArbitrationLost,
+    I2cBus,
 
     HardPower,
     HardPeripheral,
@@ -22,7 +23,7 @@ pub enum ErrorKind {
     GpioInvalidState,
     AdcOutOfRange,
     Unknown,
-    
+
     Other,
 
 }
