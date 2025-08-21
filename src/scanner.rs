@@ -17,8 +17,7 @@ pub mod ehal_0_2 {
 
     define_scanner!(
         crate::compat::I2cCompat,
-        crate::logger::Logger,
-        core::fmt::Debug
+        crate::logger::Logger
     );
 }
 
@@ -28,13 +27,12 @@ pub mod ehal_1_0 {
     
     define_scanner!(
         crate::compat::I2cCompat,
-        crate::logger::Logger,
-        embedded_hal_1::i2c::Error
+        crate::logger::Logger
     );
 }
 
 #[cfg(feature = "ehal_1_0")]
-pub use self::ehal_1_0::scanner::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
+pub use self::ehal_1_0::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
 
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
@@ -42,7 +40,9 @@ pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
 #[macro_export]
 macro_rules! define_scanner {
     ($i2c_trait:path, $logger_trait:path) => {
-        use crate::compat::err_compat::{ErrorCompat, ErrorKind};
+        use $crate::compat::err_compat::ErrorCompat;
+        use $crate::error::ErrorKind;
+        use $crate::log;
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
         ///
         /// This function probes each possible I2C device address by attempting to
