@@ -206,7 +206,7 @@ macro_rules! define_scanner {
                     }
                     Err(e) => {
                         let e_kind = e.to_compat(Some(addr));
-                        if e_kind == ErrorKind::I2c($crate::error::I2cError::Nack) {
+                        if e_kind == ErrorKind::I2c(I2cError::Nack) {
                             continue;
                         } else {
                             log!(logger, "[error] write failed at 0x{:02X}: {:?}", addr, e_kind);
