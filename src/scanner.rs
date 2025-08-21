@@ -203,7 +203,7 @@ macro_rules! define_scanner {
                     }
                     Err(e) => {
                         let e = ErrorCompat::from(e);
-                        if e.kind() == ErrorKind::Nack {
+                        if e.kind() == ErrorKind::I2cNack {
                             continue;
                         } else {
                             log!(logger, "[error] write failed at 0x{:02X}: {:?}", addr, e);
