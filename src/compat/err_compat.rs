@@ -1,45 +1,44 @@
 //! Error compatibility layer for embedded-hal 0.2 and 1.0
 //! Provides a unified error type for logging and diagnostics in no_std
 //! HAL error compatibility wrapper
-//! Converts HAL-specific errors into dvcdbg's canonical ErrorKind
+//! Works with embedded-hal 0.2 and 1.0, maps to unified `ErrorKind`
 
 use core::fmt::Debug;
 use crate::error::*;
 
-#[cfg(feature = "ehal_0_2")]
-use embedded_hal_0_2::blocking::i2c;
+#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
+use embedded_hal_0_2::blocking::i2c as i2c_0_2;
+#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
+use heapless::String;
+
 #[cfg(feature = "ehal_1_0")]
-use embedded_hal_1::i2c;
+use embedded_hal_1::i2c as i2c_1_0;
 
 /// Trait for HAL error extensions
 pub trait HalErrorExt {
-    /// Check if the error corresponds to a non-blocking/would-block situation
+    /// Check if the error is "would block" (non-fatal, retryable)
     fn is_would_block(&self) -> bool;
 
-    /// Convert the HAL error into canonical ErrorKind
+    /// Convert HAL error into unified `ErrorKind`, optionally with device address
     fn to_compat(&self, addr: Option<u8>) -> ErrorKind;
 }
 
-#[cfg(feature = "ehal_0_2")]
+#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 impl<E> HalErrorExt for E
 where
     E: Debug,
 {
     fn is_would_block(&self) -> bool {
-        // For ehal 0.2, we heuristically detect NACK via Debug output
-        let mut buf = heapless::String::<64>::new();
-        let _ = core::fmt::write(&mut buf, format_args!("{:?}", self));
+        // NOTE: 0.2 uses Debug output to detect NACKs
+        let mut buf: String<64> = String::new();
+        let _ = write!(buf, "{:?}", self);
         buf.contains("NACK") || buf.contains("NoAcknowledge")
     }
 
     fn to_compat(&self, addr: Option<u8>) -> ErrorKind {
-        // Map to canonical ErrorKind
-        if self.is_would_block() {
-            if let Some(a) = addr {
-                ErrorKind::I2c(I2cError::Nack)
-            } else {
-                ErrorKind::I2c(I2cError::Nack)
-            }
+        // Map 0.2 HAL error to unified ErrorKind
+        if let Some(_) = addr {
+            ErrorKind::I2c(I2cError::Nack)
         } else {
             ErrorKind::Unknown
         }
@@ -49,21 +48,23 @@ where
 #[cfg(feature = "ehal_1_0")]
 impl<E> HalErrorExt for E
 where
-    E: i2c::Error + Debug,
+    E: i2c_1_0::Error + Debug,
 {
     fn is_would_block(&self) -> bool {
-        matches!(self.kind(), i2c::ErrorKind::NoAcknowledge(_))
+        // 1.0 provides standardized ErrorKind
+        matches!(self.kind(), i2c_1_0::ErrorKind::NoAcknowledge(_))
     }
 
     fn to_compat(&self, addr: Option<u8>) -> ErrorKind {
+        // Convert 1.0 HAL error into unified ErrorKind
         let kind = match self.kind() {
-            i2c::ErrorKind::Bus => ErrorKind::I2c(I2cError::Bus),
-            i2c::ErrorKind::NoAcknowledge(_) => ErrorKind::I2c(I2cError::Nack),
-            i2c::ErrorKind::ArbitrationLoss => ErrorKind::I2c(I2cError::ArbitrationLost),
+            i2c_1_0::ErrorKind::Bus => ErrorKind::I2c(I2cError::Bus),
+            i2c_1_0::ErrorKind::NoAcknowledge(_) => ErrorKind::I2c(I2cError::Nack),
+            i2c_1_0::ErrorKind::ArbitrationLoss => ErrorKind::I2c(I2cError::ArbitrationLost),
             _ => ErrorKind::Unknown,
         };
-        if let Some(_a) = addr {
-            kind // could extend to include addr if needed
+        if addr.is_some() {
+            kind // Optionally could wrap with address info if desired
         } else {
             kind
         }
