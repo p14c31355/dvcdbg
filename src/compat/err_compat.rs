@@ -1,10 +1,9 @@
 //! Error compatibility layer for embedded-hal 0.2 and 1.0
 //! Provides a unified error type for logging and diagnostics in no_std
 
-use core::fmt::Debug;
-use heapless::String;
-
+use core::fmt::{Debug, Write}; // import Write for heapless::String
 use crate::error::ErrorKind;
+use heapless::String;
 
 #[cfg(feature = "ehal_1_0")]
 use embedded_hal_1::i2c;
@@ -12,8 +11,8 @@ use embedded_hal_1::i2c;
 /// Unified error enum for embedded diagnostics
 #[derive(Debug, Clone, Copy)]
 pub enum ErrorCompat {
-    /// I2C bus error
-    I2cError(u8, ErrorKind), // address + kind
+    /// I2C bus error (addr, kind)
+    I2cError(u8, ErrorKind),
     /// Generic HAL error
     HalError(ErrorKind),
 }
@@ -33,18 +32,15 @@ pub trait HalErrorExt {
     fn to_compat(&self, addr: Option<u8>) -> ErrorCompat;
 }
 
-//
-// --- embedded-hal 0.2 ---
-//
 #[cfg(feature = "ehal_0_2")]
 impl<E> From<E> for ErrorCompat
 where
     E: Debug,
 {
     fn from(e: E) -> Self {
+        // NOTE: Fallback Debug-based detection for hal-0.2 errors
         let mut buf: String<64> = String::new();
         let _ = write!(buf, "{:?}", e);
-
         if buf.contains("NACK") || buf.contains("NoAcknowledge") {
             ErrorCompat::I2cError(0, ErrorKind::I2cNack)
         } else {
@@ -59,13 +55,14 @@ where
     E: Debug,
 {
     fn is_would_block(&self) -> bool {
-        // NOTE: embedded-hal 0.2 has no standardized ErrorKind
+        // NOTE: For embedded-hal 0.2, detect NACKs via Debug output
         let mut buf: String<64> = String::new();
         let _ = write!(buf, "{:?}", self);
-        buf.contains("WouldBlock")
+        buf.contains("NACK") || buf.contains("NoAcknowledge")
     }
 
     fn to_compat(&self, addr: Option<u8>) -> ErrorCompat {
+        // Convert HAL error to unified enum
         if let Some(a) = addr {
             ErrorCompat::I2cError(a, ErrorKind::Unknown)
         } else {
@@ -74,9 +71,6 @@ where
     }
 }
 
-//
-// --- embedded-hal 1.0 ---
-//
 #[cfg(feature = "ehal_1_0")]
 impl<E> From<E> for ErrorCompat
 where
@@ -99,10 +93,12 @@ where
     E: i2c::Error + Debug,
 {
     fn is_would_block(&self) -> bool {
+        // NOTE: Use embedded-hal 1.0 standardized ErrorKind
         matches!(self.kind(), i2c::ErrorKind::NoAcknowledge(_))
     }
 
     fn to_compat(&self, addr: Option<u8>) -> ErrorCompat {
+        // Convert HAL error to unified enum
         let kind = match self.kind() {
             i2c::ErrorKind::Bus => ErrorKind::I2cBus,
             i2c::ErrorKind::NoAcknowledge(_) => ErrorKind::I2cNack,
