@@ -43,11 +43,6 @@ impl<E> HalErrorExt for E
 where
     E: i2c_1_0::Error + Debug,
 {
-    fn is_would_block(&self) -> bool {
-        // 1.0 provides standardized ErrorKind
-        matches!(self.kind(), i2c_1_0::ErrorKind::NoAcknowledge(_))
-    }
-
     fn to_compat(&self, _addr: Option<u8>) -> ErrorKind {
         // Convert 1.0 HAL error into unified ErrorKind
         match self.kind() {
