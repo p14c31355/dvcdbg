@@ -44,7 +44,7 @@ where
         let mut buf: String<64> = String::new();
         let _ = write!(buf, "{:?}", e);
         if buf.contains("NACK") || buf.contains("NoAcknowledge") {
-            ErrorCompat::I2cError(0, ErrorKind::I2cNack) // アドレスは不明なので0
+            ErrorCompat::I2cError(0, ErrorKind::I2cNack)
         } else {
             ErrorCompat::HalError(ErrorKind::Unknown)
         }
@@ -58,7 +58,7 @@ where
 {
     fn is_would_block(&self) -> bool {
         // NOTE: For embedded-hal 0.2, detect NACKs via Debug output
-        let mut buf: String<64> = String::new(); // U64を直接64に変更
+        let mut buf: String<64> = String::new();
         let _ = write!(buf, "{:?}", self);
         buf.contains("NACK") || buf.contains("NoAcknowledge")
     }
@@ -66,9 +66,9 @@ where
     fn to_compat(&self, addr: Option<u8>) -> ErrorCompat {
         // Convert HAL error to unified enum
         if let Some(a) = addr {
-            ErrorCompat::I2cError(a, ErrorKind::Unknown) // デフォルトでUnknownを設定
+            ErrorCompat::I2cError(a, ErrorKind::Unknown)
         } else {
-            ErrorCompat::HalError(ErrorKind::Unknown) // デフォルトでUnknownを設定
+            ErrorCompat::HalError(ErrorKind::Unknown)
         }
     }
 }
@@ -85,7 +85,7 @@ where
             embedded_hal_1::i2c::ErrorKind::ArbitrationLoss => ErrorKind::I2cArbitrationLost,
             _ => ErrorKind::Unknown,
         };
-        ErrorCompat::HalError(kind) // アドレスは不明なのでHalError
+        ErrorCompat::HalError(kind)
     }
 }
 
