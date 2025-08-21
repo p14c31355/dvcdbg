@@ -237,16 +237,22 @@ macro_rules! define_scanner {
                             continue;
                         } else {
                             use core::fmt::Write;
-                            let err_str: heapless::String<64> = match e_kind {
-                                ErrorKind::I2c(I2cError::ArbitrationLost) => "ArbitrationLost".into(),
-                                ErrorKind::I2c(I2cError::Bus) => "BusError".into(),
-                                ErrorKind::Other => "Other".into(),
-                                _ => {
-                                    let mut s = heapless::String::new();
-                                    let _ = write!(s, "{:?}", e_kind);
-                                    s
+
+                            let mut err_str = heapless::String::<64>::new();
+                            match e_kind {
+                                ErrorKind::I2c(I2cError::ArbitrationLost) => {
+                                    let _ = err_str.push_str("ArbitrationLost");
                                 }
-                            };
+                                ErrorKind::I2c(I2cError::Bus) => {
+                                    let _ = err_str.push_str("BusError");
+                                }
+                                ErrorKind::Other => {
+                                    let _ = err_str.push_str("Other");
+                                }
+                                _ => {
+                                    let _ = write!(err_str, "{:?}", e_kind);
+                                }
+                            }
                             log!(logger, "[error] write failed at 0x{:02X}: {}", addr, err_str);
                             return Err(e_kind);
                         }
@@ -267,7 +273,7 @@ where
     use core::fmt::Write;
     let mut s = heapless::String::<384>::new();
     for &b in expected {
-        if write!(s, "0x{:02X} ", b).is_err() {
+        if write!(s, "0x{b:02X} ").is_err() {
             let _ = s.push_str("...");
             break;
         }
@@ -276,7 +282,7 @@ where
 
     let mut s = heapless::String::<384>::new();
     for &b in detected.as_slice() {
-        let _ = write!(s, "0x{:02X} ", b);
+        let _ = write!(s, "0x{b:02X} ");
     }
     log!(logger, "Commands with response: {}", s.trim_end());
 
@@ -289,7 +295,7 @@ where
 
     let mut s = heapless::String::<384>::new();
     for &b in missing_cmds.as_slice() {
-        let _ = write!(s, "0x{:02X} ", b);
+        let _ = write!(s, "0x{b:02X} ");
     }
     log!(logger, "Commands with no response: {}", s.trim_end());
 }
