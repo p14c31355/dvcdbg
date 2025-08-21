@@ -35,9 +35,9 @@ where
         buf.contains("NACK") || buf.contains("NoAcknowledge")
     }
 
-    fn to_compat(&self, addr: Option<u8>) -> ErrorKind {
+    fn to_compat(&self, _addr: Option<u8>) -> ErrorKind {
         // Map 0.2 HAL error to unified ErrorKind
-        if let Some(_) = addr {
+        if self.is_would_block() {
             ErrorKind::I2c(I2cError::Nack)
         } else {
             ErrorKind::Unknown
