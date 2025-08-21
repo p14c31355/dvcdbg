@@ -171,7 +171,9 @@ macro_rules! define_scanner {
                             for addr in found_addrs {
                                 log!(logger, "[ok] Found device at 0x{:02X} responding to 0x{:02X}", addr, cmd);
                             }
-                            let _ = detected_cmds.push(cmd);
+                            if detected_cmds.push(cmd).is_err() {
+                                log!(logger, "[warn] Detected commands buffer is full, results may be incomplete!");
+                            }
                         }
                     }
                     Err(e) => {
