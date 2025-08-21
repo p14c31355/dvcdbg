@@ -28,7 +28,7 @@ where
     fn to_compat(&self, _addr: Option<u8>) -> ErrorKind {
         // Map 0.2 HAL error to unified ErrorKind
         // NOTE: 0.2 uses Debug output to detect NACKs
-        let mut buf: String<64> = String::new();
+        let mut buf: String<128> = String::new();
         let _ = write!(buf, "{:?}", self);
         if buf.contains("NACK") || buf.contains("NoAcknowledge") {
             ErrorKind::I2c(I2cError::Nack)
