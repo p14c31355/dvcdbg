@@ -80,11 +80,13 @@ macro_rules! define_scanner {
                         let _ = addrs_str.push_str("...");
                             break;
                     
-                }
+                
                     log!(logger, "[ok] Found devices at: {}", addrs_str.trim_end());
-            }
+            
             log!(logger, "[info] I2C scan complete.");
-        }
+                    }
+                }
+            }
 
         /// Scan the I2C bus for devices by sending specified control bytes.
         ///
