@@ -16,9 +16,6 @@ use embedded_hal_1::i2c as i2c_1_0;
 
 /// Trait for HAL error extensions
 pub trait HalErrorExt {
-    /// Check if the error is "would block" (non-fatal, retryable)
-    fn is_would_block(&self) -> bool;
-
     /// Convert HAL error into unified `ErrorKind`, optionally with device address
     fn to_compat(&self, addr: Option<u8>) -> ErrorKind;
 }
