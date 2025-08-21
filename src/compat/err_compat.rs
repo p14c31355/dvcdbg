@@ -55,18 +55,13 @@ where
         matches!(self.kind(), i2c_1_0::ErrorKind::NoAcknowledge(_))
     }
 
-    fn to_compat(&self, addr: Option<u8>) -> ErrorKind {
+    fn to_compat(&self, _addr: Option<u8>) -> ErrorKind {
         // Convert 1.0 HAL error into unified ErrorKind
-        let kind = match self.kind() {
+        match self.kind() {
             i2c_1_0::ErrorKind::Bus => ErrorKind::I2c(I2cError::Bus),
             i2c_1_0::ErrorKind::NoAcknowledge(_) => ErrorKind::I2c(I2cError::Nack),
             i2c_1_0::ErrorKind::ArbitrationLoss => ErrorKind::I2c(I2cError::ArbitrationLost),
             _ => ErrorKind::Unknown,
-        };
-        if addr.is_some() {
-            kind // Optionally could wrap with address info if desired
-        } else {
-            kind
         }
     }
 }
