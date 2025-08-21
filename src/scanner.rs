@@ -75,9 +75,11 @@ macro_rules! define_scanner {
         {
             log!(logger, "[scan] Scanning I2C bus...");
             if let Ok(found_addrs) = internal_scan(i2c, logger, &[]) {
+                log!(logger, "[ok] Found device at");
                 for addr in found_addrs {
-                    log!(logger, "[ok] Found device at 0x{:02X}", addr);
+                    log!(logger, "0x{:02X} ", addr);
                 }
+                log!(logger, "");
             }
             log!(logger, "[info] I2C scan complete.");
         }
@@ -115,7 +117,12 @@ macro_rules! define_scanner {
             L: $logger_trait,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
+            log!(logger, "[scan] Scanning I2C bus with control bytes:");
+            for &b in control_bytes {
+                log!(logger, "0x{:02X} ", b);
+            }
+            log!(logger, "");
+
             if let Ok(found_addrs) = internal_scan(i2c, logger, control_bytes) {
                 for addr in found_addrs {
                     log!(logger, "[ok] Found device at 0x{:02X}", addr);
@@ -162,7 +169,12 @@ macro_rules! define_scanner {
             L: $logger_trait,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
+            log!(logger, "[scan] Scanning I2C bus with init sequence:");
+            for &cmd in init_sequence {
+                log!(logger, "0x{:02X} ", cmd);
+            }
+            log!(logger, "");
+
             let mut detected_cmds: Vec<u8, 64> = Vec::new();
 
             for &cmd in init_sequence {
@@ -209,7 +221,13 @@ macro_rules! define_scanner {
                         if e_kind == ErrorKind::I2c(I2cError::Nack) {
                             continue;
                         } else {
-                            log!(logger, "[error] write failed at 0x{:02X}: {:?}", addr, e_kind);
+                            let err_str = match e_kind {
+                                ErrorKind::I2c(I2cError::ArbitrationLost) => "ArbitrationLost",
+                                ErrorKind::I2c(I2cError::Bus) => "BusError",
+                                ErrorKind::Other => "Other",
+                                _ => "Unknown",
+                            };
+                            log!(logger, "[error] write failed at 0x{:02X}: {}", addr, err_str);
                             return Err(e_kind);
                         }
                     }
@@ -225,32 +243,31 @@ fn log_differences<L>(logger: &mut L, expected: &[u8], detected: &Vec<u8, 64>)
 where
     L: Logger,
 {
-    log!(logger, "Expected sequence: {:02X?}", expected);
-    log!(
-        logger,
-        "Commands with response: {:02X?}",
-        detected.as_slice()
-    );
+    log!(logger, "Expected sequence:");
+    for &b in expected {
+        log!(logger, "0x{:02X} ", b);
+    }
+    log!(logger, "");
+
+    log!(logger, "Commands with response:");
+    for &b in detected.as_slice() {
+        log!(logger, "0x{:02X} ", b);
+    }
+    log!(logger, "");
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
     let mut missing_cmds: Vec<u8, 64> = Vec::new();
-    for cmd in expected
-        .iter()
-        .copied()
-        .filter(|c| sorted.binary_search(c).is_err())
-    {
+    for cmd in expected.iter().copied().filter(|c| sorted.binary_search(c).is_err()) {
         if missing_cmds.push(cmd).is_err() {
-            log!(
-                logger,
-                "[warn] Missing commands buffer is full, list is truncated."
-            );
+            log!(logger, "[warn] Missing commands buffer is full, list is truncated.");
             break;
         }
     }
-    log!(
-        logger,
-        "Commands with no response: {:02X?}",
-        missing_cmds.as_slice()
-    );
+
+    log!(logger, "Commands with no response:");
+    for &b in missing_cmds.as_slice() {
+        log!(logger, "0x{:02X} ", b);
+    }
+    log!(logger, "");
 }
