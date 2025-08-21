@@ -79,7 +79,7 @@ macro_rules! define_scanner {
                     if write!(addrs_str, "0x{:02X} ", addr).is_err() {
                         let _ = addrs_str.push_str("...");
                             break;
-                    }
+                    
                 }
                     log!(logger, "[ok] Found devices at: {}", addrs_str.trim_end());
             }
