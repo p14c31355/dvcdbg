@@ -75,11 +75,14 @@ macro_rules! define_scanner {
         {
             log!(logger, "[scan] Scanning I2C bus...");
             if let Ok(found_addrs) = internal_scan(i2c, logger, &[]) {
-                log!(logger, "[ok] Found device at");
-                for addr in found_addrs {
-                    log!(logger, "0x{:02X} ", addr);
+                if !found_addrs.is_empty() {
+                    use core::fmt::Write;
+                    let mut addrs_str = heapless::String::<768>::new();
+                    for addr in found_addrs {
+                        let _ = write!(addrs_str, "0x{:02X} ", addr);
+                    }
+                    log!(logger, "[ok] Found devices at: {}", addrs_str.trim_end());
                 }
-                log!(logger, "");
             }
             log!(logger, "[info] I2C scan complete.");
         }
@@ -117,15 +120,23 @@ macro_rules! define_scanner {
             L: $logger_trait,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            log!(logger, "[scan] Scanning I2C bus with control bytes:");
+            use core::fmt::Write;
+            let mut s = heapless::String::<256>::new();
             for &b in control_bytes {
-                log!(logger, "0x{:02X} ", b);
+                if write!(s, "0x{:02X} ", b).is_err() {
+                    let _ = s.push_str("...");
+                    break;
+                }
             }
-            log!(logger, "");
+            log!(logger, "[scan] Scanning I2C bus with control bytes: {}", s.trim_end());
 
             if let Ok(found_addrs) = internal_scan(i2c, logger, control_bytes) {
-                for addr in found_addrs {
-                    log!(logger, "[ok] Found device at 0x{:02X}", addr);
+                if !found_addrs.is_empty() {
+                    let mut addrs_str = heapless::String::<768>::new();
+                    for addr in found_addrs {
+                        let _ = write!(addrs_str, "0x{:02X} ", addr);
+                    }
+                    log!(logger, "[ok] Found devices at: {}", addrs_str.trim_end());
                 }
             }
             log!(logger, "[info] I2C scan complete.");
@@ -169,14 +180,17 @@ macro_rules! define_scanner {
             L: $logger_trait,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            log!(logger, "[scan] Scanning I2C bus with init sequence:");
+            use core::fmt::Write;
+            let mut s = heapless::String::<256>::new();
             for &cmd in init_sequence {
-                log!(logger, "0x{:02X} ", cmd);
+                if write!(s, "0x{:02X} ", cmd).is_err() {
+                    let _ = s.push_str("...");
+                    break;
+                }
             }
-            log!(logger, "");
+            log!(logger, "[scan] Scanning I2C bus with init sequence: {}", s.trim_end());
 
             let mut detected_cmds: Vec<u8, 64> = Vec::new();
-
             for &cmd in init_sequence {
                 match internal_scan(i2c, logger, &[0x00, cmd]) {
                     Ok(found_addrs) => {
@@ -187,6 +201,7 @@ macro_rules! define_scanner {
                             if detected_cmds.push(cmd).is_err() {
                                 log!(logger, "[warn] Detected commands buffer is full, results may be incomplete!");
                             }
+                            let _ = detected_cmds.push(cmd);
                         }
                     }
                     Err(e) => {
@@ -221,11 +236,16 @@ macro_rules! define_scanner {
                         if e_kind == ErrorKind::I2c(I2cError::Nack) {
                             continue;
                         } else {
-                            let err_str = match e_kind {
-                                ErrorKind::I2c(I2cError::ArbitrationLost) => "ArbitrationLost",
-                                ErrorKind::I2c(I2cError::Bus) => "BusError",
-                                ErrorKind::Other => "Other",
-                                _ => "Unknown",
+                            use core::fmt::Write;
+                            let err_str: heapless::String<64> = match e_kind {
+                                ErrorKind::I2c(I2cError::ArbitrationLost) => "ArbitrationLost".into(),
+                                ErrorKind::I2c(I2cError::Bus) => "BusError".into(),
+                                ErrorKind::Other => "Other".into(),
+                                _ => {
+                                    let mut s = heapless::String::new();
+                                    let _ = write!(s, "{:?}", e_kind);
+                                    s
+                                }
                             };
                             log!(logger, "[error] write failed at 0x{:02X}: {}", addr, err_str);
                             return Err(e_kind);
@@ -236,6 +256,7 @@ macro_rules! define_scanner {
 
             Ok(found_devices)
         }
+
     }
 }
 
@@ -243,31 +264,32 @@ fn log_differences<L>(logger: &mut L, expected: &[u8], detected: &Vec<u8, 64>)
 where
     L: Logger,
 {
-    log!(logger, "Expected sequence:");
+    use core::fmt::Write;
+    let mut s = heapless::String::<384>::new();
     for &b in expected {
-        log!(logger, "0x{:02X} ", b);
+        if write!(s, "0x{:02X} ", b).is_err() {
+            let _ = s.push_str("...");
+            break;
+        }
     }
-    log!(logger, "");
+    log!(logger, "Expected sequence: {}", s.trim_end());
 
-    log!(logger, "Commands with response:");
+    let mut s = heapless::String::<384>::new();
     for &b in detected.as_slice() {
-        log!(logger, "0x{:02X} ", b);
+        let _ = write!(s, "0x{:02X} ", b);
     }
-    log!(logger, "");
+    log!(logger, "Commands with response: {}", s.trim_end());
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
     let mut missing_cmds: Vec<u8, 64> = Vec::new();
     for cmd in expected.iter().copied().filter(|c| sorted.binary_search(c).is_err()) {
-        if missing_cmds.push(cmd).is_err() {
-            log!(logger, "[warn] Missing commands buffer is full, list is truncated.");
-            break;
-        }
+        let _ = missing_cmds.push(cmd);
     }
 
-    log!(logger, "Commands with no response:");
+    let mut s = heapless::String::<384>::new();
     for &b in missing_cmds.as_slice() {
-        log!(logger, "0x{:02X} ", b);
+        let _ = write!(s, "0x{:02X} ", b);
     }
-    log!(logger, "");
+    log!(logger, "Commands with no response: {}", s.trim_end());
 }
