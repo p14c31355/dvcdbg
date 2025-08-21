@@ -40,7 +40,7 @@ pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
 #[macro_export]
 macro_rules! define_scanner {
     ($i2c_trait:path, $logger_trait:path) => {
-        use $crate::error::ErrorKind;
+        use $crate::error::{ErrorKind, I2cError};
         use $crate::compat::HalErrorExt;
         use $crate::log;
         use heapless::Vec;
