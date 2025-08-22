@@ -36,7 +36,7 @@ pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
 
 #[macro_export]
 macro_rules! define_scanner {
-    ($i2c_trait:path, $serial:path) => {
+    ($i2c_trait:path) => {
         use $crate::error::{ErrorKind, I2cError};
         use $crate::compat::HalErrorExt;
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
