@@ -244,20 +244,12 @@ macro_rules! define_scanner {
                             use core::fmt::Write;
 
                             let mut err_str = heapless::String::<64>::new();
-                            match e_kind {
-                                ErrorKind::I2c(I2cError::ArbitrationLost) => {
-                                    let _ = err_str.push_str("ArbitrationLost");
-                                }
-                                ErrorKind::I2c(I2cError::Bus) => {
-                                    let _ = err_str.push_str("BusError");
-                                }
-                                ErrorKind::Other => {
-                                    let _ = err_str.push_str("Other");
-                                }
-                                _ => {
-                                    let _ = write!(err_str, "{:?}", e_kind);
-                                }
-                            }
+                            let _ = match e_kind {
+                                ErrorKind::I2c(I2cError::ArbitrationLost) => err_str.push_str("ArbitrationLost"),
+                                ErrorKind::I2c(I2cError::Bus) => err_str.push_str("BusError"),
+                                ErrorKind::Other => err_str.push_str("Other"),
+                                _ => write!(err_str, "{:?}", e_kind),
+                            };
                             log!(logger, "[error] write failed at 0x{:02X}: {}", addr, err_str);
                             return Err(e_kind);
                         }
@@ -284,7 +276,7 @@ where
         }
     }
     log!(logger, "Expected sequence: {}", s.trim_end());
-        s.clear();
+    s.clear();
     for &b in detected.as_slice() {
         if write!(s, "0x{b:02X} ").is_err() {
             let _ = s.push_str("...");
@@ -306,7 +298,7 @@ where
         }
     }
 
-        s.clear();
+    s.clear();
     for &b in missing_cmds.as_slice() {
         if write!(s, "0x{b:02X} ").is_err() {
             let _ = s.push_str("...");
@@ -314,4 +306,16 @@ where
         }
     }
     log!(logger, "Commands with no response: {}", s.trim_end());
+}
+
+fn bytes_to_hex_str<const N: usize>(bytes: &[u8]) -> heapless::String<N> {
+    use core::fmt::Write;
+    let mut s = heapless::String::<N>::new();
+    for &b in bytes {
+        if write!(&mut s, "0x{b:02X} ").is_err() {
+            let _ = s.push_str("...");
+            break;
+        }
+    }
+    s
 }
