@@ -246,10 +246,10 @@ fn log_differences<L>(logger: &mut L, expected: &[u8], detected: &Vec<u8, 64>)
 where
     L: Logger,
 {
-    let mut s = bytes_to_hex_str::<384>(expected);
-    log!(logger, "Expected sequence: {}", s);
-    s = bytes_to_hex_str::<384>(detected.as_slice());
-    log!(logger, "Commands with response: {}", s);
+    let expected_str = bytes_to_hex_str::<384>(expected);
+    log!(logger, "Expected sequence: {}", expected_str);
+    let detected_str = bytes_to_hex_str::<384>(detected.as_slice());
+    log!(logger, "Commands with response: {}", detected_str);
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
