@@ -11,6 +11,7 @@ pub const I2C_SCAN_ADDR_END: u8 = 0x77;
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 pub mod ehal_0_2 {
     use crate::define_scanner;
+    use heapless::Vec;
     define_scanner!(
         crate::compat::I2cCompat,
         core::fmt::Write
@@ -20,6 +21,7 @@ pub mod ehal_0_2 {
 #[cfg(feature = "ehal_1_0")]
 pub mod ehal_1_0 {
     use crate::define_scanner;
+    use heapless::Vec;
     define_scanner!(
         crate::compat::I2cCompat,
         core::fmt::Write
@@ -104,7 +106,7 @@ macro_rules! define_scanner {
             control_bytes: &[u8],
         ) where
             I2C: $i2c_trait,
-            W: core::fmt::Write,,
+            W: core::fmt::Write,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
             let s: heapless::String<256> = super::bytes_to_hex_str(control_bytes);
@@ -234,9 +236,9 @@ macro_rules! define_scanner {
 
 fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detected: &Vec<u8, 64>) {
     let expected_str = bytes_to_hex_str::<384>(expected);
-    let _ = writeln!(serial, "Expected sequence: {}", expected_str);
+    let _ = writeln!(serial, "Expected sequence: {expected_str}");
     let detected_str = bytes_to_hex_str::<384>(detected.as_slice());
-    let _ = writeln!(serial, "Commands with response: {}", detected_str);
+    let _ = writeln!(serial, "Commands with response: {detected_str}");
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
@@ -252,7 +254,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
     }
 
     let missing_cmds_str = bytes_to_hex_str::<384>(missing_cmds.as_slice());
-    let _ = writeln!(serial, "Commands with no response: {}", missing_cmds_str);
+    let _ = writeln!(serial, "Commands with no response: {missing_cmds_str}");
 }
 
 fn bytes_to_hex_str<const N: usize>(bytes: &[u8]) -> heapless::String<N> {
