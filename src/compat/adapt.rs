@@ -1,86 +1,46 @@
-/// Adapter that converts any `embedded_io::Write` into a `core::fmt::Write`.
-pub struct CoreWriteAdapter<W>(pub W);
+use core::fmt;
 
-impl<W> core::fmt::Write for CoreWriteAdapter<W>
-where
-    W: embedded_io::Write,
-{
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        // Delegate to `embedded_io::Write::write_all`
-        self.0.write_all(s.as_bytes()).map_err(|_| core::fmt::Error)
-    }
-}
-
-impl<W> core::fmt::Debug for CoreWriteAdapter<W>
-where
-    W: embedded_io::Write,
-{
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("CoreWriteAdapter").finish()
-    }
-}
-
-pub struct AddrFmtAdapter<T> {
+pub struct FmtWriteAdapter<T> {
     inner: T,
 }
 
-impl<T> AddrFmtAdapter<T> {
+impl<T> FmtWriteAdapter<T> {
     pub fn new(inner: T) -> Self {
         Self { inner }
+    }
+
+    pub fn into_inner(self) -> T {
+        self.inner
     }
 }
 
 #[cfg(feature = "ehal_1_0")]
-impl<T> core::fmt::Write for AddrFmtAdapter<T>
+impl<T> fmt::Write for FmtWriteAdapter<T>
 where
     T: embedded_io::Write,
 {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for byte in s.as_bytes() {
-            self.inner.write(&[*byte]).map_err(|_| core::fmt::Error)?;
-        }
-        Ok(())
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.inner.write_all(s.as_bytes()).map_err(|_| fmt::Error)
     }
 }
 
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
-impl<T> core::fmt::Write for AddrFmtAdapter<T>
+impl<T> fmt::Write for FmtWriteAdapter<T>
 where
     T: embedded_hal_0_2::serial::Write<u8>,
 {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for byte in s.as_bytes() {
-            nb::block!(self.inner.write(*byte)).map_err(|_| fmt::Error)?;
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for b in s.bytes() {
+            nb::block!(self.inner.write(b)).map_err(|_| fmt::Error)?;
         }
         Ok(())
     }
 }
 
-use core::fmt;
-
-pub struct SerialErrorWrapper<E> {
-    pub error: E,
-}
+pub struct SerialErrorWrapper<E>(pub E);
 
 impl<E: fmt::Debug> fmt::Display for SerialErrorWrapper<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HAL error: {:?}", self.error)
-    }
-}
-
-pub struct SerialAdapter<T> {
-    inner: T,
-}
-
-impl<T> SerialAdapter<T>
-where
-    T: embedded_io::Write,
-{
-    pub fn write_bytes(&mut self, buf: &[u8]) -> Result<usize, T::Error> {
-        self.inner.write(buf)
-    }
-
-    pub fn flush(&mut self) -> Result<(), T::Error> {
-        self.inner.flush()
+        write!(f, "HAL error: {:?}", self.0)
     }
 }
