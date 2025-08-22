@@ -1,11 +1,8 @@
 //! Scanner utilities for I2C bus device discovery and analysis.
 //!
 //! This module provides functions to scan the I2C bus for connected devices,
-//! optionally testing with control bytes or initialization command sequences,
-//! with detailed logging support.
+//! optionally testing with control bytes or initialization command sequences.
 
-use crate::log;
-use crate::logger::Logger;
 use heapless::Vec;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
@@ -14,20 +11,18 @@ pub const I2C_SCAN_ADDR_END: u8 = 0x77;
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 pub mod ehal_0_2 {
     use crate::define_scanner;
-
     define_scanner!(
         crate::compat::I2cCompat,
-        crate::logger::Logger
+        core::fmt::Write,
     );
 }
 
 #[cfg(feature = "ehal_1_0")]
 pub mod ehal_1_0 {
     use crate::define_scanner;
-    
     define_scanner!(
         crate::compat::I2cCompat,
-        crate::logger::Logger
+        core::fmt::Write,
     );
 }
 
@@ -39,11 +34,20 @@ pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
 
 #[macro_export]
 macro_rules! define_scanner {
-    ($i2c_trait:path, $logger_trait:path) => {
+    ($name:ident, $i2c:ty, $serial:ty) => {
         use $crate::error::{ErrorKind, I2cError};
         use $crate::compat::HalErrorExt;
-        use $crate::log;
-        use heapless::Vec;
+        
+        pub struct $name<'a> {
+            i2c: &'a mut $i2c,
+            serial: &'a mut $serial,
+        }
+
+        impl<'a> $name<'a> {
+            pub fn new(i2c: &'a mut $i2c, serial: &'a mut $serial) -> Self {
+                Self { i2c, serial }
+            }
+        }
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
         ///
         /// This function probes each possible I2C device address by attempting to
@@ -53,34 +57,33 @@ macro_rules! define_scanner {
         /// # Arguments
         ///
         /// * `i2c` - Mutable reference to an I2C interface implementing the `write` method.
-        /// * `logger` - Mutable reference to a logger implementing the [`Logger`] trait.
+        /// * `serial` - Mutable reference to a serial implementing the [`serial`] trait.
         ///
         /// # Example
         ///
         /// ```ignore
         /// use embedded_hal::i2c::I2c;
-        /// use dvcdbg::logger::SerialLogger;
         /// use dvcdbg::scanner::scan_i2c;
         ///
         /// let mut i2c = /* your i2c interface */;
-        /// let mut logger = SerialLogger::new(/* serial */);
+        /// let mut serial = SerialLogger::new(/* serial */);
         ///
-        /// scan_i2c(&mut i2c, &mut logger);
+        /// scan_i2c(&mut i2c, &mut serial);
         /// ```
-        pub fn scan_i2c<I2C, L>(i2c: &mut I2C, logger: &mut L)
+        pub fn scan_i2c<I2C, S>(i2c: &mut I2C, serial: &mut S)
         where
             I2C: $i2c_trait,
-            L: $logger_trait,
+            S: core::fmt::Write,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            log!(logger, "[scan] Scanning I2C bus...");
-            if let Ok(found_addrs) = internal_scan(i2c, logger, &[]) {
+            writeln!(serial, "[scan] Scanning I2C bus...").ok();
+            if let Ok(found_addrs) = internal_scan(i2c, serial, &[]) {
                 if !found_addrs.is_empty() {
                     let addrs_str: heapless::String<640> = super::bytes_to_hex_str(&found_addrs);
-                    log!(logger, "[ok] Found devices at: {}", addrs_str);
+                    writeln!(serial, "[ok] Found devices at: {}", addrs_str).ok();
                 }
             }
-            log!(logger, "[info] I2C scan complete.");
+            writeln!(serial, "[info] I2C scan complete.").ok();
         }
 
         /// Scan the I2C bus for devices by sending specified control bytes.
@@ -107,25 +110,25 @@ macro_rules! define_scanner {
         ///
         /// scan_i2c_with_ctrl(&mut i2c, &mut logger, &[0x00]);
         /// ```
-        pub fn scan_i2c_with_ctrl<I2C, L>(
+        pub fn scan_i2c_with_ctrl<I2C, S>(
             i2c: &mut I2C,
-            logger: &mut L,
+            serial: &mut S,
             control_bytes: &[u8],
         ) where
             I2C: $i2c_trait,
-            L: $logger_trait,
+            S: core::fmt::Write,,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
             let s: heapless::String<256> = super::bytes_to_hex_str(control_bytes);
-            log!(logger, "[scan] Scanning I2C bus with control bytes: {}", s);
+            writeln!(serial, "[scan] Scanning I2C bus with control bytes: {}", s).ok();
 
-            if let Ok(found_addrs) = internal_scan(i2c, logger, control_bytes) {
+            if let Ok(found_addrs) = internal_scan(i2c, serial, control_bytes) {
                 if !found_addrs.is_empty() {
                     let addrs_str: heapless::String<640> = super::bytes_to_hex_str(&found_addrs);
-                    log!(logger, "[ok] Found devices at: {}", addrs_str);
+                    writeln!(serial, "[ok] Found devices at: {}", addrs_str).ok();
                 }
             }
-            log!(logger, "[info] I2C scan complete.");
+            writeln!(serial, "[info] I2C scan complete.").ok();
         }
 
         /// Scan the I2C bus using an initialization sequence of commands.
@@ -157,49 +160,49 @@ macro_rules! define_scanner {
         /// let init_sequence: [u8; 3] = [0xAE, 0xA1, 0xAF]; // example init cmds
         /// scan_init_sequence(&mut i2c, &mut logger, &init_sequence);
         /// ```
-        pub fn scan_init_sequence<I2C, L>(
+        pub fn scan_init_sequence<I2C, S>(
             i2c: &mut I2C,
-            logger: &mut L,
+            serial: &mut S,
             init_sequence: &[u8],
         ) where
             I2C: $i2c_trait,
-            L: $logger_trait,
+            S: core::fmt::Write,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
             let s: heapless::String<256> = super::bytes_to_hex_str(init_sequence);
-            log!(logger, "[scan] Scanning I2C bus with init sequence: {}", s);
+            writeln!(serial, "[scan] Scanning I2C bus with init sequence: {}", s).ok();
 
             let mut detected_cmds: Vec<u8, 64> = Vec::new();
             for &cmd in init_sequence {
-                match internal_scan(i2c, logger, &[0x00, cmd]) {
+                match internal_scan(i2c, serial, &[0x00, cmd]) {
                     Ok(found_addrs) => {
                         if !found_addrs.is_empty() {
                             for addr in found_addrs {
-                                log!(logger, "[ok] Found device at 0x{:02X} responding to 0x{:02X}", addr, cmd);
+                                writeln!(serial, "[ok] Found device at 0x{:02X} responding to 0x{:02X}", addr, cmd).ok();
                             }
                             if detected_cmds.push(cmd).is_err() {
-                                log!(logger, "[warn] Detected commands buffer is full, results may be incomplete!");
+                                writeln!(serial, "[warn] Detected commands buffer is full, results may be incomplete!").ok();
                             }
                         }
                     }
                     Err(e) => {
-                        log!(logger, "[error] scan failed for 0x{:02X}: {:?}", cmd, e);
+                        writeln!(serial, "[error] scan failed for 0x{:02X}: {:?}", cmd, e).ok();
                     }
                 }
             }
 
-            super::log_differences(logger, init_sequence, &detected_cmds);
-            log!(logger, "[info] I2C scan with init sequence complete.");
+            super::log_differences(serial, init_sequence, &detected_cmds);
+            writeln!(serial, "[info] I2C scan with init sequence complete.").ok();
         }
 
-        fn internal_scan<I2C, L>(
+        fn internal_scan<I2C, S>(
             i2c: &mut I2C,
-            logger: &mut L,
+            serial: &mut S,
             data: &[u8],
         ) -> Result<Vec<u8, 128>, ErrorKind>
         where
             I2C: $i2c_trait,
-            L: $logger_trait,
+            S: core::fmt::Write,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
             let mut found_devices: Vec<u8, 128> = Vec::new();
@@ -229,7 +232,7 @@ macro_rules! define_scanner {
                                 err_str.truncate(cap.saturating_sub(3));
                                 let _ = err_str.push_str("...");
                             }
-                            log!(logger, "[error] write failed at 0x{:02X}: {}", addr, err_str);
+                            writeln!(serial, "[error] write failed at 0x{:02X}: {}", addr, err_str).ok();
                             return Err(e_kind);
                         }
                     }
@@ -242,30 +245,27 @@ macro_rules! define_scanner {
     }
 }
 
-fn log_differences<L>(logger: &mut L, expected: &[u8], detected: &Vec<u8, 64>)
-where
-    L: Logger,
-{
+fn log_differences<S: core::fmt::Write>(serial: &mut S, expected: &[u8], detected: &Vec<u8, 64>) {
     let expected_str = bytes_to_hex_str::<384>(expected);
-    log!(logger, "Expected sequence: {}", expected_str);
+    writeln!(serial, "Expected sequence: {}", expected_str).ok();
     let detected_str = bytes_to_hex_str::<384>(detected.as_slice());
-    log!(logger, "Commands with response: {}", detected_str);
+    writeln!(serial, "Commands with response: {}", detected_str).ok();
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
     let mut missing_cmds: Vec<u8, 64> = Vec::new();
     for cmd in expected.iter().copied().filter(|c| sorted.binary_search(c).is_err()) {
         if missing_cmds.push(cmd).is_err() {
-            log!(
-                logger,
+            writeln!(
+                serial,
                 "[warn] Missing commands buffer is full, list is truncated."
-            );
+            ).ok();
             break;
         }
     }
 
     let missing_cmds_str = bytes_to_hex_str::<384>(missing_cmds.as_slice());
-    log!(logger, "Commands with no response: {}", missing_cmds_str);
+    writeln!(serial, "Commands with no response: {}", missing_cmds_str).ok();
 }
 
 fn bytes_to_hex_str<const N: usize>(bytes: &[u8]) -> heapless::String<N> {
