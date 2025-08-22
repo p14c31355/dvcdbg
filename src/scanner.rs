@@ -77,7 +77,7 @@ macro_rules! define_scanner {
             if let Ok(found_addrs) = internal_scan(i2c, logger, &[]) {
                 if !found_addrs.is_empty() {
                     use core::fmt::Write;
-                    let mut addrs_str = heapless::String::<384>::new();
+                    let mut addrs_str = heapless::String::<640>::new();
                     for addr in found_addrs {
                         if write!(addrs_str, "0x{:02X} ", addr).is_err() {
                             let _ = addrs_str.push_str("...");
