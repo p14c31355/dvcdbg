@@ -69,3 +69,33 @@ pub enum BufferError {
     Overflow,
     Underflow,
 }
+
+use core::fmt;
+
+impl fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ErrorKind::Uart(UartError::Framing) => f.write_str("UartFraming"),
+            ErrorKind::Uart(UartError::Parity) => f.write_str("UartParity"),
+            ErrorKind::Uart(UartError::Overrun) => f.write_str("UartOverrun"),
+            ErrorKind::Uart(UartError::Underrun) => f.write_str("UartUnderrun"),
+            ErrorKind::Uart(UartError::Timeout) => f.write_str("UartTimeout"),
+            ErrorKind::I2c(I2cError::Nack) => f.write_str("NACK"),
+            ErrorKind::I2c(I2cError::ArbitrationLost) => f.write_str("Arbitration_Lost"),
+            ErrorKind::I2c(I2cError::Bus) => f.write_str("Bus_Error"),
+            ErrorKind::Spi(SpiError::ModeFault) => f.write_str("Mode_Fault"),
+            ErrorKind::Gpio(GpioError::InvalidState) => f.write_str("Invalid_State"),
+            ErrorKind::Adc(AdcError::OutOfRange) => f.write_str("Out_Of_Range"),
+            ErrorKind::Hardware(HardwareError::Power) => f.write_str("Power_Fault"),
+            ErrorKind::Hardware(HardwareError::Peripheral) => f.write_str("Peripheral_Fault"),
+            ErrorKind::Hardware(HardwareError::ShortCircuit) => f.write_str("Short_Circuit"),
+            ErrorKind::Hardware(HardwareError::OpenCircuit) => f.write_str("Open_Circuit"),
+            ErrorKind::Buffer(BufferError::Overflow) => f.write_str("Buffer_Overflow"),
+            ErrorKind::Buffer(BufferError::Underflow) => f.write_str("Buffer_Underflow"),
+            ErrorKind::InvalidConfig => f.write_str("Invalid_Config"),
+            ErrorKind::Unknown => f.write_str("Unknown"),
+            ErrorKind::Other => f.write_str("OTHER"),
+            _ => f.write_str("..."),
+        }
+    }
+}
