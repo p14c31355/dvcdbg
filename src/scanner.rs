@@ -11,21 +11,13 @@ pub const I2C_SCAN_ADDR_END: u8 = 0x77;
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 pub mod ehal_0_2 {
     use crate::define_scanner;
-    use heapless::Vec;
-    define_scanner!(
-        crate::compat::I2cCompat,
-        core::fmt::Write
-    );
+    define_scanner!(crate::compat::I2cCompat);
 }
 
 #[cfg(feature = "ehal_1_0")]
 pub mod ehal_1_0 {
     use crate::define_scanner;
-    use heapless::Vec;
-    define_scanner!(
-        crate::compat::I2cCompat,
-        core::fmt::Write
-    );
+        define_scanner!(crate::compat::I2cCompat);
 }
 
 #[cfg(feature = "ehal_1_0")]
@@ -37,6 +29,7 @@ pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
 #[macro_export]
 macro_rules! define_scanner {
     ($i2c_trait:path) => {
+        use heapless::Vec;
         use $crate::error::{ErrorKind, I2cError};
         use $crate::compat::HalErrorExt;
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
@@ -48,8 +41,7 @@ macro_rules! define_scanner {
         /// # Arguments
         ///
         /// * `i2c` - Mutable reference to an I2C interface implementing the `write` method.
-        /// * `serial` - Mutable reference to a serial implementing the [`serial`] trait.
-        ///
+        /// * `serial` - Mutable reference to a type implementing [`core::fmt::Write`].
         /// # Example
         ///
         /// ```ignore
@@ -86,7 +78,7 @@ macro_rules! define_scanner {
         /// # Arguments
         ///
         /// * `i2c` - Mutable reference to an I2C interface implementing the `write` method.
-        /// * `serial` - Mutable reference to a serial implementing the [`serial`] trait.
+        /// * `serial` - Mutable reference to a type implementing [`core::fmt::Write`].
         /// * `control_bytes` - Slice of bytes to send when probing each device.
         ///
         /// # Example
@@ -134,7 +126,7 @@ macro_rules! define_scanner {
         /// # Arguments
         ///
         /// * `i2c` - Mutable reference to an I2C interface implementing the `write` method.
-        /// * `serial` - Mutable reference to a serial implementing the [`serial`] trait.
+        /// * `serial` - Mutable reference to a type implementing [`core::fmt::Write`].
         /// * `init_sequence` - Slice of initialization commands to test.
         ///
         /// # Example
