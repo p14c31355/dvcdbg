@@ -225,6 +225,8 @@ macro_rules! define_scanner {
                             };
                             if write_result.is_err() {
                                 // If the write failed (e.g., buffer full), indicate truncation
+                                let cap = err_str.capacity();
+                                err_str.truncate(cap.saturating_sub(3));
                                 let _ = err_str.push_str("...");
                             }
                             log!(logger, "[error] write failed at 0x{:02X}: {}", addr, err_str);
