@@ -121,7 +121,7 @@ macro_rules! define_scanner {
 
             if let Ok(found_addrs) = internal_scan(i2c, logger, control_bytes) {
                 if !found_addrs.is_empty() {
-                    let addrs_str: heapless::String<384> = super::bytes_to_hex_str(&found_addrs);
+                    let addrs_str: heapless::String<640> = super::bytes_to_hex_str(&found_addrs);
                     log!(logger, "[ok] Found devices at: {}", addrs_str);
                 }
             }
