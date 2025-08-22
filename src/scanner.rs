@@ -144,7 +144,7 @@ macro_rules! define_scanner {
         /// use dvcdbg::scanner::scan_init_sequence;
         ///
         /// let mut i2c = /* your i2c interface */;
-        /// let mut serial = (/* serial */);
+        /// let mut serial = /* your type implementing core::fmt::Write */;
         ///
         /// let init_sequence: [u8; 3] = [0xAE, 0xA1, 0xAF]; // example init cmds
         /// scan_init_sequence(&mut i2c, &mut serial, &init_sequence);
