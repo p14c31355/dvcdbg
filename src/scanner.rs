@@ -76,15 +76,8 @@ macro_rules! define_scanner {
             log!(logger, "[scan] Scanning I2C bus...");
             if let Ok(found_addrs) = internal_scan(i2c, logger, &[]) {
                 if !found_addrs.is_empty() {
-                    use core::fmt::Write;
-                    let mut addrs_str = heapless::String::<640>::new();
-                    for addr in found_addrs {
-                        if write!(addrs_str, "0x{:02X} ", addr).is_err() {
-                            let _ = addrs_str.push_str("...");
-                            break;
-                        }
-                    }
-                    log!(logger, "[ok] Found devices at: {}", addrs_str.trim_end());
+                    let addrs_str: heapless::String<640> = super::bytes_to_hex_str(&found_addrs);
+                    log!(logger, "[ok] Found devices at: {}", addrs_str);
                 }
             }
             log!(logger, "[info] I2C scan complete.");
