@@ -301,8 +301,11 @@ fn bytes_to_hex_str<const N: usize>(bytes: &[u8]) -> heapless::String<N> {
     for &b in bytes {
         if write!(&mut s, "0x{b:02X} ").is_err() {
             let _ = s.push_str("...");
-            break;
+            return s;
         }
+    }
+    if !s.is_empty() {
+        s.pop(); // Remove trailing space
     }
     s
 }
