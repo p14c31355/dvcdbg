@@ -1,4 +1,4 @@
-//! serial_compat.rs
+//! src/compat/serial_compat.rs
 use core::fmt::Debug;
 use embedded_io;
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]

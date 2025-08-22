@@ -1,3 +1,4 @@
+//! src/compat/i2c_compat.rs
 use core::fmt::Debug;
 
 /// common I2C trait

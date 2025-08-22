@@ -1,3 +1,4 @@
+//! src/compat/adapt.rs
 use core::fmt;
 
 pub struct FmtWriteAdapter<T> {
