@@ -95,7 +95,6 @@ impl fmt::Display for ErrorKind {
             ErrorKind::InvalidConfig => f.write_str("Invalid_Config"),
             ErrorKind::Unknown => f.write_str("Unknown"),
             ErrorKind::Other => f.write_str("OTHER"),
-            _ => f.write_str("..."),
         }
     }
 }
