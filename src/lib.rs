@@ -2,11 +2,8 @@
 
 //! # dvcdbg
 //!
-//! Lightweight logging and diagnostic utilities for embedded Rust.
+//! Lightweight diagnostic utilities for embedded Rust.
 //! Compatible with `no_std` and multiple HAL backends.
-
-#[cfg(feature = "logger")]
-pub mod logger;
 
 #[cfg(feature = "scanner")]
 pub mod scanner;

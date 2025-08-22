@@ -2,9 +2,9 @@
   <h1>dvcdbg</h1>
 </div>
 
-> 🛠️ Lightweight logging & debugging crate for embedded Rust (no_std friendly)
+> 🛠️ Lightweight debugging crate for embedded Rust (no_std friendly)
 
-`dvcdbg` is a lightweight, `no_std`-friendly logging and debugging library for embedded Rust. It is designed to simplify the initial setup and bring-up of new hardware by providing a convenient set of diagnostic tools.
+`dvcdbg` is a lightweight, `no_std`-friendly debugging library for embedded Rust. It is designed to simplify the initial setup and bring-up of new hardware by providing a convenient set of diagnostic tools.
 
 ---
 
@@ -17,9 +17,7 @@
   - Hex dump (`write_hex!`)
   - Execution cycle measurement (`measure_cycles!`)
 - ✅ Quick diagnostic workflow with `quick_diag!`
-- ✅ Serial logger abstraction for various HALs
 - ✅ Feature flags allow selective compilation:
-  - `logger` → logging utilities
   - `scanner` → I2C scanning utilities
   - `macros` → helper macros (`adapt_serial!`, `quick_diag!`, etc.)
 
@@ -28,7 +26,7 @@
 ## 📦 Quickstart
 
 ```sh
-cargo add dvcdbg --no-default-features --features "logger,macros,ehal_0_2"
+cargo add dvcdbg --no-default-features --features "macros,ehal_0_2"
 ```
 
 ---
@@ -48,10 +46,10 @@ cargo add dvcdbg --no-default-features --features "logger,macros,ehal_0_2"
     Log an assertion failure without panicking.
 
 - **Diagnostics**
-  - `scan_i2c!(i2c, logger)`  
+  - `scan_i2c(i2c, serial)`  
     Scan I²C bus and log found devices.
-  - `quick_diag!(logger, i2c, timer [, { expr }])`  
-    Run a quick diagnostic workflow: serial check, I²C scan, optional cycle measurement.
+  - `quick_diag!(serial, i2c, timer [, { expr }])`  
+    Run a quick diagnostic workflow: serial check, I2C scan, optional cycle measurement.
 
 - **Timing & Control**
   - `measure_cycles!(expr, timer)`  

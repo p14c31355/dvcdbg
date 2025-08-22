@@ -12,13 +12,12 @@ The crate uses **Cargo features** to enable different functionality and HAL vers
 
 | Feature      | Description                                      |
 | ------------ | ------------------------------------------------ |
-| `logger`     | Enables logging support via serial adapters      |
 | `scanner`    | Enables I2C scanner utilities                    |
 | `macros`     | Enables macros like `adapt_serial!`              |
 | `ehal_0_2`   | Use `embedded-hal` 0.2.x                         |
 | `ehal_1_0`   | Use `embedded-hal` 1.0.x                         |
 
-**Default features**: `logger, scanner, macros, ehal_1_0`
+**Default features**: `scanner, macros, ehal_1_0`
 
 > To switch HAL versions, disable the default and explicitly enable:
 >
@@ -26,7 +25,7 @@ The crate uses **Cargo features** to enable different functionality and HAL vers
 > [dependencies.dvcdbg]
 > version = "x.y.z"
 > default-features = false
-> features = ["ehal_0_2", "logger", "scanner", "macros"]
+> features = ["ehal_0_2", "scanner", "macros"]
 > ```
 
 ---
@@ -55,10 +54,10 @@ fn main() -> ! {
 
     let serial = arduino_hal::default_serial!(dp, pins, 57600);
 
-    let mut logger = UnoSerial(serial);
+    let mut monitor = UnoSerial(serial);
 
-    writeln!(logger, "Hello from dvcdbg on Arduino Uno!").unwrap();
-    logger.write_all(&[0xDE, 0xAD, 0xBE, 0xEF]).unwrap();
+    writeln!(monitor, "Hello from dvcdbg on Arduino Uno!").unwrap();
+    monitor.write_all(&[0xDE, 0xAD, 0xBE, 0xEF]).unwrap();
 
     loop {}
 }
@@ -113,6 +112,6 @@ uart.write_all(&[0xAA, 0xBB]).unwrap();
 A: `adapt_serial!` automatically switches between them depending on the feature flag. Users don't need to worry about it.
 
 **Q: Can I specify multiple features?**
-A: Only enable one HAL, either `ehal_0_2` or `ehal_1_0`. Other `logger` / `scanner` / `macros` can be combined.
+A: Only enable one HAL, either `ehal_0_2` or `ehal_1_0`. Other `scanner` / `macros` can be combined.
 
 ---

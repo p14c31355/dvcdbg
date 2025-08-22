@@ -169,19 +169,6 @@ macro_rules! assert_log {
     };
 }
 
-/// Scans I2C bus for devices and logs found addresses.
-///
-/// # Example
-/// ```ignore
-/// scan_i2c!(i2c, logger);
-/// ```
-#[macro_export]
-macro_rules! scan_i2c {
-    ($i2c:expr, $logger:expr) => {{
-        $crate::scanner::scan_i2c($i2c, $logger);
-    }};
-}
-
 /// Quick diagnostic workflow for a new board.
 ///
 /// Automatically performs:
@@ -219,6 +206,6 @@ macro_rules! quick_diag {
         let _ = core::writeln!($serial, "=== Quick Diagnostic Start ===");
         // I2C bus scan
         let _ = core::writeln!($serial, "Scanning I2C bus...");
-        $crate::scan_i2c!($i2c, $serial);
+        $crate::scanner::scan_i2c($i2c, $serial);
     };
 }
