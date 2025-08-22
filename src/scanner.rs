@@ -135,14 +135,8 @@ macro_rules! define_scanner {
 
             if let Ok(found_addrs) = internal_scan(i2c, logger, control_bytes) {
                 if !found_addrs.is_empty() {
-                    let mut addrs_str = heapless::String::<384>::new();
-                    for addr in found_addrs {
-                        if write!(addrs_str, "0x{:02X} ", addr).is_err() {
-                            let _ = addrs_str.push_str("...");
-                            break;
-                        }
-                    }
-                    log!(logger, "[ok] Found devices at: {}", addrs_str.trim_end());
+                    let addrs_str: heapless::String<384> = super::bytes_to_hex_str(&found_addrs);
+                    log!(logger, "[ok] Found devices at: {}", addrs_str);
                 }
             }
             log!(logger, "[info] I2C scan complete.");
@@ -186,15 +180,8 @@ macro_rules! define_scanner {
             L: $logger_trait,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            use core::fmt::Write;
-            let mut s = heapless::String::<256>::new();
-            for &cmd in init_sequence {
-                if write!(s, "0x{:02X} ", cmd).is_err() {
-                    let _ = s.push_str("...");
-                    break;
-                }
-            }
-            log!(logger, "[scan] Scanning I2C bus with init sequence: {}", s.trim_end());
+            let s: heapless::String<256> = super::bytes_to_hex_str(init_sequence);
+            log!(logger, "[scan] Scanning I2C bus with init sequence: {}", s);
 
             let mut detected_cmds: Vec<u8, 64> = Vec::new();
             for &cmd in init_sequence {
