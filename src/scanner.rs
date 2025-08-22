@@ -96,7 +96,7 @@ macro_rules! define_scanner {
         /// use dvcdbg::scanner::scan_i2c_with_ctrl;
         ///
         /// let mut i2c = /* your i2c interface */;
-        /// let mut serial = (/* serial */);
+        /// let mut serial = /* your type implementing core::fmt::Write */;
         ///
         /// scan_i2c_with_ctrl(&mut i2c, &mut serial, &[0x00]);
         /// ```
