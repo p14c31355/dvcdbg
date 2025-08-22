@@ -263,13 +263,11 @@ where
 }
 
 fn bytes_to_hex_str<const N: usize>(bytes: &[u8]) -> heapless::String<N> {
-    use core::fmt::Write;
+    
     let mut s = heapless::String::<N>::new();
-    for &b in bytes {
-        if write!(&mut s, "0x{b:02X} ").is_err() {
-            let _ = s.push_str("...");
-            return s;
-        }
+    for &_b in bytes {
+        s.truncate(s.capacity().saturating_sub(3));
+        let _ = s.push_str("...");
     }
     if !s.is_empty() {
         s.pop(); // Remove trailing space
