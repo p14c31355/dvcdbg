@@ -7,9 +7,9 @@ pub struct FmtWriteAdapter<T: SerialCompat> {
     pub last_error: Option<T::Error>,
 }
 
-impl<T> FmtWriteAdapter<T: SerialCompat> {
+impl<T: SerialCompat> FmtWriteAdapter<T> {
     pub fn new(inner: T) -> Self {
-        Self { inner }
+        Self { inner, last_error: None }
     }
 
     pub fn into_inner(self) -> T {
@@ -21,28 +21,11 @@ impl<T> FmtWriteAdapter<T: SerialCompat> {
     }
 }
 
-#[cfg(feature = "ehal_1_0")]
-impl<T: SerialCompat> fmt::Write for FmtWriteAdapter<T>
-where
-    T: embedded_io::Write,
-{
+impl<T: SerialCompat> fmt::Write for FmtWriteAdapter<T> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        if let Err(e) = self.into_inner().write(s.as_bytes()) {
-            self.take_last_error() -> Some(e);
+        if let Err(e) = self.inner.write(s.as_bytes()) {
+            self.last_error = Some(e);
             return Err(fmt::Error);
-        }
-        Ok(())
-    }
-}
-
-#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
-impl<T> fmt::Write for FmtWriteAdapter<T>
-where
-    T: embedded_hal_0_2::serial::Write<u8>,
-{
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        for b in s.bytes() {
-            nb::block!(self.inner.write(b)).map_err(|_| fmt::Error)?;
         }
         Ok(())
     }
