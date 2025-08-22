@@ -198,22 +198,7 @@ macro_rules! define_scanner {
                         if e_kind == ErrorKind::I2c(I2cError::Nack) {
                             continue;
                         } else {
-                            use core::fmt::Write;
-
-                            let mut err_str = heapless::String::<64>::new();
-                            let write_result = match e_kind {
-                                ErrorKind::I2c(I2cError::ArbitrationLost) => write!(&mut err_str, "ArbitrationLost"),
-                                ErrorKind::I2c(I2cError::Bus) => write!(&mut err_str, "BusError"),
-                                ErrorKind::Other => write!(&mut err_str, "Other"),
-                                _ => write!(&mut err_str, "{:?}", e_kind),
-                            };
-                            if write_result.is_err() {
-                                // If the write failed (e.g., buffer full), indicate truncation
-                                let cap = err_str.capacity();
-                                err_str.truncate(cap.saturating_sub(3));
-                                let _ = err_str.push_str("...");
-                            }
-                            let _ = writeln!(serial, "[error] write failed at 0x{:02X}: {}", addr, err_str);
+                            let _ = writeln!(serial, "[error] write failed at 0x{:02X}: {}", addr, e_kind);
                             return Err(e_kind);
                         }
                     }
