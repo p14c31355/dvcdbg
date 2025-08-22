@@ -116,15 +116,8 @@ macro_rules! define_scanner {
             L: $logger_trait,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            use core::fmt::Write;
-            let mut s = heapless::String::<256>::new();
-            for &b in control_bytes {
-                if write!(s, "0x{:02X} ", b).is_err() {
-                    let _ = s.push_str("...");
-                    break;
-                }
-            }
-            log!(logger, "[scan] Scanning I2C bus with control bytes: {}", s.trim_end());
+            let s: heapless::String<256> = super::bytes_to_hex_str(control_bytes);
+            log!(logger, "[scan] Scanning I2C bus with control bytes: {}", s);
 
             if let Ok(found_addrs) = internal_scan(i2c, logger, control_bytes) {
                 if !found_addrs.is_empty() {
