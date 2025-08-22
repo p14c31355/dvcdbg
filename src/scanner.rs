@@ -133,13 +133,16 @@ macro_rules! define_scanner {
             }
             log!(logger, "[scan] Scanning I2C bus with control bytes: {}", s.trim_end());
 
-            if let Ok(found_addrs) = internal_scan(i2c, logger, control_bytes) {
-                    if write!(addrs_str, "0x{:02X} ", addr).is_err() {
-                        let _ = addrs_str.push_str("...");
-                        break;
+                            if !found_addrs.is_empty() {
+                    let mut addrs_str = heapless::String::<384>::new();
+                    for addr in found_addrs {
+                        if write!(addrs_str, "0x{:02X} ", addr).is_err() {
+                            let _ = addrs_str.push_str("...");
+                            break;
+                        }
                     }
                     log!(logger, "[ok] Found devices at: {}", addrs_str.trim_end());
-            }
+                }
             log!(logger, "[info] I2C scan complete.");
         }
 
@@ -279,9 +282,12 @@ where
         }
     }
     log!(logger, "Expected sequence: {}", s.trim_end());
-    if write!(s, "0x{b:02X} ").is_err() {
-        let _ = s.push_str("...");
-        break;
+        s.clear();
+    for &b in detected.as_slice() {
+        if write!(s, "0x{b:02X} ").is_err() {
+            let _ = s.push_str("...");
+            break;
+        }
     }
     log!(logger, "Commands with response: {}", s.trim_end());
 
@@ -298,9 +304,12 @@ where
         }
     }
 
-    if write!(s, "0x{b:02X} ").is_err() {
-        let _ = s.push_str("...");
-        break;
+        s.clear();
+    for &b in missing_cmds.as_slice() {
+        if write!(s, "0x{b:02X} ").is_err() {
+            let _ = s.push_str("...");
+            break;
+        }
     }
     log!(logger, "Commands with no response: {}", s.trim_end());
 }
