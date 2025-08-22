@@ -75,8 +75,9 @@ macro_rules! define_scanner {
         {
             log!(logger, "[scan] Scanning I2C bus...");
             if let Ok(found_addrs) = internal_scan(i2c, logger, &[]) {
-                for addr in found_addrs {
-                    log!(logger, "[ok] Found device at 0x{:02X}", addr);
+                if !found_addrs.is_empty() {
+                    let addrs_str: heapless::String<640> = super::bytes_to_hex_str(&found_addrs);
+                    log!(logger, "[ok] Found devices at: {}", addrs_str);
                 }
             }
             log!(logger, "[info] I2C scan complete.");
@@ -115,10 +116,13 @@ macro_rules! define_scanner {
             L: $logger_trait,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            log!(logger, "[scan] Scanning I2C bus with control bytes: {:?}", control_bytes);
+            let s: heapless::String<256> = super::bytes_to_hex_str(control_bytes);
+            log!(logger, "[scan] Scanning I2C bus with control bytes: {}", s);
+
             if let Ok(found_addrs) = internal_scan(i2c, logger, control_bytes) {
-                for addr in found_addrs {
-                    log!(logger, "[ok] Found device at 0x{:02X}", addr);
+                if !found_addrs.is_empty() {
+                    let addrs_str: heapless::String<640> = super::bytes_to_hex_str(&found_addrs);
+                    log!(logger, "[ok] Found devices at: {}", addrs_str);
                 }
             }
             log!(logger, "[info] I2C scan complete.");
@@ -162,9 +166,10 @@ macro_rules! define_scanner {
             L: $logger_trait,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            log!(logger, "[scan] Scanning I2C bus with init sequence: {:02X?}", init_sequence);
-            let mut detected_cmds: Vec<u8, 64> = Vec::new();
+            let s: heapless::String<256> = super::bytes_to_hex_str(init_sequence);
+            log!(logger, "[scan] Scanning I2C bus with init sequence: {}", s);
 
+            let mut detected_cmds: Vec<u8, 64> = Vec::new();
             for &cmd in init_sequence {
                 match internal_scan(i2c, logger, &[0x00, cmd]) {
                     Ok(found_addrs) => {
@@ -209,7 +214,22 @@ macro_rules! define_scanner {
                         if e_kind == ErrorKind::I2c(I2cError::Nack) {
                             continue;
                         } else {
-                            log!(logger, "[error] write failed at 0x{:02X}: {:?}", addr, e_kind);
+                            use core::fmt::Write;
+
+                            let mut err_str = heapless::String::<64>::new();
+                            let write_result = match e_kind {
+                                ErrorKind::I2c(I2cError::ArbitrationLost) => write!(&mut err_str, "ArbitrationLost"),
+                                ErrorKind::I2c(I2cError::Bus) => write!(&mut err_str, "BusError"),
+                                ErrorKind::Other => write!(&mut err_str, "Other"),
+                                _ => write!(&mut err_str, "{:?}", e_kind),
+                            };
+                            if write_result.is_err() {
+                                // If the write failed (e.g., buffer full), indicate truncation
+                                let cap = err_str.capacity();
+                                err_str.truncate(cap.saturating_sub(3));
+                                let _ = err_str.push_str("...");
+                            }
+                            log!(logger, "[error] write failed at 0x{:02X}: {}", addr, err_str);
                             return Err(e_kind);
                         }
                     }
@@ -218,6 +238,7 @@ macro_rules! define_scanner {
 
             Ok(found_devices)
         }
+
     }
 }
 
@@ -225,21 +246,15 @@ fn log_differences<L>(logger: &mut L, expected: &[u8], detected: &Vec<u8, 64>)
 where
     L: Logger,
 {
-    log!(logger, "Expected sequence: {:02X?}", expected);
-    log!(
-        logger,
-        "Commands with response: {:02X?}",
-        detected.as_slice()
-    );
+    let expected_str = bytes_to_hex_str::<384>(expected);
+    log!(logger, "Expected sequence: {}", expected_str);
+    let detected_str = bytes_to_hex_str::<384>(detected.as_slice());
+    log!(logger, "Commands with response: {}", detected_str);
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
     let mut missing_cmds: Vec<u8, 64> = Vec::new();
-    for cmd in expected
-        .iter()
-        .copied()
-        .filter(|c| sorted.binary_search(c).is_err())
-    {
+    for cmd in expected.iter().copied().filter(|c| sorted.binary_search(c).is_err()) {
         if missing_cmds.push(cmd).is_err() {
             log!(
                 logger,
@@ -248,9 +263,26 @@ where
             break;
         }
     }
-    log!(
-        logger,
-        "Commands with no response: {:02X?}",
-        missing_cmds.as_slice()
-    );
+
+    let missing_cmds_str = bytes_to_hex_str::<384>(missing_cmds.as_slice());
+    log!(logger, "Commands with no response: {}", missing_cmds_str);
+}
+
+fn bytes_to_hex_str<const N: usize>(bytes: &[u8]) -> heapless::String<N> {
+    use core::fmt::Write;
+    let mut s = heapless::String::<N>::new();
+    for &b in bytes {
+        if write!(&mut s, "0x{:02X} ", b).is_err() {
+            // Buffer is full, truncate to fit "..."
+            let cap = s.capacity();
+            s.truncate(cap.saturating_sub(3));
+            let _ = s.push_str("...");
+            break;
+        }
+    }
+
+    if !s.is_empty() && s.ends_with(' ') {
+        s.pop(); // Remove trailing space
+    }
+    s
 }
