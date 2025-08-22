@@ -133,7 +133,8 @@ macro_rules! define_scanner {
             }
             log!(logger, "[scan] Scanning I2C bus with control bytes: {}", s.trim_end());
 
-                            if !found_addrs.is_empty() {
+            if let Ok(found_addrs) = internal_scan(i2c, logger, control_bytes) {
+                if !found_addrs.is_empty() {
                     let mut addrs_str = heapless::String::<384>::new();
                     for addr in found_addrs {
                         if write!(addrs_str, "0x{:02X} ", addr).is_err() {
@@ -143,6 +144,7 @@ macro_rules! define_scanner {
                     }
                     log!(logger, "[ok] Found devices at: {}", addrs_str.trim_end());
                 }
+            }
             log!(logger, "[info] I2C scan complete.");
         }
 
