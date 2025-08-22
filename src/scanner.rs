@@ -17,7 +17,7 @@ pub mod ehal_0_2 {
 #[cfg(feature = "ehal_1_0")]
 pub mod ehal_1_0 {
     use crate::define_scanner;
-        define_scanner!(crate::compat::I2cCompat);
+    define_scanner!(crate::compat::I2cCompat);
 }
 
 #[cfg(feature = "ehal_1_0")]
