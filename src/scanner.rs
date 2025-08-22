@@ -264,8 +264,8 @@ where
         }
     }
 
-    s = bytes_to_hex_str::<384>(missing_cmds.as_slice());
-    log!(logger, "Commands with no response: {}", s);
+    let missing_cmds_str = bytes_to_hex_str::<384>(missing_cmds.as_slice());
+    log!(logger, "Commands with no response: {}", missing_cmds_str);
 }
 
 fn bytes_to_hex_str<const N: usize>(bytes: &[u8]) -> heapless::String<N> {
