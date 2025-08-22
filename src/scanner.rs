@@ -217,12 +217,16 @@ macro_rules! define_scanner {
                             use core::fmt::Write;
 
                             let mut err_str = heapless::String::<64>::new();
-                            let _ = match e_kind {
-                                ErrorKind::I2c(I2cError::ArbitrationLost) => err_str.push_str("ArbitrationLost"),
-                                ErrorKind::I2c(I2cError::Bus) => err_str.push_str("BusError"),
-                                ErrorKind::Other => err_str.push_str("Other"),
-                                _ => write!(err_str, "{:?}", e_kind),
+                            let write_result = match e_kind {
+                                ErrorKind::I2c(I2cError::ArbitrationLost) => write!(&mut err_str, "ArbitrationLost"),
+                                ErrorKind::I2c(I2cError::Bus) => write!(&mut err_str, "BusError"),
+                                ErrorKind::Other => write!(&mut err_str, "Other"),
+                                _ => write!(&mut err_str, "{:?}", e_kind),
                             };
+                            if write_result.is_err() {
+                                // If the write failed (e.g., buffer full), indicate truncation
+                                let _ = err_str.push_str("...");
+                            }
                             log!(logger, "[error] write failed at 0x{:02X}: {}", addr, err_str);
                             return Err(e_kind);
                         }
