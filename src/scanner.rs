@@ -240,23 +240,10 @@ fn log_differences<L>(logger: &mut L, expected: &[u8], detected: &Vec<u8, 64>)
 where
     L: Logger,
 {
-    use core::fmt::Write;
-    let mut s = heapless::String::<384>::new();
-    for &b in expected {
-        if write!(s, "0x{b:02X} ").is_err() {
-            let _ = s.push_str("...");
-            break;
-        }
-    }
-    log!(logger, "Expected sequence: {}", s.trim_end());
-    s.clear();
-    for &b in detected.as_slice() {
-        if write!(s, "0x{b:02X} ").is_err() {
-            let _ = s.push_str("...");
-            break;
-        }
-    }
-    log!(logger, "Commands with response: {}", s.trim_end());
+    let mut s = bytes_to_hex_str::<384>(expected);
+    log!(logger, "Expected sequence: {}", s);
+    s = bytes_to_hex_str::<384>(detected.as_slice());
+    log!(logger, "Commands with response: {}", s);
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
@@ -271,14 +258,8 @@ where
         }
     }
 
-    s.clear();
-    for &b in missing_cmds.as_slice() {
-        if write!(s, "0x{b:02X} ").is_err() {
-            let _ = s.push_str("...");
-            break;
-        }
-    }
-    log!(logger, "Commands with no response: {}", s.trim_end());
+    s = bytes_to_hex_str::<384>(missing_cmds.as_slice());
+    log!(logger, "Commands with no response: {}", s);
 }
 
 fn bytes_to_hex_str<const N: usize>(bytes: &[u8]) -> heapless::String<N> {
