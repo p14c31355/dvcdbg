@@ -10,8 +10,6 @@ use core::fmt::Write;
 use crate::error::*;
 
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
-use embedded_hal_0_2::blocking::i2c as i2c_0_2;
-#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 use heapless::String;
 
 #[cfg(feature = "ehal_1_0")]

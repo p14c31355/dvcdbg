@@ -9,6 +9,12 @@ use crate::write_hex;
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
 
+pub enum LogLevel {
+    Quiet,
+    Verbose,
+    None,
+}
+
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 pub mod ehal_0_2 {
     use crate::define_scanner;
@@ -62,7 +68,7 @@ macro_rules! define_scanner {
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
             let _ = writeln!(serial, "[scan] Scanning I2C bus...");
-            if let Ok(found_addrs) = internal_scan(i2c, serial, &[]) {
+            if let Ok(found_addrs) = internal_scan(i2c, serial, &[], $crate::scanner::LogLevel::Quiet) {
                 if !found_addrs.is_empty() {
                     let _ = write!(serial, "[ok] Found devices at: ");
                     write_hex!(serial, &found_addrs);
@@ -107,7 +113,7 @@ macro_rules! define_scanner {
             let _ = write!(serial, "[scan] Scanning I2C bus with control bytes: ");
             write_hex!(serial, control_bytes);
             let _ = writeln!(serial);
-            if let Ok(found_addrs) = internal_scan(i2c, serial, control_bytes) {
+            if let Ok(found_addrs) = internal_scan(i2c, serial, control_bytes, $crate::scanner::LogLevel::None) {
                 if !found_addrs.is_empty() {
                     let _ = write!(serial, "[ok] Found devices at: ");
                     write_hex!(serial, &found_addrs);
@@ -160,7 +166,7 @@ macro_rules! define_scanner {
 
             let mut detected_cmds: Vec<u8, 64> = Vec::new();
             for &cmd in init_sequence {
-                match internal_scan(i2c, serial, &[0x00, cmd]) {
+                match internal_scan(i2c, serial, &[0x00, cmd], $crate::scanner::LogLevel::Quiet) {
                     Ok(found_addrs) => {
                         if !found_addrs.is_empty() {
                             for addr in found_addrs {
@@ -185,6 +191,7 @@ macro_rules! define_scanner {
             i2c: &mut I2C,
             serial: &mut W,
             data: &[u8],
+            log_level: $crate::scanner::LogLevel,
         ) -> Result<Vec<u8, 128>, ErrorKind>
         where
             I2C: $i2c_trait,
@@ -196,23 +203,16 @@ macro_rules! define_scanner {
 
             for addr in super::I2C_SCAN_ADDR_START..=super::I2C_SCAN_ADDR_END {
                 match i2c.write(addr, data) {
-                    Ok(_) => {
-                        let _ = found_devices.push(addr);
-                    }
+                    Ok(_) => { let _ = found_devices.push(addr); }
                     Err(e) => {
                         let e_kind = e.to_compat(Some(addr));
                         if e_kind == ErrorKind::I2c(I2cError::Nack) {
                             continue;
-                        } else {
-                            // logging and continue
-                            let _ = writeln!(
-                                serial,
-                                "[error] write failed at 0x{:02X}: {}",
-                                addr, e_kind
-                            );
-                            last_error = Some(e_kind);
-                            continue;
                         }
+                        if let $crate::scanner::LogLevel::Verbose = log_level {
+                            let _ = writeln!(serial, "[error] write failed at 0x{:02X}: {}", addr, e_kind);
+                        }
+                        last_error = Some(e_kind);
                     }
                 }
             }
@@ -227,7 +227,6 @@ macro_rules! define_scanner {
                 Ok(found_devices)
             }
         }
-
     }
 }
 
