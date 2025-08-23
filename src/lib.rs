@@ -10,6 +10,6 @@ pub mod scanner;
 #[macro_use]
 pub mod macros;
 
-pub mod prelude;
 pub mod compat;
 pub mod error;
+pub mod prelude;

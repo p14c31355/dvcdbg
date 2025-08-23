@@ -241,11 +241,7 @@ macro_rules! define_scanner {
     }
 }
 
-fn log_differences<W: core::fmt::Write>(
-    serial: &mut W,
-    expected: &[u8],
-    detected: &Vec<u8, 64>
-) {
+fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detected: &Vec<u8, 64>) {
     let _ = writeln!(serial, "Expected sequence:");
     for b in expected {
         let _ = writeln!(serial, " 0x{:02X}", b);
@@ -261,7 +257,11 @@ fn log_differences<W: core::fmt::Write>(
     let mut sorted = detected.clone();
     sorted.sort_unstable();
     let mut missing_cmds: Vec<u8, 64> = Vec::new();
-    for cmd in expected.iter().copied().filter(|c| sorted.binary_search(c).is_err()) {
+    for cmd in expected
+        .iter()
+        .copied()
+        .filter(|c| sorted.binary_search(c).is_err())
+    {
         if missing_cmds.push(cmd).is_err() {
             let _ = writeln!(
                 serial,
