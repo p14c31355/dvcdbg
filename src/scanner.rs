@@ -68,9 +68,9 @@ macro_rules! define_scanner {
             let _ = writeln!(serial, "[scan] Scanning I2C bus...");
             if let Ok(found_addrs) = internal_scan(i2c, serial, &[], $crate::scanner::LogLevel::Quiet) {
                 if !found_addrs.is_empty() {
-                    let _ = write!(serial, "[ok] Found devices at:");
+                    let _ = writeln!(serial, "[ok] Found devices at:");
                     for addr in &found_addrs {
-                        let _ = write!(serial, " 0x{:02X}", addr);
+                        let _ = writeln!(serial, " 0x{:02X}", addr);
                     }
                     let _ = writeln!(serial);
                 }
@@ -110,16 +110,16 @@ macro_rules! define_scanner {
             W: core::fmt::Write,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            let _ = write!(serial, "[scan] Scanning I2C bus with control bytes:");
+            let _ = writeln!(serial, "[scan] Scanning I2C bus with control bytes:");
             for b in control_bytes {
-                let _ = write!(serial, " 0x{:02X}", b);
+                let _ = writeln!(serial, " 0x{:02X}", b);
             }
             let _ = writeln!(serial);
             if let Ok(found_addrs) = internal_scan(i2c, serial, control_bytes, $crate::scanner::LogLevel::None) {
                 if !found_addrs.is_empty() {
-                    let _ = write!(serial, "[ok] Found devices at:");
+                    let _ = writeln!(serial, "[ok] Found devices at:");
                     for addr in &found_addrs {
-                        let _ = write!(serial, " 0x{:02X}", addr);
+                        let _ = writeln!(serial, " 0x{:02X}", addr);
                     }
                     let _ = writeln!(serial);
                 }
@@ -164,9 +164,9 @@ macro_rules! define_scanner {
             W: core::fmt::Write,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            let _ = write!(serial, "[scan] Scanning I2C bus with init sequence:");
+            let _ = writeln!(serial, "[scan] Scanning I2C bus with init sequence:");
             for b in init_sequence {
-                let _ = write!(serial, " 0x{:02X}", b);
+                let _ = writeln!(serial, " 0x{:02X}", b);
             }
             let _ = writeln!(serial);
 
@@ -246,15 +246,15 @@ fn log_differences<W: core::fmt::Write>(
     expected: &[u8],
     detected: &Vec<u8, 64>
 ) {
-    let _ = write!(serial, "Expected sequence:");
+    let _ = writeln!(serial, "Expected sequence:");
     for b in expected {
-        let _ = write!(serial, " 0x{:02X}", b);
+        let _ = writeln!(serial, " 0x{:02X}", b);
     }
     let _ = writeln!(serial);
 
-    let _ = write!(serial, "Commands with response:");
+    let _ = writeln!(serial, "Commands with response:");
     for b in detected {
-        let _ = write!(serial, " 0x{:02X}", b);
+        let _ = writeln!(serial, " 0x{:02X}", b);
     }
     let _ = writeln!(serial);
 
@@ -271,9 +271,9 @@ fn log_differences<W: core::fmt::Write>(
         }
     }
 
-    let _ = write!(serial, "Commands with no response:");
+    let _ = writeln!(serial, "Commands with no response:");
     for b in &missing_cmds {
-        let _ = write!(serial, " 0x{:02X}", b);
+        let _ = writeln!(serial, " 0x{:02X}", b);
     }
     let _ = writeln!(serial);
 }

@@ -74,10 +74,8 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                // Now that the adapter implements `embedded_io::Write`, we can use `write_all`.
-                for b in s.bytes() {
-                    self.0.write(&[b]).map_err(|_| core::fmt::Error)?;
-                }
+                self.0.write(s.as_bytes()).map_err(|_| core::fmt::Error)?;
+                self.0.flush().map_err(|_| core::fmt::Error)?;
                 Ok(())
             }
         }
