@@ -1,6 +1,8 @@
 //! src/compat/adapt.rs
 use core::fmt;
 use crate::compat::serial_compat::SerialCompat;
+use crate::compat::err_compat::HalErrorExt;
+use crate::error::ErrorKind;
 
 pub struct FmtWriteAdapter<T: SerialCompat> {
     inner: T,
@@ -19,6 +21,13 @@ impl<T: SerialCompat> FmtWriteAdapter<T> {
     pub fn take_last_error(&mut self) -> Option<T::Error> {
         self.last_error.take()
     }
+
+    pub fn take_last_error_kind(&mut self) -> Option<ErrorKind>
+    where
+        T::Error: HalErrorExt,
+    {
+        self.last_error.take().map(|e| e.to_compat(None))
+    }
 }
 
 impl<T: SerialCompat> fmt::Write for FmtWriteAdapter<T> {
@@ -28,13 +37,5 @@ impl<T: SerialCompat> fmt::Write for FmtWriteAdapter<T> {
             return Err(fmt::Error);
         }
         Ok(())
-    }
-}
-
-pub struct SerialErrorWrapper<E>(pub E);
-
-impl<E: fmt::Debug> fmt::Display for SerialErrorWrapper<E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HAL error: {:?}", self.0)
     }
 }
