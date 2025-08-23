@@ -80,10 +80,6 @@ where
         nb::block!(embedded_hal_0_2::serial::Write::flush(self)).map_err(CompatErr)?;
         Ok(())
     }
-
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        self.write(s.as_bytes()).map_err(|_| core::fmt::Error)
-    }
 }
 
 #[cfg(test)]
