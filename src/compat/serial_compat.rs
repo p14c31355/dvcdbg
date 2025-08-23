@@ -1,6 +1,8 @@
 //! src/compat/serial_compat.rs
 use core::fmt::Debug;
 use embedded_io;
+#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
+use nb;
 /// ### Differ bus injection with blanket (SELF RESPONSIBILITY)
 /// ```ignore
 /// use dvcdbg::prelude::*;
@@ -40,6 +42,8 @@ impl<E: Debug> embedded_io::Error for CompatErr<E> {
     }
 }
 
+// ========== ehal 1.0 ==========
+#[cfg(feature = "ehal_1_0")]
 impl<S> SerialCompat for SerialEio<S>
 where
     S: UartLike,
@@ -56,11 +60,27 @@ where
     }
 }
 
-impl<S> core::fmt::Write for SerialEio<S>
+// ========== ehal 0.2.x ==========
+#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
+impl<S> SerialCompat for S
 where
-    S: UartLike,
-    <S as embedded_io::ErrorType>::Error: Debug,
+    S: embedded_hal_0_2::serial::Write<u8>,
+    <S as embedded_hal_0_2::serial::Write<u8>>::Error: Debug,
 {
+    type Error = CompatErr<<S as embedded_hal_0_2::serial::Write<u8>>::Error>;
+
+    fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        for byte in buf {
+            nb::block!(embedded_hal_0_2::serial::Write::write(self, *byte)).map_err(CompatErr)?;
+        }
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        nb::block!(embedded_hal_0_2::serial::Write::flush(self)).map_err(CompatErr)?;
+        Ok(())
+    }
+
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         self.write(s.as_bytes()).map_err(|_| core::fmt::Error)
     }

@@ -16,6 +16,7 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-io",
  "heapless",
+ "nb 1.1.0",
 ]
 
 [[package]]
