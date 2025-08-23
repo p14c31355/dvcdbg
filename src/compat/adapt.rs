@@ -20,7 +20,7 @@ use crate::error::ErrorKind;
 /// # use dvcdbg::compat::serial_compat::SerialCompat;
 /// # struct DummySerial;
 /// # impl SerialCompat for DummySerial {
-/// #     type Error = ();
+/// #     type Error = core::convert::Infallible;
 /// #     fn write(&mut self, _buf: &[u8]) -> Result<(), Self::Error> { Ok(()) }
 /// #     fn flush(&mut self) -> Result<(), Self::Error> { Ok(()) }
 /// # }
