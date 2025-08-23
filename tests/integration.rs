@@ -18,7 +18,7 @@ impl core::fmt::Write for DummySerial {
 }
 
 struct DummyI2c;
-impl dvcdbg::compat::I2cCompat for DummyI2c {
+impl I2cCompat for DummyI2c {
     type Error = core::convert::Infallible;
 
     fn write(&mut self, _addr: u8, _bytes: &[u8]) -> Result<(), Self::Error> { Ok(()) }
