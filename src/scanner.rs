@@ -192,6 +192,7 @@ macro_rules! define_scanner {
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
             let mut found_devices: Vec<u8, 128> = Vec::new();
+            let mut last_error: Option<ErrorKind> = None;
 
             for addr in super::I2C_SCAN_ADDR_START..=super::I2C_SCAN_ADDR_END {
                 match i2c.write(addr, data) {
@@ -203,14 +204,28 @@ macro_rules! define_scanner {
                         if e_kind == ErrorKind::I2c(I2cError::Nack) {
                             continue;
                         } else {
-                            let _ = writeln!(serial, "[error] write failed at 0x{:02X}: {}", addr, e_kind);
-                            return Err(e_kind);
+                            // logging and continue
+                            let _ = writeln!(
+                                serial,
+                                "[error] write failed at 0x{:02X}: {}",
+                                addr, e_kind
+                            );
+                            last_error = Some(e_kind);
+                            continue;
                         }
                     }
                 }
             }
 
-            Ok(found_devices)
+            if found_devices.is_empty() {
+                if let Some(e) = last_error {
+                    Err(e)
+                } else {
+                    Ok(found_devices)
+                }
+            } else {
+                Ok(found_devices)
+            }
         }
 
     }
