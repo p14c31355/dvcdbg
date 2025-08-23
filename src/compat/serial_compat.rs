@@ -10,7 +10,7 @@ use nb;
 /// struct MyUart;
 /// impl embedded_io::Write for MyUart {
 ///    type Error = core::convert::Infallible;
-///    fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> { Ok(()) }
+///    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> { Ok(buf.len()) }
 ///    fn flush(&mut self) -> Result<(), Self::Error> { Ok(()) }
 /// }
 ///
