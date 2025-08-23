@@ -75,8 +75,10 @@ macro_rules! adapt_serial {
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 // Now that the adapter implements `embedded_io::Write`, we can use `write_all`.
-                use embedded_io::Write;
-                self.write_all(s.as_bytes()).map_err(|_| core::fmt::Error)
+                for b in s.bytes() {
+                    self.0.write(&[b]).map_err(|_| core::fmt::Error)?;
+                }
+                Ok(())
             }
         }
     };
