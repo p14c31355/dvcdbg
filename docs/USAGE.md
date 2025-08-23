@@ -8,16 +8,14 @@
 
 ## 1. Feature Flags
 
-The crate uses **Cargo features** to enable different functionality and HAL versions.
+The crate uses **Cargo features** to enable different HAL versions.
 
 | Feature      | Description                                      |
 | ------------ | ------------------------------------------------ |
-| `scanner`    | Enables I2C scanner utilities                    |
-| `macros`     | Enables macros like `adapt_serial!`              |
 | `ehal_0_2`   | Use `embedded-hal` 0.2.x                         |
 | `ehal_1_0`   | Use `embedded-hal` 1.0.x                         |
 
-**Default features**: `scanner, macros, ehal_1_0`
+**Default features**: `ehal_1_0`
 
 > To switch HAL versions, disable the default and explicitly enable:
 >
@@ -25,7 +23,7 @@ The crate uses **Cargo features** to enable different functionality and HAL vers
 > [dependencies.dvcdbg]
 > version = "x.y.z"
 > default-features = false
-> features = ["ehal_0_2", "scanner", "macros"]
+> features = ["ehal_0_2"]
 > ```
 
 ---
@@ -112,6 +110,6 @@ uart.write_all(&[0xAA, 0xBB]).unwrap();
 A: `adapt_serial!` automatically switches between them depending on the feature flag. Users don't need to worry about it.
 
 **Q: Can I specify multiple features?**
-A: Only enable one HAL, either `ehal_0_2` or `ehal_1_0`. Other `scanner` / `macros` can be combined.
+A: Only enable one HAL, either `ehal_0_2` or `ehal_1_0`.
 
 ---
