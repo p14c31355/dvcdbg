@@ -1,5 +1,6 @@
 use dvcdbg::prelude::*;
 use dvcdbg::compat::{SerialCompat, I2cCompat};
+use core::fmt::Write;
 
 // -----------------------------
 // Dummy implementations
@@ -7,16 +8,22 @@ use dvcdbg::compat::{SerialCompat, I2cCompat};
 struct DummySerial;
 impl SerialCompat for DummySerial {
     type Error = core::convert::Infallible;
+
     fn write(&mut self, _buf: &[u8]) -> Result<(), Self::Error> { Ok(()) }
     fn flush(&mut self) -> Result<(), Self::Error> { Ok(()) }
 }
 
+impl core::fmt::Write for DummySerial {
+    fn write_str(&mut self, _s: &str) -> core::fmt::Result { Ok(()) }
+}
+
 struct DummyI2c;
-impl I2cCompat for DummyI2c {
+impl dvcdbg::compat::I2cCompat for DummyI2c {
     type Error = core::convert::Infallible;
-    fn write(&mut self, _addr: u8, _buf: &[u8]) -> Result<(), Self::Error> { Ok(()) }
-    fn read(&mut self, _addr: u8, _buf: &mut [u8]) -> Result<(), Self::Error> { Ok(()) }
-    fn write_read(&mut self, _addr: u8, _buf: &[u8], _out: &mut [u8]) -> Result<(), Self::Error> { Ok(()) }
+
+    fn write(&mut self, _addr: u8, _bytes: &[u8]) -> Result<(), Self::Error> { Ok(()) }
+    fn read(&mut self, _addr: u8, _buffer: &mut [u8]) -> Result<(), Self::Error> { Ok(()) }
+    fn write_read(&mut self, _addr: u8, _bytes: &[u8], _buffer: &mut [u8]) -> Result<(), Self::Error> { Ok(()) }
 }
 
 // -----------------------------
@@ -36,11 +43,14 @@ fn test_full_stack() {
     assert!(i2c.read(0x42, &mut buf).is_ok());
     assert!(i2c.write_read(0x42, &[1,2], &mut buf).is_ok());
 
-    scan_i2c(&mut i2c, &mut DummySerial);
+    scan_i2c(&mut i2c, &mut serial);
 
-    assert_log!(serial, "test log macro");
-    quick_diag!(serial, "dummy diag");
+    assert_log!(false, &mut serial, "test log macro");
 
-    write_bin!(serial, b"\x00\xFF").unwrap();
-    write_hex!(serial, b"\xAA\xBB").unwrap();
+    assert_log!(true, &mut serial, "this won't log");
+
+    quick_diag!(&mut serial, &mut i2c);
+
+    write_bin!(&mut serial, &[0x00, 0xFF]);
+    write_hex!(&mut serial, &[0xAA, 0xBB]);
 }
