@@ -81,3 +81,75 @@ where
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ===== 1.0 Dummy UART =====
+    #[cfg(feature = "ehal_1_0")]
+    mod ehal_1_0_tests {
+        use super::*;
+
+        #[derive(Debug)]
+        struct DummyUart;
+
+        impl embedded_io::ErrorType for DummyUart {
+            type Error = core::convert::Infallible;
+        }
+
+        impl embedded_io::Write for DummyUart {
+            fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
+        }
+
+        impl UartLike for DummyUart {}
+
+        #[test]
+        fn test_serial_write_1_0() {
+            let mut serial = SerialEio(DummyUart);
+            let data = b"hello";
+
+            assert!(serial.write(data).is_ok());
+            assert!(serial.flush().is_ok());
+        }
+    }
+
+    // ===== 0.2 Dummy UART =====
+    #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
+    mod ehal_0_2_tests {
+        use super::*;
+        use embedded_hal_0_2::serial::Write as HalWrite;
+        use nb;
+
+        #[derive(Debug)]
+        struct DummyUart;
+
+        impl HalWrite<u8> for DummyUart {
+            type Error = core::convert::Infallible;
+
+            fn write(&mut self, _word: u8) -> nb::Result<(), Self::Error> {
+                Ok(())
+            }
+
+            fn flush(&mut self) -> nb::Result<(), Self::Error> {
+                Ok(())
+            }
+        }
+
+        #[test]
+        fn test_serial_write_0_2() {
+            let mut uart = DummyUart;
+            let buf = b"hello";
+
+            for &b in buf {
+                assert!(nb::block!(uart.write(b)).is_ok());
+            }
+            assert!(nb::block!(uart.flush()).is_ok());
+        }
+    }
+}
