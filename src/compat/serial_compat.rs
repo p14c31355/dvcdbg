@@ -3,6 +3,26 @@ use core::fmt::Debug;
 use embedded_io;
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 use nb;
+/// ### Differ bus injection with blanket (SELF RESPONSIBILITY)
+/// ```ignore
+/// use dvcdbg::prelude::*;
+///
+/// struct MyUart;
+/// impl embedded_io::Write for MyUart {
+///    type Error = core::convert::Infallible;
+///    fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> { Ok(()) }
+///    fn flush(&mut self) -> Result<(), Self::Error> { Ok(()) }
+/// }
+///
+/// impl UartLike for MyUart {}
+///
+/// let mut serial = SerialEio(MyUart);
+/// serial.write(b"hello")?;
+///```
+pub trait UartLike: embedded_io::Write {}
+
+#[derive(Debug)]
+pub struct SerialEio<S: UartLike>(pub S);
 
 /// common Serial Write trait
 /// The `write` method is now slice-oriented.
@@ -24,19 +44,19 @@ impl<E: Debug> embedded_io::Error for CompatErr<E> {
 
 // ========== ehal 1.0 ==========
 #[cfg(feature = "ehal_1_0")]
-impl<S> SerialCompat for S
+impl<S> SerialCompat for SerialEio<S>
 where
-    S: embedded_io::Write,
+    S: UartLike,
     <S as embedded_io::ErrorType>::Error: Debug,
 {
     type Error = <S as embedded_io::ErrorType>::Error;
 
     fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        embedded_io::Write::write_all(self, buf)
+        embedded_io::Write::write_all(&mut self.0, buf)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        embedded_io::Write::flush(self)
+        embedded_io::Write::flush(&mut self.0)
     }
 }
 
