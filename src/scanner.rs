@@ -4,6 +4,7 @@
 //! optionally testing with control bytes or initialization command sequences.
 
 use heapless::Vec;
+use crate::write_hex;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -32,6 +33,7 @@ macro_rules! define_scanner {
         use heapless::Vec;
         use $crate::error::{ErrorKind, I2cError};
         use $crate::compat::HalErrorExt;
+        use $crate::write_hex;
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
         ///
         /// This function probes each possible I2C device address by attempting to
@@ -62,8 +64,9 @@ macro_rules! define_scanner {
             let _ = writeln!(serial, "[scan] Scanning I2C bus...");
             if let Ok(found_addrs) = internal_scan(i2c, serial, &[]) {
                 if !found_addrs.is_empty() {
-                    let addrs_str: heapless::String<640> = super::bytes_to_hex_str(&found_addrs);
-                    let _ = writeln!(serial, "[ok] Found devices at: {}", addrs_str);
+                    let _ = write!(serial, "[ok] Found devices at: ");
+                    write_hex!(serial, &found_addrs);
+                    let _ = writeln!(serial);
                 }
             }
             let _ = writeln!(serial, "[info] I2C scan complete.");
@@ -101,13 +104,14 @@ macro_rules! define_scanner {
             W: core::fmt::Write,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            let s: heapless::String<256> = super::bytes_to_hex_str(control_bytes);
-            let _ = writeln!(serial, "[scan] Scanning I2C bus with control bytes: {}", s);
-
+            let _ = write!(serial, "[scan] Scanning I2C bus with control bytes: ");
+            write_hex!(serial, control_bytes);
+            let _ = writeln!(serial);
             if let Ok(found_addrs) = internal_scan(i2c, serial, control_bytes) {
                 if !found_addrs.is_empty() {
-                    let addrs_str: heapless::String<640> = super::bytes_to_hex_str(&found_addrs);
-                    let _ = writeln!(serial, "[ok] Found devices at: {}", addrs_str);
+                    let _ = write!(serial, "[ok] Found devices at: ");
+                    write_hex!(serial, &found_addrs);
+                    let _ = writeln!(serial);
                 }
             }
             let _ = writeln!(serial, "[info] I2C scan complete.");
@@ -150,8 +154,9 @@ macro_rules! define_scanner {
             W: core::fmt::Write,
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
-            let s: heapless::String<256> = super::bytes_to_hex_str(init_sequence);
-            let _ = writeln!(serial, "[scan] Scanning I2C bus with init sequence: {}", s);
+            let _ = write!(serial, "[scan] Scanning I2C bus with init sequence: ");
+            write_hex!(serial, init_sequence);
+            let _ = writeln!(serial);
 
             let mut detected_cmds: Vec<u8, 64> = Vec::new();
             for &cmd in init_sequence {
@@ -198,22 +203,7 @@ macro_rules! define_scanner {
                         if e_kind == ErrorKind::I2c(I2cError::Nack) {
                             continue;
                         } else {
-                            use core::fmt::Write;
-
-                            let mut err_str = heapless::String::<64>::new();
-                            let write_result = match e_kind {
-                                ErrorKind::I2c(I2cError::ArbitrationLost) => write!(&mut err_str, "ArbitrationLost"),
-                                ErrorKind::I2c(I2cError::Bus) => write!(&mut err_str, "BusError"),
-                                ErrorKind::Other => write!(&mut err_str, "Other"),
-                                _ => write!(&mut err_str, "{:?}", e_kind),
-                            };
-                            if write_result.is_err() {
-                                // If the write failed (e.g., buffer full), indicate truncation
-                                let cap = err_str.capacity();
-                                err_str.truncate(cap.saturating_sub(3));
-                                let _ = err_str.push_str("...");
-                            }
-                            let _ = writeln!(serial, "[error] write failed at 0x{:02X}: {}", addr, err_str);
+                            let _ = writeln!(serial, "[error] write failed at 0x{:02X}: {}", addr, e_kind);
                             return Err(e_kind);
                         }
                     }
@@ -227,10 +217,12 @@ macro_rules! define_scanner {
 }
 
 fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detected: &Vec<u8, 64>) {
-    let expected_str = bytes_to_hex_str::<384>(expected);
-    let _ = writeln!(serial, "Expected sequence: {expected_str}");
-    let detected_str = bytes_to_hex_str::<384>(detected.as_slice());
-    let _ = writeln!(serial, "Commands with response: {detected_str}");
+    let _ = write!(serial, "Expected sequence: ");
+    write_hex!(serial, expected);
+    let _ = writeln!(serial);
+    let _ = write!(serial, "Commands with response: ");
+    write_hex!(serial, detected.as_slice());
+    let _ = writeln!(serial);
 
     let mut sorted = detected.clone();
     sorted.sort_unstable();
@@ -245,25 +237,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
         }
     }
 
-    let missing_cmds_str = bytes_to_hex_str::<384>(missing_cmds.as_slice());
-    let _ = writeln!(serial, "Commands with no response: {missing_cmds_str}");
-}
-
-fn bytes_to_hex_str<const N: usize>(bytes: &[u8]) -> heapless::String<N> {
-    use core::fmt::Write;
-    let mut s = heapless::String::<N>::new();
-    for &b in bytes {
-        if write!(&mut s, "0x{b:02X} ").is_err() {
-            // Buffer is full, truncate to fit "..."
-            let cap = s.capacity();
-            s.truncate(cap.saturating_sub(3));
-            let _ = s.push_str("...");
-            break;
-        }
-    }
-
-    if !s.is_empty() && s.ends_with(' ') {
-        s.pop(); // Remove trailing space
-    }
-    s
+    let _ = write!(serial, "Commands with no response: ");
+    write_hex!(serial, missing_cmds.as_slice());
+    let _ = writeln!(serial);
 }

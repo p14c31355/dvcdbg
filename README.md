@@ -13,20 +13,17 @@
 - ✅ Works in `no_std` environments
 - ✅ Lightweight and fast, formatless logging support
 - ✅ Includes useful embedded utilities:
-  - I2C bus scanner (`scan_i2c!`)
+  - I2C bus scanner (`scan_i2c`)
   - Hex dump (`write_hex!`)
   - Execution cycle measurement (`measure_cycles!`)
 - ✅ Quick diagnostic workflow with `quick_diag!`
-- ✅ Feature flags allow selective compilation:
-  - `scanner` → I2C scanning utilities
-  - `macros` → helper macros (`adapt_serial!`, `quick_diag!`, etc.)
 
 ---
 
 ## 📦 Quickstart
 
 ```sh
-cargo add dvcdbg --no-default-features --features "macros,ehal_0_2"
+cargo add dvcdbg --no-default-features --features "ehal_0_2"
 ```
 
 ---
@@ -46,8 +43,8 @@ cargo add dvcdbg --no-default-features --features "macros,ehal_0_2"
     Log an assertion failure without panicking.
 
 - **Diagnostics**
-  - `scan_i2c(i2c, serial)`  
-    Scan I²C bus and log found devices.
+  - `scan_i2c(i2c, serial)`
+    Scan I2C bus and log found devices.
   - `quick_diag!(serial, i2c, timer [, { expr }])`  
     Run a quick diagnostic workflow: serial check, I2C scan, optional cycle measurement.
 

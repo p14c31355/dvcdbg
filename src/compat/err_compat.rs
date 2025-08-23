@@ -1,3 +1,4 @@
+//! src/compat/err_compat.rs
 //! Error compatibility layer for embedded-hal 0.2 and 1.0
 //! Provides a unified error type for logging and diagnostics in no_std
 //! HAL error compatibility wrapper
