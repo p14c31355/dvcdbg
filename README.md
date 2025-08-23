@@ -43,6 +43,8 @@ cargo add dvcdbg --no-default-features --features "ehal_0_2"
     Log an assertion failure without panicking.
 
 - **Diagnostics**
+  - `scan_i2c(i2c, serial)`
+    Scan I2C bus and log found devices.
   - `quick_diag!(serial, i2c, timer [, { expr }])`  
     Run a quick diagnostic workflow: serial check, I2C scan, optional cycle measurement.
 
