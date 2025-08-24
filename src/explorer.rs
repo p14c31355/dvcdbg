@@ -1,3 +1,36 @@
+//! # I2C Command Sequence Explorer
+//!
+//! This module provides an algorithm to discover valid sequences of I2C commands
+//! for devices with dependency constraints.
+//!
+//! ## Overview
+//! - `Explorer` holds a sequence of `CmdNode`s, each representing a command and its dependencies.
+//! - The `explore` function performs:
+//!   1. **Iterative staging**: topological sort-like process to place commands with satisfied dependencies.
+//!   2. **Permutation exploration**: non-recursive, linear-stack-based exploration of unresolved commands.
+//!
+//! ## Usage
+//! ```ignore
+//! let cmds = &[
+//!     CmdNode { cmd: 0x01, deps: &[] },
+//!     CmdNode { cmd: 0x02, deps: &[0x01] },
+//!     CmdNode { cmd: 0x03, deps: &[0x01] },
+//! ];
+//! let explorer = Explorer { sequence: cmds };
+//! explorer.explore(&mut i2c, &mut serial).unwrap();
+//! ```
+//!
+//! ## AVR / Embedded Constraints
+//! - **Stack-safe**: The permutation algorithm is iterative to avoid stack overflow on devices with tiny stacks (e.g., AVR).
+//! - **RAM Usage**: `heapless::Vec` is used for `path_stack`, `loop_start_indices`, and `current`, while `current_set` and `used` are fixed-size arrays.
+//! These consume RAM proportional to the number of unresolved commands or the `CMD_CAPACITY` constant. Limit `CMD_CAPACITY` to a safe number (e.g., 8–16) for 8-bit MCUs to manage static memory allocation.
+//! - **Performance**: Unresolved commands are explored in factorial order (`n!`). Keep unresolved command count low to avoid long execution times.
+//! - **Error Handling**: I2C write errors are logged to serial. Users should monitor logs for bus errors or NACKs.
+//!
+//! ## Notes
+//! - The algorithm ensures **dependency order is respected**.
+//! - Commands are staged and permuted only when dependencies allow.
+//! - The non-recursive approach is chosen to make the algorithm safer for small-memory MCUs.
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use heapless::Vec;
 
@@ -64,6 +97,22 @@ impl<'a> Explorer<'a> {
     /// - `Ok(())` if exploration ran to completion.
     /// - `Err(ExplorerError::TooManyCommands)` if the input sequence exceeded capacity.
     ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use your_crate::{Explorer, CmdNode};
+    ///
+    /// // Two commands: 0xA0 depends on 0x90, 0x90 has no deps.
+    /// let nodes = [
+    ///     CmdNode { cmd: 0x90, deps: &[] },
+    ///     CmdNode { cmd: 0xA0, deps: &[0x90] },
+    /// ];
+    ///
+    /// let explorer = Explorer { sequence: &nodes };
+    ///
+    /// // Dummy I2C + Serial implementations would be injected here in real use.
+    /// // explorer.explore(&mut i2c, &mut serial);
+    /// ```
     /// # Notes
     /// - This function may take a very long time if many commands remain unresolved,
     ///   since it must try permutations of them.
