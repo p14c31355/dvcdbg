@@ -269,14 +269,14 @@ impl<'a> Explorer<'a> {
         &self,
         unresolved: &Vec<usize, CMD_CAPACITY>,
         state: &mut PermutationState<CMD_CAPACITY>,
-        pop_loop_index: bool,
+        reason: BacktrackReason,
     ) -> bool {
         if let Some(last_added_pos) = state.path_stack.pop() {
             let node_cmd = self.sequence[unresolved[last_added_pos]].cmd;
             state.used[last_added_pos] = false;
             state.current_set[node_cmd as usize] = false;
             state.current.pop();
-            if pop_loop_index { state.loop_start_indices.pop(); }
+            if matches!(reason, BacktrackReason::ExhaustedOptions) { state.loop_start_indices.pop(); }
             if let Some(last_loop_idx) = state.loop_start_indices.last_mut() {
                 *last_loop_idx += 1;
             } else { return false; }
