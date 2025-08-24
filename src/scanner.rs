@@ -49,7 +49,7 @@ macro_rules! define_scanner {
         ///
         /// * `i2c` - Mutable reference to an I2C interface implementing the `write` method.
         /// * `serial` - Mutable reference to a type implementing [`core::fmt::Write`].
-        /// * `log_level` - 
+        /// * `log_level` - Controls the verbosity of the log output.
         /// # Example
         ///
         /// ```ignore
