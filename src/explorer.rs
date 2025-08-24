@@ -1,5 +1,5 @@
+use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use heapless::Vec;
-use crate::scanner::{I2C_SCAN_ADDR_START, I2C_SCAN_ADDR_END};
 
 const CMD_CAPACITY: usize = 32;
 
@@ -20,31 +20,27 @@ impl<'a> Explorer<'a> {
     {
         // iterative staging (topological sort-like)
         let mut staged: Vec<u8, CMD_CAPACITY> = Vec::new();
-        let mut remaining: Vec<usize, CMD_CAPACITY> = Vec::new();
-        for i in 0..self.sequence.len() {
-            if remaining.push(i).is_err() {
-                let _ = writeln!(serial, "error: too many commands");
-                return Err(());
-            }
+        if self.sequence.len() > CMD_CAPACITY {
+            let _ = writeln!(serial, "error: too many commands");
+            return Err(());
         }
+        let mut remaining: Vec<usize, CMD_CAPACITY> = (0..self.sequence.len()).collect();
+        let mut staged_set = [false; 256];
 
         loop {
             let before = staged.len();
-            let mut new_remaining: Vec<usize, CMD_CAPACITY> = Vec::new();
-
-            for &idx in remaining.iter() {
+            remaining.retain(|&idx| {
                 let node = &self.sequence[idx];
-                if node.deps.iter().all(|d| staged.contains(d)) {
-                    if staged.push(node.cmd).is_err() {
-                        let _ = writeln!(serial, "error: staged buffer full");
-                        return Err(());
-                    }
+                if node.deps.iter().all(|d| staged_set[*d as usize]) {
+                    // This can't fail due to the check above.
+                    staged.push(node.cmd).unwrap();
+                    staged_set[node.cmd as usize] = true;
+                    false // remove from remaining
                 } else {
-                    let _ = new_remaining.push(idx);
+                    true // keep in remaining
                 }
-            }
+            });
 
-            remaining = new_remaining;
             if staged.len() == before {
                 // No progress was made in this iteration, so we break.
                 break;
@@ -57,8 +53,18 @@ impl<'a> Explorer<'a> {
         // Now, unresolved must be permuted
         let mut current: Vec<u8, CMD_CAPACITY> = staged.clone();
         let mut used = [false; CMD_CAPACITY];
-        self.permute(i2c, serial, &remaining, &mut current, &mut used)?;
-
+        let mut current_set = [false; 256];
+        for &cmd in current.iter() {
+            current_set[cmd as usize] = true;
+        }
+        self.permute(
+            i2c,
+            serial,
+            &remaining,
+            &mut current,
+            &mut used,
+            &mut current_set,
+        )?;
         Ok(())
     }
 
@@ -69,6 +75,7 @@ impl<'a> Explorer<'a> {
         unresolved: &Vec<usize, CMD_CAPACITY>,
         current: &mut Vec<u8, CMD_CAPACITY>,
         used: &mut [bool; CMD_CAPACITY],
+        current_set: &mut [bool; 256],
     ) -> Result<(), ()>
     where
         I2C: crate::compat::I2cCompat,
@@ -80,7 +87,7 @@ impl<'a> Explorer<'a> {
             for &cmd in current.iter() {
                 for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                     if let Err(e) = i2c.write(addr, &[cmd]) {
-                      let _ = writeln!(serial, "i2c error at addr 0x{:02X}: {:?}", addr, e);
+                        let _ = writeln!(serial, "i2c error at addr 0x{:02X}: {:?}", addr, e);
                     }
                 }
             }
@@ -92,13 +99,14 @@ impl<'a> Explorer<'a> {
                 continue;
             }
             let node = &self.sequence[idx];
-            if node.deps.iter().all(|d| current.contains(d)) {
-                if current.push(node.cmd).is_err() {
-                    return Err(());
-                }
+            if node.deps.iter().all(|d| current_set[*d as usize]) {
+                // This can't fail if the initial length check is done in `explore`.
+                current.push(node.cmd).unwrap();
+                current_set[node.cmd as usize] = true;
                 used[pos] = true;
-                self.permute(i2c, serial, unresolved, current, used)?;
+                self.permute(i2c, serial, unresolved, current, used, current_set)?;
                 used[pos] = false;
+                current_set[node.cmd as usize] = false;
                 current.pop();
             }
         }
