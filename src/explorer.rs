@@ -4,6 +4,10 @@ use heapless::Vec;
 const CMD_CAPACITY: usize = 32;
 const MAX_PERMUTATION_WARNING_THRESHOLD: usize = 8;
 
+pub enum ExplorerError {
+    TooManyCommands,
+}
+
 pub struct CmdNode<'a> {
     pub cmd: u8,
     pub deps: &'a [u8],
@@ -68,11 +72,7 @@ impl<'a> Explorer<'a> {
             used: [false; CMD_CAPACITY],
             current_set: staged_set,
             path_stack: Vec::new(),
-            loop_start_indices: {
-                let mut v = Vec::new();
-                v.push(0);
-                v
-            },
+            loop_start_indices: Vec::from_slice(&[0]).unwrap(),
         };
 
         let mut solved_addrs = [false; 128];
