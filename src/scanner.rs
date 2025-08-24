@@ -8,7 +8,7 @@ use heapless::Vec;
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum LogLevel {
     Quiet,
     Verbose,
