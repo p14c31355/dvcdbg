@@ -5,19 +5,46 @@ const CMD_CAPACITY: usize = 32;
 const MAX_PERMUTATION_WARNING_THRESHOLD: usize = 8;
 const I2C_ADDRESS_COUNT: usize = 128;
 
+/// Errors that can occur during exploration of command sequences.
 pub enum ExplorerError {
+    /// The provided sequence contained more commands than supported (`CMD_CAPACITY`).
     TooManyCommands,
 }
 
+/// Represents a single I2C command in the dependency graph.
+///
+/// Each command may depend on other commands, meaning they must appear
+/// earlier in the sequence before this command can be executed.
 pub struct CmdNode<'a> {
+    /// The I2C command byte.
     pub cmd: u8,
+    /// The list of command bytes that must precede this command.
     pub deps: &'a [u8],
 }
 
+/// An explorer that attempts to discover valid I2C command sequences
+/// given a list of commands with dependencies.
+///
+/// The algorithm:
+/// - First performs a topological sort of commands with no unresolved dependencies.
+/// - Then, for the remaining commands, iteratively generates permutations
+///   that satisfy all dependency constraints.
+/// - For each candidate sequence, attempts it on all I2C addresses in the scan range.
 pub struct Explorer<'a> {
+    /// The input sequence of command nodes (with dependencies).
     pub sequence: &'a [CmdNode<'a>],
 }
 
+/// Internal state used during permutation generation.
+///
+/// This struct is not exposed publicly, but its fields are documented
+/// to aid maintainers:
+///
+/// - `current`: the sequence being built so far.
+/// - `used`: flags marking which unresolved command indices are currently in `current`.
+/// - `current_set`: boolean lookup for whether a specific command byte is in `current`.
+/// - `path_stack`: stack of indices into `unresolved`, representing the order of decisions.
+/// - `loop_start_indices`: optimization to avoid retrying candidates already attempted at each recursion depth.
 struct PermutationState<const C: usize> {
     current: Vec<u8, C>,
     used: [bool; C],
@@ -27,6 +54,20 @@ struct PermutationState<const C: usize> {
 }
 
 impl<'a> Explorer<'a> {
+    /// Explore valid I2C command sequences for the provided command graph.
+    ///
+    /// # Parameters
+    /// - `i2c`: An I2C implementation used to test candidate sequences against device addresses.
+    /// - `serial`: A serial writer for logging progress and results.
+    ///
+    /// # Returns
+    /// - `Ok(())` if exploration ran to completion.
+    /// - `Err(ExplorerError::TooManyCommands)` if the input sequence exceeded capacity.
+    ///
+    /// # Notes
+    /// - This function may take a very long time if many commands remain unresolved,
+    ///   since it must try permutations of them.
+    /// - Successfully discovered addresses are logged to the provided `serial` writer.
     pub fn explore<I2C, W>(&self, i2c: &mut I2C, serial: &mut W) -> Result<(), ExplorerError>
     where
         I2C: crate::compat::I2cCompat,
@@ -38,6 +79,7 @@ impl<'a> Explorer<'a> {
             return Err(ExplorerError::TooManyCommands);
         }
 
+        // Build initial sequence of commands with all dependencies satisfied
         let mut remaining: Vec<usize, CMD_CAPACITY> = (0..self.sequence.len()).collect();
         let mut staged_set = [false; 256];
 
@@ -125,6 +167,10 @@ impl<'a> Explorer<'a> {
         }
     }
 
+    /// Called whenever a full valid permutation has been generated.
+    ///
+    /// Attempts the sequence against all possible I2C addresses,
+    /// marking those that succeed and logging the result.
     fn handle_full_permutation<I2C, W>(
         &self,
         i2c: &mut I2C,
@@ -156,6 +202,10 @@ impl<'a> Explorer<'a> {
         }
     }
 
+    /// Attempts to extend the current partial permutation by adding
+    /// one more command that satisfies its dependencies.
+    ///
+    /// Returns `true` if a command was added, or `false` if no valid candidate was found.
     fn try_extend_permutation(
         &self,
         unresolved: &Vec<usize, CMD_CAPACITY>,
@@ -185,6 +235,14 @@ impl<'a> Explorer<'a> {
         false
     }
 
+    /// Backtracks to the previous decision point in the permutation search.
+    ///
+    /// # Parameters
+    /// - `pop_loop_index`:  
+    ///   - `true`: we failed to extend further, so discard the loop index for this depth.  
+    ///   - `false`: we found a valid full permutation, so just increment the loop index.
+    ///
+    /// Returns `true` if backtracking can continue, or `false` if the root was reached.
     fn backtrack(
         &self,
         unresolved: &Vec<usize, CMD_CAPACITY>,
