@@ -162,7 +162,7 @@ impl<'a> Explorer<'a> {
         let _ = writeln!(serial, "[explorer] unresolved: {remaining:?}");
 
         let mut current_state = PermutationState {
-            current: staged.clone(),
+            current: staged,
             used: [false; CMD_CAPACITY],
             current_set: staged_set,
             path_stack: Vec::new(),
