@@ -1,10 +1,11 @@
-//! I2C command sequence explorer for no_std
+//! I2C command sequence explorer for no_std with set-unit dependency check
 use heapless::Vec;
 use crate::scanner::{I2C_SCAN_ADDR_START, I2C_SCAN_ADDR_END};
 
 pub struct CmdNode<'a> {
     pub cmd: u8,
     pub deps: &'a [u8],
+    pub sets: &'a [&'a [u8]],
 }
 
 pub struct Explorer<'a> {
@@ -41,7 +42,11 @@ impl<'a> Explorer<'a> {
 
         let node = &self.sequence[index];
 
-        if node.deps.iter().all(|d| current_seq.contains(d)) {
+        let deps_ok = node.deps.iter().all(|d| current_seq.contains(d));
+
+        let sets_ok = node.sets.is_empty() || node.sets.iter().any(|set| set.iter().all(|s| current_seq.contains(s)));
+
+        if deps_ok && sets_ok {
             for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 let _ = i2c.write(addr, &[node.cmd]);
             }
