@@ -2,6 +2,7 @@ use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use heapless::Vec;
 
 const CMD_CAPACITY: usize = 32;
+const MAX_PERMUTATION_WARNING_THRESHOLD: usize = 8;
 
 pub struct CmdNode<'a> {
     pub cmd: u8,
@@ -50,13 +51,13 @@ impl<'a> Explorer<'a> {
             let _ = writeln!(serial, "[explorer] warning: unresolved dependencies found, possibly due to a cycle.");
         }
 
-        let _ = writeln!(serial, "[explorer] staged: {:?}", staged);
-        let _ = writeln!(serial, "[explorer] unresolved: {:?}", remaining);
+        let _ = writeln!(serial, "[explorer] staged: {staged:?}");
+        let _ = writeln!(serial, "[explorer] unresolved: {remaining:?}");
 
         // Now, unresolved must be permuted
         let mut current: Vec<u8, CMD_CAPACITY> = staged.clone();
         let mut used = [false; CMD_CAPACITY];
-        if remaining.len() > 8 {
+        if remaining.len() > MAX_PERMUTATION_WARNING_THRESHOLD {
             let _ = writeln!(serial, "[explorer] warning: Large number of unresolved commands ({}). This may take a very long time.", remaining.len());
         }
         let mut current_set = staged_set;
@@ -85,7 +86,7 @@ impl<'a> Explorer<'a> {
         W: core::fmt::Write,
     {
         if current.len() == self.sequence.len() {
-            let _ = writeln!(serial, "[explorer] candidate: {:?}", current);
+            let _ = writeln!(serial, "[explorer] candidate: {current:?}");
 
                         for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 // For each address, try the full sequence.
@@ -98,7 +99,7 @@ impl<'a> Explorer<'a> {
                 }
 
                 if all_ok {
-                    let _ = writeln!(serial, "[explorer] success: sequence {:?} works for addr 0x{:02X}", current, addr);
+                    let _ = writeln!(serial, "[explorer] success: sequence {current:?} works for addr 0x{addr:02X}");
                 }
             }
             return;
