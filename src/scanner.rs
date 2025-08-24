@@ -12,7 +12,7 @@ pub const I2C_SCAN_ADDR_END: u8 = 0x77;
 pub enum LogLevel {
     Quiet,
     Verbose,
-    Default,
+    Normal,
 }
 
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
