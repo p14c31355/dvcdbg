@@ -1,6 +1,8 @@
 use heapless::Vec;
 use crate::scanner::{I2C_SCAN_ADDR_START, I2C_SCAN_ADDR_END};
 
+const CMD_CAPACITY: usize = 32;
+
 pub struct CmdNode<'a> {
     pub cmd: u8,
     pub deps: &'a [u8],
@@ -17,8 +19,8 @@ impl<'a> Explorer<'a> {
         W: core::fmt::Write,
     {
         // iterative staging (topological sort-like)
-        let mut staged: Vec<u8, 32> = Vec::new();
-        let mut remaining: Vec<usize, 32> = Vec::new();
+        let mut staged: Vec<u8, CMD_CAPACITY> = Vec::new();
+        let mut remaining: Vec<usize, CMD_CAPACITY> = Vec::new();
         for i in 0..self.sequence.len() {
             if remaining.push(i).is_err() {
                 let _ = writeln!(serial, "error: too many commands");
@@ -28,7 +30,7 @@ impl<'a> Explorer<'a> {
 
         loop {
             let before = staged.len();
-            let mut new_remaining: Vec<usize, 32> = Vec::new();
+            let mut new_remaining: Vec<usize, CMD_CAPACITY> = Vec::new();
 
             for &idx in remaining.iter() {
                 let node = &self.sequence[idx];
@@ -42,13 +44,9 @@ impl<'a> Explorer<'a> {
                 }
             }
 
-            if new_remaining.len() == remaining.len() {
-                // no progress → unresolved commands left
-                remaining = new_remaining;
-                break;
-            }
             remaining = new_remaining;
             if staged.len() == before {
+                // No progress was made in this iteration, so we break.
                 break;
             }
         }
@@ -57,8 +55,8 @@ impl<'a> Explorer<'a> {
         let _ = writeln!(serial, "[explorer] unresolved: {:?}", remaining);
 
         // Now, unresolved must be permuted
-        let mut current: Vec<u8, 32> = staged.clone();
-        let mut used = [false; 32];
+        let mut current: Vec<u8, CMD_CAPACITY> = staged.clone();
+        let mut used = [false; CMD_CAPACITY];
         self.permute(i2c, serial, &remaining, &mut current, &mut used)?;
 
         Ok(())
@@ -68,9 +66,9 @@ impl<'a> Explorer<'a> {
         &self,
         i2c: &mut I2C,
         serial: &mut W,
-        unresolved: &Vec<usize, 32>,
-        current: &mut Vec<u8, 32>,
-        used: &mut [bool; 32],
+        unresolved: &Vec<usize, CMD_CAPACITY>,
+        current: &mut Vec<u8, CMD_CAPACITY>,
+        used: &mut [bool; CMD_CAPACITY],
     ) -> Result<(), ()>
     where
         I2C: crate::compat::I2cCompat,
@@ -82,8 +80,7 @@ impl<'a> Explorer<'a> {
             for &cmd in current.iter() {
                 for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                     if let Err(e) = i2c.write(addr, &[cmd]) {
-                        let _ = writeln!(serial, "i2c error: {:?}", e);
-                        return Err(());
+                      let _ = writeln!(serial, "i2c error at addr 0x{:02X}: {:?}", addr, e);
                     }
                 }
             }
