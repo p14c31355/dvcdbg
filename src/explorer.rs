@@ -27,7 +27,7 @@ struct PermutationState<const C: usize> {
 }
 
 impl<'a> Explorer<'a> {
-    pub fn explore<I2C, W>(&self, i2c: &mut I2C, serial: &mut W) -> Result<(), ()>
+    pub fn explore<I2C, W>(&self, i2c: &mut I2C, serial: &mut W) -> Result<(), ExplorerError>
     where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
@@ -35,7 +35,7 @@ impl<'a> Explorer<'a> {
         let mut staged: Vec<u8, CMD_CAPACITY> = Vec::new();
         if self.sequence.len() > CMD_CAPACITY {
             let _ = writeln!(serial, "error: too many commands");
-            return Err(());
+            return Err(ExplorerError::TooManyCommands);
         }
 
         let mut remaining: Vec<usize, CMD_CAPACITY> = (0..self.sequence.len()).collect();
