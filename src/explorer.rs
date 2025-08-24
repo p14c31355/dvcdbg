@@ -46,6 +46,9 @@ impl<'a> Explorer<'a> {
                 break;
             }
         }
+        if !remaining.is_empty() {
+            let _ = writeln!(serial, "[explorer] warning: unresolved dependencies found, possibly due to a cycle.");
+        }
 
         let _ = writeln!(serial, "[explorer] staged: {:?}", staged);
         let _ = writeln!(serial, "[explorer] unresolved: {:?}", remaining);
