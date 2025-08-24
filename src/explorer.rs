@@ -290,10 +290,9 @@ impl<'a> Explorer<'a> {
     }
 
     fn hex_byte<W: core::fmt::Write>(w: &mut W, b: u8) {
-        let hi = (b >> 4) & 0xF;
-        let lo = b & 0xF;
-        let hi = if hi < 10 { b'0' + hi } else { b'A' + hi - 10 };
-        let lo = if lo < 10 { b'0' + lo } else { b'A' + lo - 10 };
+        const HEX_CHARS: &[u8] = b"0123456789ABCDEF";
+        let hi = HEX_CHARS[((b >> 4) & 0x0F) as usize];
+        let lo = HEX_CHARS[(b & 0x0F) as usize];
         w.write_char(hi as char).ok();
         w.write_char(lo as char).ok();
     }
