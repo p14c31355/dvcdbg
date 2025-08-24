@@ -46,7 +46,7 @@ impl<'a> Explorer<'a> {
             remaining.retain(|&idx| {
                 let node = &self.sequence[idx];
                 if node.deps.iter().all(|d| staged_set[*d as usize]) {
-                    staged.push(node.cmd).unwrap();
+                    staged.push(node.cmd).expect("staged vec should have enough capacity");
                     staged_set[node.cmd as usize] = true;
                     false
                 } else {
