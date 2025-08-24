@@ -96,13 +96,7 @@ impl<'a> Explorer<'a> {
 
             for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 // For each address, try the full sequence.
-                let mut all_ok = true;
-                for &cmd in current.iter() {
-                    if i2c.write(addr, &[cmd]).is_err() {
-                        all_ok = false;
-                        break; // This sequence doesn't work for this address
-                    }
-                }
+                let all_ok = current.iter().all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
 
                 if all_ok {
                     let _ = writeln!(
