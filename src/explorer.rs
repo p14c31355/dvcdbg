@@ -196,7 +196,7 @@ impl<'a> Explorer<'a> {
         serial: &mut W,
         unresolved: &Vec<usize, CMD_CAPACITY>,
         state: &mut PermutationState<CMD_CAPACITY>,
-        solved_addrs: &mut [bool; 128],
+        solved_addrs: &mut [bool; I2C_ADDRESS_COUNT],
     ) where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
