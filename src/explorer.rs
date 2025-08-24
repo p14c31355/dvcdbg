@@ -76,7 +76,7 @@ impl<'a> Explorer<'a> {
             loop_start_indices: Vec::from_slice(&[0]).unwrap(),
         };
 
-        let mut solved_addrs = [false; 128];
+        let mut solved_addrs = [false; I2C_ADDRESS_COUNT];
 
         if remaining.len() > MAX_PERMUTATION_WARNING_THRESHOLD {
             let _ = writeln!(
