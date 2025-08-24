@@ -2,10 +2,10 @@
 //! Adapter that wraps any `SerialCompat` implementor and exposes a `core::fmt::Write`
 //! interface while retaining the original HAL error for later inspection.
 
-use core::fmt;
-use crate::compat::serial_compat::SerialCompat;
 use crate::compat::err_compat::HalErrorExt;
+use crate::compat::serial_compat::SerialCompat;
 use crate::error::ErrorKind;
+use core::fmt;
 
 /// A lightweight adapter to write formatted strings to a HAL serial/I2C interface.
 ///
@@ -36,7 +36,10 @@ pub struct FmtWriteAdapter<T: SerialCompat> {
 impl<T: SerialCompat> FmtWriteAdapter<T> {
     /// Create a new adapter wrapping a serial device.
     pub fn new(inner: T) -> Self {
-        Self { inner, last_error: None }
+        Self {
+            inner,
+            last_error: None,
+        }
     }
 
     /// Extract the inner serial device, consuming the adapter.

@@ -89,6 +89,7 @@ mod tests {
     // ===== 1.0 Dummy UART =====
     #[cfg(feature = "ehal_1_0")]
     mod ehal_1_0_tests {
+
         use super::*;
 
         #[derive(Debug)]

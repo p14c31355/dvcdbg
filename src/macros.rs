@@ -74,9 +74,9 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                // Now that the adapter implements `embedded_io::Write`, we can use `write_all`.
-                use embedded_io::Write;
-                self.write_all(s.as_bytes()).map_err(|_| core::fmt::Error)
+                self.0.write(s.as_bytes()).map_err(|_| core::fmt::Error)?;
+                self.0.flush().map_err(|_| core::fmt::Error)?;
+                Ok(())
             }
         }
     };
@@ -188,8 +188,8 @@ macro_rules! assert_log {
 /// ```
 #[macro_export]
 macro_rules! quick_diag {
-    ($serial:expr, $i2c:expr, $timer:expr, $test_expr:block) => {{
-        quick_diag!(@inner $serial, $i2c);
+    ($serial:expr, $i2c:expr, $timer:expr, $test_expr:block, $log_level:expr) => {{
+        quick_diag!(@inner $serial, $i2c, $log_level);
 
         // Test expression timing
         let (_result, cycles) = $crate::measure_cycles!($test_expr, $timer);
@@ -198,14 +198,14 @@ macro_rules! quick_diag {
         let _ = core::writeln!($serial, "=== Quick Diagnostic Complete ===");
     }};
     ($serial:expr, $i2c:expr) => {{
-        quick_diag!(@inner $serial, $i2c);
+        quick_diag!(@inner $serial, $i2c, $crate::scanner::LogLevel::Verbose);
         let _ = core::writeln!($serial, "=== Quick Diagnostic Complete ===");
     }};
     // Internal rule for common diagnostic steps.
-    (@inner $serial:expr, $i2c:expr) => {
+    (@inner $serial:expr, $i2c:expr, $log_level:expr) => {
         let _ = core::writeln!($serial, "=== Quick Diagnostic Start ===");
         // I2C bus scan
         let _ = core::writeln!($serial, "Scanning I2C bus...");
-        $crate::scanner::scan_i2c($i2c, $serial);
+        $crate::scanner::scan_i2c($i2c, $serial, $log_level);
     };
 }

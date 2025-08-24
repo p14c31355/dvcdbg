@@ -4,13 +4,11 @@
 //! HAL error compatibility wrapper
 //! Works with embedded-hal 0.2 and 1.0, maps to unified `ErrorKind`
 
+use crate::error::*;
 use core::fmt::Debug;
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 use core::fmt::Write;
-use crate::error::*;
 
-#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
-use embedded_hal_0_2::blocking::i2c as i2c_0_2;
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 use heapless::String;
 
