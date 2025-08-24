@@ -45,6 +45,11 @@ pub enum ExplorerError {
     TooManyCommands,
 }
 
+enum BacktrackReason {
+    FoundPermutation, // A full, valid sequence was found
+    ExhaustedOptions, // Failed to extend the current partial sequence
+}
+
 /// Represents a single I2C command in the dependency graph.
 ///
 /// Each command may depend on other commands, meaning they must appear
