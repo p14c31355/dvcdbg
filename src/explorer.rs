@@ -56,7 +56,7 @@ impl<'a> Explorer<'a> {
         // Now, unresolved must be permuted
         let mut current: Vec<u8, CMD_CAPACITY> = staged.clone();
         let mut used = [false; CMD_CAPACITY];
-                if remaining.len() > 8 {
+        if remaining.len() > 8 {
             let _ = writeln!(serial, "[explorer] warning: Large number of unresolved commands ({}). This may take a very long time.", remaining.len());
         }
         let mut current_set = staged_set;
