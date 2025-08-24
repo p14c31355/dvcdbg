@@ -31,6 +31,7 @@
 //! - The algorithm ensures **dependency order is respected**.
 //! - Commands are staged and permuted only when dependencies allow.
 //! - The non-recursive approach is chosen to make the algorithm safer for small-memory MCUs.
+
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use heapless::Vec;
 
@@ -137,18 +138,14 @@ impl<'a> Explorer<'a> {
             remaining.retain(|&idx| {
                 let node = &self.sequence[idx];
                 if node.deps.iter().all(|d| staged_set[*d as usize]) {
-                    staged
-                        .push(node.cmd)
-                        .expect("staged vec should have enough capacity");
+                    staged.push(node.cmd).expect("staged vec should have enough capacity");
                     staged_set[node.cmd as usize] = true;
                     false
                 } else {
                     true
                 }
             });
-            if staged.len() == before {
-                break;
-            }
+            if staged.len() == before { break; }
         }
 
         if !remaining.is_empty() {
@@ -158,7 +155,8 @@ impl<'a> Explorer<'a> {
             );
         }
 
-        let _ = writeln!(serial, "[explorer] staged: {staged:?}");
+        let _ = writeln!(serial, "[explorer] staged:");
+        self.write_sequence(serial, &staged);
         let _ = writeln!(serial, "[explorer] unresolved: {remaining:?}");
 
         let mut current_state = PermutationState {
@@ -168,7 +166,6 @@ impl<'a> Explorer<'a> {
             path_stack: Vec::new(),
             loop_start_indices: Vec::from_slice(&[0]).unwrap(),
         };
-
         let mut solved_addrs = [false; I2C_ADDRESS_COUNT];
 
         if remaining.len() > MAX_PERMUTATION_WARNING_THRESHOLD {
@@ -179,13 +176,7 @@ impl<'a> Explorer<'a> {
             );
         }
 
-        self.permute(
-            i2c,
-            serial,
-            &remaining,
-            &mut current_state,
-            &mut solved_addrs,
-        );
+        self.permute(i2c, serial, &remaining, &mut current_state, &mut solved_addrs);
 
         Ok(())
     }
@@ -204,14 +195,10 @@ impl<'a> Explorer<'a> {
         'main_loop: loop {
             if state.current.len() == self.sequence.len() {
                 self.handle_full_permutation(i2c, serial, state, solved_addrs);
-                if !self.backtrack(unresolved, state, false) {
-                    break 'main_loop;
-                }
+                if !self.backtrack(unresolved, state, false) { break 'main_loop; }
             } else if !self.try_extend_permutation(unresolved, state) {
                 // Could not extend, backtrack
-                if !self.backtrack(unresolved, state, true) {
-                    break 'main_loop;
-                }
+                if !self.backtrack(unresolved, state, true) { break 'main_loop; }
             }
         }
     }
@@ -230,22 +217,14 @@ impl<'a> Explorer<'a> {
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
     {
-        let _ = writeln!(serial, "[explorer] candidate: {:?}", state.current);
+        let _ = writeln!(serial, "[explorer] candidate:");
+        self.write_sequence(serial, &state.current);
 
         for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-            if solved_addrs[addr as usize] {
-                continue;
-            }
-            let all_ok = state
-                .current
-                .iter()
-                .all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
+            if solved_addrs[addr as usize] { continue; }
+            let all_ok = state.current.iter().all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
             if all_ok {
-                let _ = writeln!(
-                    serial,
-                    "[explorer] success: sequence {:?} works for addr 0x{:02X}",
-                    state.current, addr
-                );
+                let _ = writeln!(serial, "[explorer] success: sequence works for addr 0x{addr:02X}");
                 solved_addrs[addr as usize] = true;
             }
         }
@@ -260,15 +239,9 @@ impl<'a> Explorer<'a> {
         unresolved: &Vec<usize, CMD_CAPACITY>,
         state: &mut PermutationState<CMD_CAPACITY>,
     ) -> bool {
-        let current_loop_start_idx = *state
-            .loop_start_indices
-            .last()
-            .expect("loop_start_indices should not be empty");
-
+        let current_loop_start_idx = *state.loop_start_indices.last().unwrap();
         for (pos, &idx) in unresolved.iter().enumerate().skip(current_loop_start_idx) {
-            if state.used[pos] {
-                continue;
-            }
+            if state.used[pos] { continue; }
             let node = &self.sequence[idx];
             if node.deps.iter().all(|d| state.current_set[*d as usize]) {
                 // Make choice
@@ -303,17 +276,28 @@ impl<'a> Explorer<'a> {
             state.used[last_added_pos] = false;
             state.current_set[node_cmd as usize] = false;
             state.current.pop();
-            if pop_loop_index {
-                state.loop_start_indices.pop();
-            }
+            if pop_loop_index { state.loop_start_indices.pop(); }
             if let Some(last_loop_idx) = state.loop_start_indices.last_mut() {
                 *last_loop_idx += 1;
-            } else {
-                return false;
-            }
+            } else { return false; }
             true
-        } else {
-            false
+        } else { false }
+    }
+
+    fn hex_byte<W: core::fmt::Write>(w: &mut W, b: u8) {
+        let hi = (b >> 4) & 0xF;
+        let lo = b & 0xF;
+        let hi = if hi < 10 { b'0' + hi } else { b'A' + hi - 10 };
+        let lo = if lo < 10 { b'0' + lo } else { b'A' + lo - 10 };
+        w.write_char(hi as char).ok();
+        w.write_char(lo as char).ok();
+    }
+
+    fn write_sequence<W: core::fmt::Write>(&self, w: &mut W, seq: &[u8]) {
+        for &b in seq {
+            Self::hex_byte(w, b);
+            w.write_char(' ').ok();
         }
+        w.write_char('\n').ok();
     }
 }
