@@ -46,7 +46,9 @@ impl<'a> Explorer<'a> {
             remaining.retain(|&idx| {
                 let node = &self.sequence[idx];
                 if node.deps.iter().all(|d| staged_set[*d as usize]) {
-                    staged.push(node.cmd).expect("staged vec should have enough capacity");
+                    staged
+                        .push(node.cmd)
+                        .expect("staged vec should have enough capacity");
                     staged_set[node.cmd as usize] = true;
                     false
                 } else {
@@ -114,17 +116,15 @@ impl<'a> Explorer<'a> {
                 if !self.backtrack(unresolved, state, false) {
                     break 'main_loop;
                 }
-            } else {
-                if !self.try_extend_permutation(unresolved, state) {
-                    // Could not extend, backtrack
-                    if !self.backtrack(unresolved, state, true) {
-                        break 'main_loop;
-                    }
+            } else if !self.try_extend_permutation(unresolved, state) {
+                // Could not extend, backtrack
+                if !self.backtrack(unresolved, state, true) {
+                    break 'main_loop;
                 }
             }
         }
     }
-    
+
     fn handle_full_permutation<I2C, W>(
         &self,
         i2c: &mut I2C,
@@ -161,8 +161,11 @@ impl<'a> Explorer<'a> {
         unresolved: &Vec<usize, CMD_CAPACITY>,
         state: &mut PermutationState<CMD_CAPACITY>,
     ) -> bool {
-        let current_loop_start_idx = *state.loop_start_indices.last().expect("loop_start_indices should not be empty");
-    
+        let current_loop_start_idx = *state
+            .loop_start_indices
+            .last()
+            .expect("loop_start_indices should not be empty");
+
         for (pos, &idx) in unresolved.iter().enumerate().skip(current_loop_start_idx) {
             if state.used[pos] {
                 continue;
@@ -173,9 +176,9 @@ impl<'a> Explorer<'a> {
                 state.current.push(node.cmd).unwrap();
                 state.current_set[node.cmd as usize] = true;
                 state.used[pos] = true;
-    
-                state.path_stack.push(pos);
-                state.loop_start_indices.push(0);
+
+                let _ = state.path_stack.push(pos);
+                let _ = state.loop_start_indices.push(0);
                 return true;
             }
         }
