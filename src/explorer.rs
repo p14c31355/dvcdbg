@@ -200,10 +200,10 @@ impl<'a> Explorer<'a> {
         'main_loop: loop {
             if state.current.len() == self.sequence.len() {
                 self.handle_full_permutation(i2c, serial, state, solved_addrs);
-                if !self.backtrack(unresolved, state, false) { break 'main_loop; }
+                if !self.backtrack(unresolved, state, BacktrackReason::FoundPermutation) { break 'main_loop; }
             } else if !self.try_extend_permutation(unresolved, state) {
                 // Could not extend, backtrack
-                if !self.backtrack(unresolved, state, true) { break 'main_loop; }
+                if !self.backtrack(unresolved, state, BacktrackReason::ExhaustedOptions) { break 'main_loop; }
             }
         }
     }
