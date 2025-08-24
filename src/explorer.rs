@@ -85,7 +85,13 @@ impl<'a> Explorer<'a> {
             );
         }
 
-        self.permute(i2c, serial, &remaining, &mut current_state, &mut solved_addrs);
+        self.permute(
+            i2c,
+            serial,
+            &remaining,
+            &mut current_state,
+            &mut solved_addrs,
+        );
 
         Ok(())
     }
@@ -104,17 +110,21 @@ impl<'a> Explorer<'a> {
         'main_loop: loop {
             if state.current.len() == self.sequence.len() {
                 // Full permutation formed
-                let _ = writeln!(serial, "[explorer] candidate: {state.current:?}");
+                let _ = writeln!(serial, "[explorer] candidate: {:?}", state.current);
 
                 for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                     if solved_addrs[addr as usize] {
                         continue; // skip already solved addresses
                     }
-                    let all_ok = state.current.iter().all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
+                    let all_ok = state
+                        .current
+                        .iter()
+                        .all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
                     if all_ok {
                         let _ = writeln!(
                             serial,
-                            "[explorer] success: sequence {state.current:?} works for addr 0x{addr:02X}"
+                            "[explorer] success: sequence {:?} works for addr 0x{:02X}",
+                            state.current, addr
                         );
                         solved_addrs[addr as usize] = true;
                     }
