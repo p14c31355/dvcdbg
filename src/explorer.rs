@@ -109,60 +109,76 @@ impl<'a> Explorer<'a> {
     {
         'main_loop: loop {
             if state.current.len() == self.sequence.len() {
-                // Full permutation formed
-                let _ = writeln!(serial, "[explorer] candidate: {:?}", state.current);
-
-                for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                    if solved_addrs[addr as usize] {
-                        continue; // skip already solved addresses
-                    }
-                    let all_ok = state
-                        .current
-                        .iter()
-                        .all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
-                    if all_ok {
-                        let _ = writeln!(
-                            serial,
-                            "[explorer] success: sequence {:?} works for addr 0x{:02X}",
-                            state.current, addr
-                        );
-                        solved_addrs[addr as usize] = true;
-                    }
-                }
-
+                self.handle_full_permutation(i2c, serial, state, solved_addrs);
                 if !self.backtrack(unresolved, state, false) {
                     break 'main_loop;
                 }
             } else {
-                // Try extending permutation
-                let mut found_next_candidate = false;
-                let current_loop_start_idx = *state.loop_start_indices.last().unwrap();
-
-                for (pos, &idx) in unresolved.iter().enumerate().skip(current_loop_start_idx) {
-                    if state.used[pos] {
-                        continue;
-                    }
-                    let node = &self.sequence[idx];
-                    if node.deps.iter().all(|d| state.current_set[*d as usize]) {
-                        // Make choice
-                        state.current.push(node.cmd).unwrap();
-                        state.current_set[node.cmd as usize] = true;
-                        state.used[pos] = true;
-
-                        state.path_stack.push(pos);
-                        state.loop_start_indices.push(0);
-                        found_next_candidate = true;
-                        break;
-                    }
-                }
-
-                if !found_next_candidate {
+                if !self.try_extend_permutation(unresolved, state) {
+                    // Could not extend, backtrack
                     if !self.backtrack(unresolved, state, true) {
                         break 'main_loop;
                     }
                 }
             }
         }
+    }
+    
+    fn handle_full_permutation<I2C, W>(
+        &self,
+        i2c: &mut I2C,
+        serial: &mut W,
+        state: &mut PermutationState<CMD_CAPACITY>,
+        solved_addrs: &mut [bool; 128],
+    ) where
+        I2C: crate::compat::I2cCompat,
+        W: core::fmt::Write,
+    {
+        let _ = writeln!(serial, "[explorer] candidate: {:?}", state.current);
+
+        for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+            if solved_addrs[addr as usize] {
+                continue;
+            }
+            let all_ok = state
+                .current
+                .iter()
+                .all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
+            if all_ok {
+                let _ = writeln!(
+                    serial,
+                    "[explorer] success: sequence {:?} works for addr 0x{:02X}",
+                    state.current, addr
+                );
+                solved_addrs[addr as usize] = true;
+            }
+        }
+    }
+
+    fn try_extend_permutation(
+        &self,
+        unresolved: &Vec<usize, CMD_CAPACITY>,
+        state: &mut PermutationState<CMD_CAPACITY>,
+    ) -> bool {
+        let current_loop_start_idx = *state.loop_start_indices.last().unwrap();
+    
+        for (pos, &idx) in unresolved.iter().enumerate().skip(current_loop_start_idx) {
+            if state.used[pos] {
+                continue;
+            }
+            let node = &self.sequence[idx];
+            if node.deps.iter().all(|d| state.current_set[*d as usize]) {
+                // Make choice
+                state.current.push(node.cmd).unwrap();
+                state.current_set[node.cmd as usize] = true;
+                state.used[pos] = true;
+    
+                state.path_stack.push(pos);
+                state.loop_start_indices.push(0);
+                return true;
+            }
+        }
+        false
     }
 
     fn backtrack(
