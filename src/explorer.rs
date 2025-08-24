@@ -101,8 +101,6 @@ impl<'a> Explorer<'a> {
         loop_start_indices.push(0); // Initial depth starts loop from index 0
 
         'main_loop: loop {
-            // Check if a full permutation has been formed.
-            // 'current' starts with 'staged' commands and grows until it matches 'self.sequence.len()'.
             if current.len() == self.sequence.len() {
                 // Base case: A full permutation has been formed.
                 let _ = writeln!(serial, "[explorer] candidate: {current:?}");
@@ -117,17 +115,15 @@ impl<'a> Explorer<'a> {
                     }
                 }
 
-                // After processing, backtrack.
-                // Pop the last added element and undo its effects.
-                if let Some(last_added_pos) = path_stack.pop() {
-                    let node_cmd = self.sequence[unresolved[last_added_pos]].cmd;
-                    used[last_added_pos] = false;
-                    current_set[node_cmd as usize] = false;
-                    current.pop();
-                    // Increment the loop start index for the current depth (which is now the previous depth)
-                    *loop_start_indices.last_mut().unwrap() += 1;
-                } else {
-                    // path_stack is empty, all permutations explored.
+                if !self.backtrack(
+                    unresolved,
+                    current,
+                    used,
+                    current_set,
+                    &mut path_stack,
+                    &mut loop_start_indices,
+                    false,
+                ) {
                     break 'main_loop;
                 }
             } else {
@@ -146,33 +142,59 @@ impl<'a> Explorer<'a> {
                         current_set[node.cmd as usize] = true;
                         used[pos] = true;
 
-                        path_stack.push(pos); // Record the choice made at this depth
-                        loop_start_indices.push(0); // Start the next depth's loop from 0
+                        path_stack.push(pos);
+                        loop_start_indices.push(0);
                         found_next_candidate = true;
-                        break; // Simulate recursive call: go to the next depth
+                        break;
                     }
                 }
 
                 if !found_next_candidate {
                     // No more candidates at the current depth, backtrack.
-                    if let Some(last_added_pos) = path_stack.pop() {
-                        let node_cmd = self.sequence[unresolved[last_added_pos]].cmd;
-                        used[last_added_pos] = false;
-                        current_set[node_cmd as usize] = false;
-                        current.pop();
-                        loop_start_indices.pop(); // Remove the loop index for the depth we just left
-                        if let Some(last_loop_idx) = loop_start_indices.last_mut() {
-                            *last_loop_idx += 1; // Increment the loop index for the previous depth
-                        } else {
-                            // path_stack is empty, all permutations explored.
-                            break 'main_loop;
-                        }
-                    } else {
-                        // path_stack is empty, all permutations explored.
+                    if !self.backtrack(
+                        unresolved,
+                        current,
+                        used,
+                        current_set,
+                        &mut path_stack,
+                        &mut loop_start_indices,
+                        true,
+                    ) {
                         break 'main_loop;
                     }
                 }
             }
+        }
+    }
+
+    fn backtrack(
+        &self,
+        unresolved: &Vec<usize, CMD_CAPACITY>,
+        current: &mut Vec<u8, CMD_CAPACITY>,
+        used: &mut [bool; CMD_CAPACITY],
+        current_set: &mut [bool; 256],
+        path_stack: &mut Vec<usize, CMD_CAPACITY>,
+        loop_start_indices: &mut Vec<usize, CMD_CAPACITY>,
+        pop_loop_index: bool,
+    ) -> bool {
+        if let Some(last_added_pos) = path_stack.pop() {
+            let node_cmd = self.sequence[unresolved[last_added_pos]].cmd;
+            used[last_added_pos] = false;
+            current_set[node_cmd as usize] = false;
+            current.pop();
+            if pop_loop_index {
+                loop_start_indices.pop();
+            }
+            if let Some(last_loop_idx) = loop_start_indices.last_mut() {
+                *last_loop_idx += 1;
+            } else {
+                // path_stack is empty, all permutations explored.
+                return false;
+            }
+            true
+        } else {
+            // path_stack is empty, all permutations explored.
+            false
         }
     }
 }
