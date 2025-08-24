@@ -1,65 +1,87 @@
-//! Stage-based I2C command sequence explorer for no_std
 use heapless::Vec;
 use crate::scanner::{I2C_SCAN_ADDR_START, I2C_SCAN_ADDR_END};
 
 pub struct CmdNode<'a> {
     pub cmd: u8,
     pub deps: &'a [u8],
-    pub stage: usize,
 }
 
-pub struct Explorer<'a, const N: usize> {
+pub struct Explorer<'a> {
     pub sequence: &'a [CmdNode<'a>],
-    pub max_stage: usize,
 }
 
 impl<'a> Explorer<'a> {
-    pub fn explore<I2C, W>(
-        &self,
-        i2c: &mut I2C,
-        serial: &mut W,
-    ) where
+    pub fn explore<I2C, W>(&self, i2c: &mut I2C, serial: &mut W)
+    where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
     {
-        let mut current_seq: Vec<u8, 32> = Vec::new();
-        self.backtrack(i2c, serial, 0, 0, &mut current_seq);
+        let mut staged_seq: Vec<u8, 32> = Vec::new();
+        let mut problem_indices: Vec<usize, 16> = Vec::new();
+
+        for (i, node) in self.sequence.iter().enumerate() {
+            if node.deps.iter().all(|d| staged_seq.contains(d)) {
+                for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+                    let _ = i2c.write(addr, &[node.cmd]);
+                }
+                let _ = staged_seq.push(node.cmd);
+            } else {
+                let _ = problem_indices.push(i);
+            }
+        }
+
+        let _ = writeln!(serial, "[explorer] Staged sequence: {:?}", staged_seq);
+        let _ = writeln!(serial, "[explorer] Problem indices: {:?}", problem_indices);
+
+        let mut combo: Vec<u8, 16> = Vec::new();
+        self.backtrack_combo(i2c, serial, &problem_indices, 0, &mut combo, &staged_seq);
     }
 
-    fn backtrack<I2C, W>(
+    fn backtrack_combo<I2C, W>(
         &self,
         i2c: &mut I2C,
         serial: &mut W,
-        index: usize,
-        stage: usize,
-        current_seq: &mut Vec<u8, 32>,
+        problem_indices: &[usize],
+        depth: usize,
+        combo: &mut Vec<u8, 16>,
+        staged_seq: &Vec<u8, 32>,
     ) where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
     {
-        if index >= self.sequence.len() || stage >= self.max_stage {
-            let _ = writeln!(serial, "[explorer] Stage {} sequence: {:?}", stage, current_seq);
+        if depth >= problem_indices.len() {
+            if self.check_deps(combo, staged_seq) {
+                let mut full_seq = staged_seq.clone();
+                full_seq.extend(combo.iter().copied());
+                let _ = writeln!(serial, "[explorer] Valid full sequence: {:?}", full_seq);
+                for &cmd in full_seq.iter() {
+                    for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+                        let _ = i2c.write(addr, &[cmd]);
+                    }
+                }
+            }
             return;
         }
 
-        let node = &self.sequence[index];
+        let idx = problem_indices[depth];
+        let node = &self.sequence[idx];
 
-        if node.deps.iter().all(|d| current_seq.contains(d)) && node.stage <= stage {
-            for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                let _ = i2c.write(addr, &[node.cmd]).map_err(|e| writeln!(serial, "[explorer] I2C write error at 0x{:02X}: {:?}", addr, e));
-            }
-
-            if current_seq.push(node.cmd).is_ok() {
-                let next_stage = if current_seq.len() % (self.max_stage / 4).max(1) == 0 {
-                    stage + 1
-                } else {
-                    stage
-                };
-                self.backtrack(i2c, serial, index + 1, next_stage, current_seq);
-                let _ = current_seq.pop();
-            }
+        if combo.push(node.cmd).is_ok() {
+            self.backtrack_combo(i2c, serial, problem_indices, depth + 1, combo, staged_seq);
+            let _ = combo.pop();
         }
 
-        self.backtrack(i2c, serial, index + 1, stage, current_seq);
+        self.backtrack_combo(i2c, serial, problem_indices, depth + 1, combo, staged_seq);
+    }
+
+    fn check_deps(&self, combo: &Vec<u8, 16>, staged_seq: &Vec<u8, 32>) -> bool {
+        let mut accumulated = staged_seq.clone();
+        accumulated.extend(combo.iter().copied());
+        for node in self.sequence.iter() {
+            if !node.deps.iter().all(|d| accumulated.contains(d)) {
+                return false;
+            }
+        }
+        true
     }
 }
