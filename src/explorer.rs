@@ -8,7 +8,7 @@ pub struct CmdNode<'a> {
     pub stage: usize,
 }
 
-pub struct Explorer<'a> {
+pub struct Explorer<'a, const N: usize> {
     pub sequence: &'a [CmdNode<'a>],
     pub max_stage: usize,
 }
