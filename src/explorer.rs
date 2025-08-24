@@ -91,37 +91,93 @@ impl<'a> Explorer<'a> {
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
     {
-        if current.len() == self.sequence.len() {
-            let _ = writeln!(serial, "[explorer] candidate: {current:?}");
+        // Stack to store the 'pos' (index in unresolved.iter().enumerate()) of the element
+        // that was added to 'current' at the current depth. This allows us to backtrack.
+        let mut path_stack: Vec<usize, CMD_CAPACITY> = Vec::new();
 
-            for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                // For each address, try the full sequence.
-                let all_ok = current.iter().all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
+        // Stack to store the starting index for the 'for' loop at each depth.
+        // When we go deeper, we push 0. When we backtrack, we increment the top.
+        let mut loop_start_indices: Vec<usize, CMD_CAPACITY> = Vec::new();
+        loop_start_indices.push(0); // Initial depth starts loop from index 0
 
-                if all_ok {
-                    let _ = writeln!(
-                        serial,
-                        "[explorer] success: sequence {current:?} works for addr 0x{addr:02X}"
-                    );
+        'main_loop: loop {
+            // Check if a full permutation has been formed.
+            // 'current' starts with 'staged' commands and grows until it matches 'self.sequence.len()'.
+            if current.len() == self.sequence.len() {
+                // Base case: A full permutation has been formed.
+                let _ = writeln!(serial, "[explorer] candidate: {current:?}");
+
+                for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+                    let all_ok = current.iter().all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
+                    if all_ok {
+                        let _ = writeln!(
+                            serial,
+                            "[explorer] success: sequence {current:?} works for addr 0x{addr:02X}"
+                        );
+                    }
                 }
-            }
-            return;
-        }
 
-        for (pos, &idx) in unresolved.iter().enumerate() {
-            if used[pos] {
-                continue;
-            }
-            let node = &self.sequence[idx];
-            if node.deps.iter().all(|d| current_set[*d as usize]) {
-                // This can't fail if the initial length check is done in `explore`.
-                current.push(node.cmd).unwrap();
-                current_set[node.cmd as usize] = true;
-                used[pos] = true;
-                self.permute(i2c, serial, unresolved, current, used, current_set);
-                used[pos] = false;
-                current_set[node.cmd as usize] = false;
-                current.pop();
+                // After processing, backtrack.
+                // Pop the last added element and undo its effects.
+                if let Some(last_added_pos) = path_stack.pop() {
+                    let node_cmd = self.sequence[unresolved[last_added_pos]].cmd;
+                    used[last_added_pos] = false;
+                    current_set[node_cmd as usize] = false;
+                    current.pop();
+                    // Increment the loop start index for the current depth (which is now the previous depth)
+                    if let Some(last_loop_idx) = loop_start_indices.last_mut() {
+                        *last_loop_idx += 1;
+                    } else {
+                        // This means path_stack was empty, and we just popped the last element.
+                        // All permutations have been explored.
+                        break 'main_loop;
+                    }
+                } else {
+                    // path_stack is empty, all permutations explored.
+                    break 'main_loop;
+                }
+            } else {
+                // Recursive step: Try to extend the current permutation.
+                let mut found_next_candidate = false;
+                let current_loop_start_idx = *loop_start_indices.last().unwrap();
+
+                for (pos, &idx) in unresolved.iter().enumerate().skip(current_loop_start_idx) {
+                    if used[pos] {
+                        continue;
+                    }
+                    let node = &self.sequence[idx];
+                    if node.deps.iter().all(|d| current_set[*d as usize]) {
+                        // Make the choice: add this command.
+                        current.push(node.cmd).unwrap();
+                        current_set[node.cmd as usize] = true;
+                        used[pos] = true;
+
+                        path_stack.push(pos); // Record the choice made at this depth
+                        loop_start_indices.push(0); // Start the next depth's loop from 0
+                        found_next_candidate = true;
+                        break; // Simulate recursive call: go to the next depth
+                    }
+                }
+
+                if !found_next_candidate {
+                    // No more candidates at the current depth, backtrack.
+                    if let Some(last_added_pos) = path_stack.pop() {
+                        let node_cmd = self.sequence[unresolved[last_added_pos]].cmd;
+                        used[last_added_pos] = false;
+                        current_set[node_cmd as usize] = false;
+                        current.pop();
+                        loop_start_indices.pop(); // Remove the loop index for the depth we just left
+                        if let Some(last_loop_idx) = loop_start_indices.last_mut() {
+                            *last_loop_idx += 1; // Increment the loop index for the previous depth
+                        } else {
+                            // path_stack is empty, all permutations explored.
+                            break 'main_loop;
+                        }
+                    } else {
+                        // path_stack is empty, all permutations explored.
+                        break 'main_loop;
+                    }
+                }
             }
         }
     }
