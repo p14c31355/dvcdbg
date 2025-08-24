@@ -56,10 +56,10 @@ impl<'a> Explorer<'a> {
         // Now, unresolved must be permuted
         let mut current: Vec<u8, CMD_CAPACITY> = staged.clone();
         let mut used = [false; CMD_CAPACITY];
-        let mut current_set = [false; 256];
-        for &cmd in current.iter() {
-            current_set[cmd as usize] = true;
+                if remaining.len() > 8 {
+            let _ = writeln!(serial, "[explorer] warning: Large number of unresolved commands ({}). This may take a very long time.", remaining.len());
         }
+        let mut current_set = [false; 256];
         self.permute(
             i2c,
             serial,
@@ -67,7 +67,7 @@ impl<'a> Explorer<'a> {
             &mut current,
             &mut used,
             &mut current_set,
-        )?;
+        );
         Ok(())
     }
 
@@ -79,7 +79,7 @@ impl<'a> Explorer<'a> {
         current: &mut Vec<u8, CMD_CAPACITY>,
         used: &mut [bool; CMD_CAPACITY],
         current_set: &mut [bool; 256],
-    ) -> Result<(), ()>
+    )
     where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
@@ -87,14 +87,21 @@ impl<'a> Explorer<'a> {
         if current.len() == self.sequence.len() {
             let _ = writeln!(serial, "[explorer] candidate: {:?}", current);
 
-            for &cmd in current.iter() {
-                for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                    if let Err(e) = i2c.write(addr, &[cmd]) {
-                        let _ = writeln!(serial, "i2c error at addr 0x{:02X}: {:?}", addr, e);
+                        for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+                // For each address, try the full sequence.
+                let mut all_ok = true;
+                for &cmd in current.iter() {
+                    if i2c.write(addr, &[cmd]).is_err() {
+                        all_ok = false;
+                        break; // This sequence doesn't work for this address
                     }
                 }
+
+                if all_ok {
+                    let _ = writeln!(serial, "[explorer] success: sequence {:?} works for addr 0x{:02X}", current, addr);
+                }
             }
-            return Ok(());
+            return;
         }
 
         for (pos, &idx) in unresolved.iter().enumerate() {
@@ -107,12 +114,11 @@ impl<'a> Explorer<'a> {
                 current.push(node.cmd).unwrap();
                 current_set[node.cmd as usize] = true;
                 used[pos] = true;
-                self.permute(i2c, serial, unresolved, current, used, current_set)?;
+                self.permute(i2c, serial, unresolved, current, used, current_set);
                 used[pos] = false;
                 current_set[node.cmd as usize] = false;
                 current.pop();
             }
         }
-        Ok(())
     }
 }
