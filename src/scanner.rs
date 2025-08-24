@@ -177,8 +177,8 @@ macro_rules! define_scanner {
             let _ = writeln!(serial);
 
             let mut detected_cmds: Vec<u8, 64> = Vec::new();
-            let value = internal_scan(i2c, serial, &[0x00, cmd], log_level);
             for &cmd in init_sequence {
+                let value = internal_scan(i2c, serial, &[0x00, cmd], log_level.clone());
                 match value {
                     Ok(found_addrs) => {
                         if !found_addrs.is_empty() {
@@ -251,13 +251,13 @@ macro_rules! define_scanner {
 fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detected: &Vec<u8, 64>) {
     let _ = writeln!(serial, "Expected sequence:");
     for b in expected {
-        let _ = writeln!(serial, " 0x{:02X}", b);
+        let _ = writeln!(serial, " 0x{b:02X}");
     }
     let _ = writeln!(serial);
 
     let _ = writeln!(serial, "Commands with response:");
     for b in detected {
-        let _ = writeln!(serial, " 0x{:02X}", b);
+        let _ = writeln!(serial, " 0x{b:02X}");
     }
     let _ = writeln!(serial);
 
@@ -280,7 +280,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 
     let _ = writeln!(serial, "Commands with no response:");
     for b in &missing_cmds {
-        let _ = writeln!(serial, " 0x{:02X}", b);
+        let _ = writeln!(serial, " 0x{b:02X}");
     }
     let _ = writeln!(serial);
 }
