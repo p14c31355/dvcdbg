@@ -115,7 +115,7 @@ macro_rules! define_scanner {
                 let _ = writeln!(serial, " 0x{:02X}", b);
             }
             let _ = writeln!(serial);
-            if let Ok(found_addrs) = internal_scan(i2c, serial, control_bytes, $crate::scanner::LogLevel::None) {
+            if let Ok(found_addrs) = internal_scan(i2c, serial, control_bytes, $crate::scanner::LogLevel::Default) {
                 if !found_addrs.is_empty() {
                     let _ = writeln!(serial, "[ok] Found devices at:");
                     for addr in &found_addrs {
