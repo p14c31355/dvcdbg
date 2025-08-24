@@ -206,6 +206,6 @@ macro_rules! quick_diag {
         let _ = core::writeln!($serial, "=== Quick Diagnostic Start ===");
         // I2C bus scan
         let _ = core::writeln!($serial, "Scanning I2C bus...");
-        $crate::scanner::scan_i2c($i2c, $serial, log_level);
+        $crate::scanner::scan_i2c($i2c, $serial, $log_level);
     };
 }
