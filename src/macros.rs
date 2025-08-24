@@ -188,7 +188,7 @@ macro_rules! assert_log {
 /// ```
 #[macro_export]
 macro_rules! quick_diag {
-    ($serial:expr, $i2c:expr, $timer:expr, $test_expr:block, $log_level:ty) => {{
+    ($serial:expr, $i2c:expr, $timer:expr, $test_expr:block, $log_level:expr) => {{
         quick_diag!(@inner $serial, $i2c);
 
         // Test expression timing
