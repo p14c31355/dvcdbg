@@ -160,7 +160,7 @@ impl<'a> Explorer<'a> {
         unresolved: &Vec<usize, CMD_CAPACITY>,
         state: &mut PermutationState<CMD_CAPACITY>,
     ) -> bool {
-        let current_loop_start_idx = *state.loop_start_indices.last().unwrap();
+        let current_loop_start_idx = *state.loop_start_indices.last().expect("loop_start_indices should not be empty");
     
         for (pos, &idx) in unresolved.iter().enumerate().skip(current_loop_start_idx) {
             if state.used[pos] {
