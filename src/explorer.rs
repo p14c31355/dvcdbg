@@ -11,77 +11,100 @@ pub struct Explorer<'a> {
 }
 
 impl<'a> Explorer<'a> {
-    pub fn explore<I2C, W>(&self, i2c: &mut I2C, serial: &mut W)
+    pub fn explore<I2C, W>(&self, i2c: &mut I2C, serial: &mut W) -> Result<(), ()>
     where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
     {
-        let mut staged_seq: Vec<u8, 32> = Vec::new();
-        let mut problem_indices: Vec<usize, 16> = Vec::new();
-
-        for (i, node) in self.sequence.iter().enumerate() {
-            if node.deps.iter().all(|d| staged_seq.contains(d)) {
-                for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                    let _ = i2c.write(addr, &[node.cmd]);
-                }
-                let _ = staged_seq.push(node.cmd);
-            } else {
-                let _ = problem_indices.push(i);
+        // iterative staging (topological sort-like)
+        let mut staged: Vec<u8, 32> = Vec::new();
+        let mut remaining: Vec<usize, 32> = Vec::new();
+        for i in 0..self.sequence.len() {
+            if remaining.push(i).is_err() {
+                let _ = writeln!(serial, "error: too many commands");
+                return Err(());
             }
         }
 
-        let _ = writeln!(serial, "[explorer] Staged sequence: {:?}", staged_seq);
-        let _ = writeln!(serial, "[explorer] Problem indices: {:?}", problem_indices);
+        loop {
+            let before = staged.len();
+            let mut new_remaining: Vec<usize, 32> = Vec::new();
 
-        let mut combo: Vec<u8, 16> = Vec::new();
-        self.backtrack_combo(i2c, serial, &problem_indices, 0, &mut combo, &staged_seq);
+            for &idx in remaining.iter() {
+                let node = &self.sequence[idx];
+                if node.deps.iter().all(|d| staged.contains(d)) {
+                    if staged.push(node.cmd).is_err() {
+                        let _ = writeln!(serial, "error: staged buffer full");
+                        return Err(());
+                    }
+                } else {
+                    let _ = new_remaining.push(idx);
+                }
+            }
+
+            if new_remaining.len() == remaining.len() {
+                // no progress → unresolved commands left
+                remaining = new_remaining;
+                break;
+            }
+            remaining = new_remaining;
+            if staged.len() == before {
+                break;
+            }
+        }
+
+        let _ = writeln!(serial, "[explorer] staged: {:?}", staged);
+        let _ = writeln!(serial, "[explorer] unresolved: {:?}", remaining);
+
+        // Now, unresolved must be permuted
+        let mut current: Vec<u8, 32> = staged.clone();
+        let mut used = [false; 32];
+        self.permute(i2c, serial, &remaining, &mut current, &mut used)?;
+
+        Ok(())
     }
 
-    fn backtrack_combo<I2C, W>(
+    fn permute<I2C, W>(
         &self,
         i2c: &mut I2C,
         serial: &mut W,
-        problem_indices: &[usize],
-        depth: usize,
-        combo: &mut Vec<u8, 16>,
-        staged_seq: &Vec<u8, 32>,
-    ) where
+        unresolved: &Vec<usize, 32>,
+        current: &mut Vec<u8, 32>,
+        used: &mut [bool; 32],
+    ) -> Result<(), ()>
+    where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
     {
-        if depth >= problem_indices.len() {
-            if self.check_deps(combo, staged_seq) {
-                let mut full_seq = staged_seq.clone();
-                full_seq.extend(combo.iter().copied());
-                let _ = writeln!(serial, "[explorer] Valid full sequence: {:?}", full_seq);
-                for &cmd in full_seq.iter() {
-                    for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                        let _ = i2c.write(addr, &[cmd]);
+        if current.len() == self.sequence.len() {
+            let _ = writeln!(serial, "[explorer] candidate: {:?}", current);
+
+            for &cmd in current.iter() {
+                for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+                    if let Err(e) = i2c.write(addr, &[cmd]) {
+                        let _ = writeln!(serial, "i2c error: {:?}", e);
+                        return Err(());
                     }
                 }
             }
-            return;
+            return Ok(());
         }
 
-        let idx = problem_indices[depth];
-        let node = &self.sequence[idx];
-
-        if combo.push(node.cmd).is_ok() {
-            self.backtrack_combo(i2c, serial, problem_indices, depth + 1, combo, staged_seq);
-            let _ = combo.pop();
-        }
-
-        self.backtrack_combo(i2c, serial, problem_indices, depth + 1, combo, staged_seq);
-    }
-
-    fn check_deps(&self, combo: &Vec<u8, 16>, staged_seq: &Vec<u8, 32>) -> bool {
-        let mut accumulated = staged_seq.clone();
-        accumulated.extend(combo.iter().copied());
-        for node in self.sequence.iter() {
-            if !node.deps.iter().all(|d| accumulated.contains(d)) {
-                return false;
+        for (pos, &idx) in unresolved.iter().enumerate() {
+            if used[pos] {
+                continue;
+            }
+            let node = &self.sequence[idx];
+            if node.deps.iter().all(|d| current.contains(d)) {
+                if current.push(node.cmd).is_err() {
+                    return Err(());
+                }
+                used[pos] = true;
+                self.permute(i2c, serial, unresolved, current, used)?;
+                used[pos] = false;
+                current.pop();
             }
         }
-        true
+        Ok(())
     }
 }
