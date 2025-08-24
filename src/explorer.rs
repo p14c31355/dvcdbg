@@ -13,18 +13,26 @@ pub struct Explorer<'a> {
     pub sequence: &'a [CmdNode<'a>],
 }
 
+struct PermutationState<const C: usize> {
+    current: Vec<u8, C>,
+    used: [bool; C],
+    current_set: [bool; 256],
+    path_stack: Vec<usize, C>,
+    loop_start_indices: Vec<usize, C>,
+}
+
 impl<'a> Explorer<'a> {
     pub fn explore<I2C, W>(&self, i2c: &mut I2C, serial: &mut W) -> Result<(), ()>
     where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
     {
-        // iterative staging (topological sort-like)
         let mut staged: Vec<u8, CMD_CAPACITY> = Vec::new();
         if self.sequence.len() > CMD_CAPACITY {
             let _ = writeln!(serial, "error: too many commands");
             return Err(());
         }
+
         let mut remaining: Vec<usize, CMD_CAPACITY> = (0..self.sequence.len()).collect();
         let mut staged_set = [false; 256];
 
@@ -33,20 +41,18 @@ impl<'a> Explorer<'a> {
             remaining.retain(|&idx| {
                 let node = &self.sequence[idx];
                 if node.deps.iter().all(|d| staged_set[*d as usize]) {
-                    // This can't fail due to the check above.
                     staged.push(node.cmd).unwrap();
                     staged_set[node.cmd as usize] = true;
-                    false // remove from remaining
+                    false
                 } else {
-                    true // keep in remaining
+                    true
                 }
             });
-
             if staged.len() == before {
-                // No progress was made in this iteration, so we break.
                 break;
             }
         }
+
         if !remaining.is_empty() {
             let _ = writeln!(
                 serial,
@@ -57,9 +63,20 @@ impl<'a> Explorer<'a> {
         let _ = writeln!(serial, "[explorer] staged: {staged:?}");
         let _ = writeln!(serial, "[explorer] unresolved: {remaining:?}");
 
-        // Now, unresolved must be permuted
-        let mut current: Vec<u8, CMD_CAPACITY> = staged.clone();
-        let mut used = [false; CMD_CAPACITY];
+        let mut current_state = PermutationState {
+            current: staged.clone(),
+            used: [false; CMD_CAPACITY],
+            current_set: staged_set,
+            path_stack: Vec::new(),
+            loop_start_indices: {
+                let mut v = Vec::new();
+                v.push(0);
+                v
+            },
+        };
+
+        let mut solved_addrs = [false; 128];
+
         if remaining.len() > MAX_PERMUTATION_WARNING_THRESHOLD {
             let _ = writeln!(
                 serial,
@@ -67,15 +84,9 @@ impl<'a> Explorer<'a> {
                 remaining.len()
             );
         }
-        let mut current_set = staged_set;
-        self.permute(
-            i2c,
-            serial,
-            &remaining,
-            &mut current,
-            &mut used,
-            &mut current_set,
-        );
+
+        self.permute(i2c, serial, &remaining, &mut current_state, &mut solved_addrs);
+
         Ok(())
     }
 
@@ -84,82 +95,59 @@ impl<'a> Explorer<'a> {
         i2c: &mut I2C,
         serial: &mut W,
         unresolved: &Vec<usize, CMD_CAPACITY>,
-        current: &mut Vec<u8, CMD_CAPACITY>,
-        used: &mut [bool; CMD_CAPACITY],
-        current_set: &mut [bool; 256],
+        state: &mut PermutationState<CMD_CAPACITY>,
+        solved_addrs: &mut [bool; 128],
     ) where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
     {
-        // Stack to store the 'pos' (index in unresolved.iter().enumerate()) of the element
-        // that was added to 'current' at the current depth. This allows us to backtrack.
-        let mut path_stack: Vec<usize, CMD_CAPACITY> = Vec::new();
-
-        // Stack to store the starting index for the 'for' loop at each depth.
-        // When we go deeper, we push 0. When we backtrack, we increment the top.
-        let mut loop_start_indices: Vec<usize, CMD_CAPACITY> = Vec::new();
-        loop_start_indices.push(0); // Initial depth starts loop from index 0
-
         'main_loop: loop {
-            if current.len() == self.sequence.len() {
-                // Base case: A full permutation has been formed.
-                let _ = writeln!(serial, "[explorer] candidate: {current:?}");
+            if state.current.len() == self.sequence.len() {
+                // Full permutation formed
+                let _ = writeln!(serial, "[explorer] candidate: {state.current:?}");
 
                 for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                    let all_ok = current.iter().all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
+                    if solved_addrs[addr as usize] {
+                        continue; // skip already solved addresses
+                    }
+                    let all_ok = state.current.iter().all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
                     if all_ok {
                         let _ = writeln!(
                             serial,
-                            "[explorer] success: sequence {current:?} works for addr 0x{addr:02X}"
+                            "[explorer] success: sequence {state.current:?} works for addr 0x{addr:02X}"
                         );
+                        solved_addrs[addr as usize] = true;
                     }
                 }
 
-                if !self.backtrack(
-                    unresolved,
-                    current,
-                    used,
-                    current_set,
-                    &mut path_stack,
-                    &mut loop_start_indices,
-                    false,
-                ) {
+                if !self.backtrack(unresolved, state, false) {
                     break 'main_loop;
                 }
             } else {
-                // Recursive step: Try to extend the current permutation.
+                // Try extending permutation
                 let mut found_next_candidate = false;
-                let current_loop_start_idx = *loop_start_indices.last().unwrap();
+                let current_loop_start_idx = *state.loop_start_indices.last().unwrap();
 
                 for (pos, &idx) in unresolved.iter().enumerate().skip(current_loop_start_idx) {
-                    if used[pos] {
+                    if state.used[pos] {
                         continue;
                     }
                     let node = &self.sequence[idx];
-                    if node.deps.iter().all(|d| current_set[*d as usize]) {
-                        // Make the choice: add this command.
-                        current.push(node.cmd).unwrap();
-                        current_set[node.cmd as usize] = true;
-                        used[pos] = true;
+                    if node.deps.iter().all(|d| state.current_set[*d as usize]) {
+                        // Make choice
+                        state.current.push(node.cmd).unwrap();
+                        state.current_set[node.cmd as usize] = true;
+                        state.used[pos] = true;
 
-                        path_stack.push(pos);
-                        loop_start_indices.push(0);
+                        state.path_stack.push(pos);
+                        state.loop_start_indices.push(0);
                         found_next_candidate = true;
                         break;
                     }
                 }
 
                 if !found_next_candidate {
-                    // No more candidates at the current depth, backtrack.
-                    if !self.backtrack(
-                        unresolved,
-                        current,
-                        used,
-                        current_set,
-                        &mut path_stack,
-                        &mut loop_start_indices,
-                        true,
-                    ) {
+                    if !self.backtrack(unresolved, state, true) {
                         break 'main_loop;
                     }
                 }
@@ -170,30 +158,24 @@ impl<'a> Explorer<'a> {
     fn backtrack(
         &self,
         unresolved: &Vec<usize, CMD_CAPACITY>,
-        current: &mut Vec<u8, CMD_CAPACITY>,
-        used: &mut [bool; CMD_CAPACITY],
-        current_set: &mut [bool; 256],
-        path_stack: &mut Vec<usize, CMD_CAPACITY>,
-        loop_start_indices: &mut Vec<usize, CMD_CAPACITY>,
+        state: &mut PermutationState<CMD_CAPACITY>,
         pop_loop_index: bool,
     ) -> bool {
-        if let Some(last_added_pos) = path_stack.pop() {
+        if let Some(last_added_pos) = state.path_stack.pop() {
             let node_cmd = self.sequence[unresolved[last_added_pos]].cmd;
-            used[last_added_pos] = false;
-            current_set[node_cmd as usize] = false;
-            current.pop();
+            state.used[last_added_pos] = false;
+            state.current_set[node_cmd as usize] = false;
+            state.current.pop();
             if pop_loop_index {
-                loop_start_indices.pop();
+                state.loop_start_indices.pop();
             }
-            if let Some(last_loop_idx) = loop_start_indices.last_mut() {
+            if let Some(last_loop_idx) = state.loop_start_indices.last_mut() {
                 *last_loop_idx += 1;
             } else {
-                // path_stack is empty, all permutations explored.
                 return false;
             }
             true
         } else {
-            // path_stack is empty, all permutations explored.
             false
         }
     }
