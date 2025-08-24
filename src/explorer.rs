@@ -59,7 +59,7 @@ impl<'a> Explorer<'a> {
                 if remaining.len() > 8 {
             let _ = writeln!(serial, "[explorer] warning: Large number of unresolved commands ({}). This may take a very long time.", remaining.len());
         }
-        let mut current_set = [false; 256];
+        let mut current_set = staged_set;
         self.permute(
             i2c,
             serial,
