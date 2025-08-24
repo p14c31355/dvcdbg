@@ -46,7 +46,7 @@ impl<'a> Explorer<'a> {
 
         if node.deps.iter().all(|d| current_seq.contains(d)) && node.stage <= stage {
             for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                let _ = i2c.write(addr, &[node.cmd]);
+                let _ = i2c.write(addr, &[node.cmd]).map_err(|e| writeln!(serial, "[explorer] I2C write error at 0x{:02X}: {:?}", addr, e));
             }
 
             if current_seq.push(node.cmd).is_ok() {
