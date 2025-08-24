@@ -23,7 +23,7 @@
 //! ## AVR / Embedded Constraints
 //! - **Stack-safe**: The permutation algorithm is iterative to avoid stack overflow on devices with tiny stacks (e.g., AVR).
 //! - **RAM Usage**: `heapless::Vec` is used for `path_stack`, `loop_start_indices`, and `current`, while `current_set` and `used` are fixed-size arrays.
-//! These consume RAM proportional to the number of unresolved commands or the `CMD_CAPACITY` constant. Limit `CMD_CAPACITY` to a safe number (e.g., 8–16) for 8-bit MCUs to manage static memory allocation.
+//!   These consume RAM proportional to the number of unresolved commands or the `CMD_CAPACITY` constant. Limit `CMD_CAPACITY` to a safe number (e.g., 8–16) for 8-bit MCUs to manage static memory allocation.
 //! - **Performance**: Unresolved commands are explored in factorial order (`n!`). Keep unresolved command count low to avoid long execution times.
 //! - **Error Handling**: I2C write errors are logged to serial. Users should monitor logs for bus errors or NACKs.
 //!
