@@ -198,7 +198,7 @@ macro_rules! quick_diag {
         let _ = core::writeln!($serial, "=== Quick Diagnostic Complete ===");
     }};
     ($serial:expr, $i2c:expr) => {{
-        quick_diag!(@inner $serial, $i2c, $log_level);
+        quick_diag!(@inner $serial, $i2c, $crate::scanner::LogLevel::Verbose);
         let _ = core::writeln!($serial, "=== Quick Diagnostic Complete ===");
     }};
     // Internal rule for common diagnostic steps.
