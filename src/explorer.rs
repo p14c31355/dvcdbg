@@ -48,7 +48,10 @@ impl<'a> Explorer<'a> {
             }
         }
         if !remaining.is_empty() {
-            let _ = writeln!(serial, "[explorer] warning: unresolved dependencies found, possibly due to a cycle.");
+            let _ = writeln!(
+                serial,
+                "[explorer] warning: unresolved dependencies found, possibly due to a cycle."
+            );
         }
 
         let _ = writeln!(serial, "[explorer] staged: {staged:?}");
@@ -58,7 +61,11 @@ impl<'a> Explorer<'a> {
         let mut current: Vec<u8, CMD_CAPACITY> = staged.clone();
         let mut used = [false; CMD_CAPACITY];
         if remaining.len() > MAX_PERMUTATION_WARNING_THRESHOLD {
-            let _ = writeln!(serial, "[explorer] warning: Large number of unresolved commands ({}). This may take a very long time.", remaining.len());
+            let _ = writeln!(
+                serial,
+                "[explorer] warning: Large number of unresolved commands ({}). This may take a very long time.",
+                remaining.len()
+            );
         }
         let mut current_set = staged_set;
         self.permute(
@@ -80,15 +87,14 @@ impl<'a> Explorer<'a> {
         current: &mut Vec<u8, CMD_CAPACITY>,
         used: &mut [bool; CMD_CAPACITY],
         current_set: &mut [bool; 256],
-    )
-    where
+    ) where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
     {
         if current.len() == self.sequence.len() {
             let _ = writeln!(serial, "[explorer] candidate: {current:?}");
 
-                        for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+            for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 // For each address, try the full sequence.
                 let mut all_ok = true;
                 for &cmd in current.iter() {
@@ -99,7 +105,10 @@ impl<'a> Explorer<'a> {
                 }
 
                 if all_ok {
-                    let _ = writeln!(serial, "[explorer] success: sequence {current:?} works for addr 0x{addr:02X}");
+                    let _ = writeln!(
+                        serial,
+                        "[explorer] success: sequence {current:?} works for addr 0x{addr:02X}"
+                    );
                 }
             }
             return;
