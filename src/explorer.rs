@@ -3,6 +3,7 @@ use heapless::Vec;
 
 const CMD_CAPACITY: usize = 32;
 const MAX_PERMUTATION_WARNING_THRESHOLD: usize = 8;
+const I2C_ADDRESS_COUNT: usize = 128;
 
 pub enum ExplorerError {
     TooManyCommands,
