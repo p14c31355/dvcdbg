@@ -1,56 +1,56 @@
+//! I2C command sequence explorer for no_std
 use heapless::Vec;
-use embedded_hal::blocking::i2c::{Write, WriteRead};
+use crate::scanner::{I2C_SCAN_ADDR_START, I2C_SCAN_ADDR_END};
 
-pub struct Command<'a> {
-    pub bytes: &'a [u8],
-    pub depends_on: &'a [&'a [u8]],
+pub struct CmdNode<'a> {
+    pub cmd: u8,
+    pub deps: &'a [u8],
 }
 
-pub struct Explorer<'a, I2C, const N: usize>
-where
-    I2C: Write,
-{
-    i2c: I2C,
-    addr: u8,
-    commands: &'a [Command<'a>],
-    visited: Vec<&'a [u8], N>,
+pub struct Explorer<'a> {
+    pub sequence: &'a [CmdNode<'a>],
 }
 
-impl<'a, I2C, const N: usize> Explorer<'a, I2C, N>
-where
-    I2C: Write,
-{
-    pub fn new(i2c: I2C, addr: u8, commands: &'a [Command<'a>]) -> Self {
-        Self {
-            i2c,
-            addr,
-            commands,
-            visited: Vec::new(),
-        }
+impl<'a> Explorer<'a> {
+    pub fn explore<I2C, W>(
+        &self,
+        i2c: &mut I2C,
+        serial: &mut W,
+    ) where
+        I2C: crate::compat::I2cCompat,
+        W: core::fmt::Write,
+    {
+        let mut current_seq: Vec<u8, 32> = Vec::new();
+        self.backtrack(i2c, serial, 0, &mut current_seq);
     }
 
-    pub fn explore(&mut self) -> Result<(), I2C::Error> {
-        for cmd in self.commands {
-            self.try_send(cmd)?;
+    fn backtrack<I2C, W>(
+        &self,
+        i2c: &mut I2C,
+        serial: &mut W,
+        index: usize,
+        current_seq: &mut Vec<u8, 32>,
+    ) where
+        I2C: crate::compat::I2cCompat,
+        W: core::fmt::Write,
+    {
+        if index >= self.sequence.len() {
+            let _ = writeln!(serial, "[explorer] Valid sequence found: {:?}", current_seq);
+            return;
         }
-        Ok(())
-    }
 
-    fn try_send(&mut self, cmd: &Command<'a>) -> Result<(), I2C::Error> {
-        for dep in cmd.depends_on {
-            if !self.visited.contains(dep) {
-                let dep_cmd = self.commands.iter().find(|c| c.bytes == *dep).unwrap();
-                self.try_send(dep_cmd)?;
+        let node = &self.sequence[index];
+
+        if node.deps.iter().all(|d| current_seq.contains(d)) {
+            for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+                let _ = i2c.write(addr, &[node.cmd]);
+            }
+            if current_seq.push(node.cmd).is_ok() {
+                self.backtrack(i2c, serial, index + 1, current_seq);
+                let _ = current_seq.pop();
             }
         }
 
-        if self.visited.contains(&cmd.bytes) {
-            return Ok(());
-        }
-
-        self.i2c.write(self.addr, cmd.bytes)?;
-
-        self.visited.push(cmd.bytes).ok();
-        Ok(())
+        self.backtrack(i2c, serial, index + 1, current_seq);
     }
 }
