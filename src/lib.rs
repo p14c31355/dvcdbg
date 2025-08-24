@@ -12,4 +12,5 @@ pub mod macros;
 
 pub mod compat;
 pub mod error;
+pub mod explorer;
 pub mod prelude;
