@@ -125,13 +125,7 @@ impl<'a> Explorer<'a> {
                     current_set[node_cmd as usize] = false;
                     current.pop();
                     // Increment the loop start index for the current depth (which is now the previous depth)
-                    if let Some(last_loop_idx) = loop_start_indices.last_mut() {
-                        *last_loop_idx += 1;
-                    } else {
-                        // This means path_stack was empty, and we just popped the last element.
-                        // All permutations have been explored.
-                        break 'main_loop;
-                    }
+                    *loop_start_indices.last_mut().unwrap() += 1;
                 } else {
                     // path_stack is empty, all permutations explored.
                     break 'main_loop;
