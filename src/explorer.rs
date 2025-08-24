@@ -265,9 +265,9 @@ impl<'a> Explorer<'a> {
     /// Backtracks to the previous decision point in the permutation search.
     ///
     /// # Parameters
-    /// - `pop_loop_index`:  
-    ///   - `true`: we failed to extend further, so discard the loop index for this depth.  
-    ///   - `false`: we found a valid full permutation, so just increment the loop index.
+    /// - `reason`: Indicates why backtracking is occurring. This determines how the search state is updated.
+    ///   - `BacktrackReason::FoundPermutation`: A full permutation was found. The search continues for the next sibling.
+    ///   - `BacktrackReason::ExhaustedOptions`: The current path cannot be extended. The search backtracks and prunes this branch.
     ///
     /// Returns `true` if backtracking can continue, or `false` if the root was reached.
     fn backtrack(
