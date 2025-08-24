@@ -229,7 +229,7 @@ macro_rules! define_scanner {
                         if let $crate::scanner::LogLevel::Verbose = log_level {
                             let _ = writeln!(serial, "[error] write failed at 0x{:02X}: {}", addr, e_kind);
                         }
-                        last_error = Some(e_kind);
+if last_error.is_none() { last_error = Some(e_kind); }
                     }
                 }
             }
