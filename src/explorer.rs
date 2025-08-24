@@ -47,10 +47,10 @@ impl<'a> Explorer<'a> {
         let sets_ok = node.sets.is_empty() || node.sets.iter().any(|set| set.iter().all(|s| current_seq.contains(s)));
 
         if deps_ok && sets_ok {
-            for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                let _ = i2c.write(addr, &[node.cmd]);
-            }
             if current_seq.push(node.cmd).is_ok() {
+                for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+                    let _ = i2c.write(addr, &[node.cmd]);
+                }
                 self.backtrack(i2c, serial, index + 1, current_seq);
                 let _ = current_seq.pop();
             }
