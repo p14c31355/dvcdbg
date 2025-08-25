@@ -162,7 +162,7 @@ macro_rules! define_scanner {
         pub fn scan_init_sequence<I2C, W>(
             i2c: &mut I2C,
             serial: &mut W,
-            init_sequence: &mut [u8],
+            init_sequence: &[u8],
             log_level: $crate::scanner::LogLevel,
         ) -> Vec<u8, 64>
         where
