@@ -253,14 +253,15 @@ impl<'a> Explorer<'a> {
 
             let node = &self.sequence[idx];
 
-            state.current.push(node.cmd).unwrap();
-            state.current_set[node.cmd as usize] = true;
-            state.used[pos] = true;
+            if node.deps.iter().all(|d| state.current_set[*d as usize]) {
+                state.current.push(node.cmd).unwrap();
+                state.current_set[node.cmd as usize] = true;
+                state.used[pos] = true;
 
-            let _ = state.path_stack.push(pos);
-            let _ = state.loop_start_indices.push(0);
-
-            return true;
+                let _ = state.path_stack.push(pos);
+                let _ = state.loop_start_indices.push(0);
+                return true;
+            }
         }
 
         false
