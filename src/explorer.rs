@@ -145,7 +145,7 @@ impl<'a> Explorer<'a> {
     ///
     /// let mut executor = MyExecutor;
     ///
-    /// for cmd in SH1107G_NODES.iter() {
+    /// for cmd in nodes.iter() {
     ///     if !executor.exec(&mut i2c, 0x3C, cmd.bytes) {
     ///        let _ = writeln!(serial, "[error] failed to send command: {:X?}", cmd.bytes);
     ///    }
