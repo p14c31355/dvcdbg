@@ -22,12 +22,12 @@
 //!     }
 //! }
 //!
-//! let cmds = &[
-//!     CmdNode { bytes: &[0x01], deps: &[] },
-//!     CmdNode { bytes: &[0x02], deps: &[0x01] },
-//!     CmdNode { bytes: &[0x03], deps: &[0x01] },
+//! let cmds = [
+//!     CmdNode { bytes: vec![0x01], deps: vec![] },
+//!     CmdNode { bytes: vec![0x02], deps: vec![0x01] },
+//!     CmdNode { bytes: vec![0x03], deps: vec![0x01] },
 //! ];
-//! let explorer = Explorer { sequence: cmds };
+//! let explorer = Explorer { sequence: cmds.to_vec() };
 //! let mut executor = MyExecutor;
 //! // explorer.explore(&mut i2c, &mut serial, &mut executor).unwrap();
 //! ```
@@ -66,11 +66,11 @@ enum BacktrackReason {
 ///
 /// Each command may depend on other commands, meaning they must appear
 /// earlier in the sequence before this command can be executed.
-pub struct CmdNode<'a> {
+pub struct CmdNode {
     /// The I2C command bytes to be sent. Can be a single command or a command with parameters.
-    pub bytes: &'a [u8],
+    pub bytes: Vec<u8>,
     /// The list of command bytes that must precede this command. The dependency is on the *first* byte of the dependent command.
-    pub deps: &'a [u8],
+    pub deps: Vec<u8>,
 }
 
 /// An explorer that attempts to discover valid I2C command sequences
@@ -81,9 +81,9 @@ pub struct CmdNode<'a> {
 /// - Then, for the remaining commands, iteratively generates permutations
 ///   that satisfy all dependency constraints.
 /// - For each candidate sequence, attempts it on all I2C addresses in the scan range.
-pub struct Explorer<'a> {
+pub struct Explorer {
     /// The input sequence of command nodes (with dependencies).
-    pub sequence: &'a [CmdNode<'a>],
+    pub sequence: Vec<CmdNode>,
 }
 
 /// Internal state used during permutation generation.
@@ -97,7 +97,7 @@ pub struct Explorer<'a> {
 /// - `path_stack`: stack of indices into `unresolved`, representing the order of decisions.
 /// - `loop_start_indices`: optimization to avoid retrying candidates already attempted at each recursion depth.
 struct PermutationState<const C: usize> {
-    current: Vec<&'static [u8], C>,
+    current: Vec<Vec<u8>, C>,
     used: [bool; C],
     current_set: [bool; 256],
     path_stack: Vec<usize, C>,
@@ -114,7 +114,7 @@ pub trait CmdExecutor<I2C> {
     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool;
 }
 
-impl<'a> Explorer<'a> {
+impl Explorer {
     /// Explore valid I2C command sequences for the provided command graph.
     ///
     /// # Parameters
@@ -133,11 +133,11 @@ impl<'a> Explorer<'a> {
     ///
     /// // Two commands: 0xA0 depends on 0x90, 0x90 has no deps.
     /// let nodes = [
-    ///     CmdNode { bytes: &[0x90], deps: &[] },
-    ///     CmdNode { bytes: &[0xA0], deps: &[0x90] },
+    ///     CmdNode { bytes: vec![0x90], deps: vec![] },
+    ///     CmdNode { bytes: vec![0xA0], deps: vec![0x90] },
     /// ];
     ///
-    /// let explorer = Explorer { sequence: &nodes };
+    /// let explorer = Explorer { sequence: nodes.to_vec() };
     ///
     /// // Dummy I2C + Serial + Executor implementations would be injected here in real use.
     /// // explorer.explore(&mut i2c, &mut serial, &mut executor);
@@ -157,7 +157,7 @@ impl<'a> Explorer<'a> {
         W: core::fmt::Write,
         E: CmdExecutor<I2C>,
     {
-        let mut staged: Vec<&'static [u8], CMD_CAPACITY> = Vec::new();
+        let mut staged: Vec<Vec<u8>, CMD_CAPACITY> = Vec::new();
         if self.sequence.len() > CMD_CAPACITY {
             let _ = writeln!(serial, "error: too many commands");
             return Err(ExplorerError::TooManyCommands);
@@ -173,7 +173,7 @@ impl<'a> Explorer<'a> {
                 let node = &self.sequence[idx];
                 if node.deps.iter().all(|d| staged_set[*d as usize]) {
                     staged
-                        .push(node.bytes)
+                        .push(node.bytes.clone())
                         .expect("staged vec should have enough capacity");
                     if let Some(first_byte) = node.bytes.first() {
                         staged_set[*first_byte as usize] = true;
@@ -282,7 +282,7 @@ impl<'a> Explorer<'a> {
             let all_ok = state
                 .current
                 .iter()
-                .all(|&cmd| executor.exec(i2c, addr, cmd));
+                .all(|cmd| executor.exec(i2c, addr, cmd));
             if all_ok {
                 let _ = writeln!(
                     serial,
@@ -310,7 +310,7 @@ impl<'a> Explorer<'a> {
             let node = &self.sequence[idx];
             if node.deps.iter().all(|d| state.current_set[*d as usize]) {
                 // Make choice
-                state.current.push(node.bytes).unwrap();
+                state.current.push(node.bytes.clone()).unwrap();
                 if let Some(first_byte) = node.bytes.first() {
                     state.current_set[*first_byte as usize] = true;
                 }
@@ -367,9 +367,9 @@ impl<'a> Explorer<'a> {
         w.write_char(lo as char).ok();
     }
 
-    fn write_sequence<W: core::fmt::Write>(&self, w: &mut W, seq: &[&[u8]]) {
+    fn write_sequence<W: core::fmt::Write>(&self, w: &mut W, seq: &[Vec<u8>]) {
         for bytes in seq {
-            for &b in *bytes {
+            for &b in bytes {
                 Self::hex_byte(w, b);
             }
             w.write_char(' ').ok();
