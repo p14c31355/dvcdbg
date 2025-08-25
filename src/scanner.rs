@@ -323,7 +323,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 /// let mut serial = /* your serial instance */;
 /// let init_sequence = [0u8; 16]; // Example initial sequence
 /// let explorer = Explorer { sequence: &[] }; // Dummy explorer
-
+///
 /// run_explorer(
 ///     &explorer,
 ///     &mut i2c,
