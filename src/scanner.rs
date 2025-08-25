@@ -290,7 +290,7 @@ pub fn run_explorer<I2C, S>(
     explorer: &crate::explorer::Explorer<'_>,
     i2c: &mut I2C,
     serial: &mut S,
-    init_sequence: &mut [u8],
+    init_sequence: &[u8],
     prefix: u8,
     log_level: LogLevel,
 ) -> Result<(), crate::explorer::ExplorerError>
