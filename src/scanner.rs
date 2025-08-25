@@ -307,13 +307,12 @@ where
         log_level,
     );
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
-
     let _ = writeln!(serial, "[log] Start driver safe init");
 
     explorer.explore(
         i2c,
         serial,
-        &mut PrefixExecutor::new(prefix,successful_seq),
+        &mut PrefixExecutor::new(prefix, successful_seq),
     )
     .map(|()| {
         let _ = writeln!(serial, "[driver] init sequence applied");
@@ -325,14 +324,16 @@ where
 }
 struct PrefixExecutor {
     prefix: u8,
+    init_sequence: heapless::Vec<u8, 64>,
     buffer: heapless::Vec<u8, 64>,
 }
 
 impl PrefixExecutor {
-    fn new(prefix: u8, buffer: heapless::Vec<u8, 64>) -> Self {
+    fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
         Self {
             prefix,
-            buffer,
+            init_sequence,
+            buffer: heapless::Vec::new(),
         }
     }
 }
@@ -343,12 +344,23 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool {
-        // This executor is a dummy for the explorer.
+        // Init sequence before exploring
         self.buffer.clear();
+        for &c in self.init_sequence.iter() {
+            if self.buffer.push(self.prefix).is_err() || self.buffer.push(c).is_err() {
+                return false;
+            }
+            if i2c.write(addr, &self.buffer).is_err() {
+                return false;
+            }
+            self.buffer.clear();
+        }
 
+        // Run the explorer command
         if self.buffer.push(self.prefix).is_err() || self.buffer.extend_from_slice(cmd).is_err() {
             return false;
         }
+
         i2c.write(addr, &self.buffer).is_ok()
     }
 }
