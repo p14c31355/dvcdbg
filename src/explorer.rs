@@ -45,8 +45,8 @@
 //! - The non-recursive approach is chosen to make the algorithm safer for small-memory MCUs.
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
-use heapless::{Vec, String};
 use core::fmt::Write;
+use heapless::{String, Vec};
 
 const CMD_CAPACITY: usize = 32;
 const MAX_PERMUTATION_WARNING_THRESHOLD: usize = 8;
@@ -142,9 +142,9 @@ impl<'a> Explorer<'a> {
     /// ];
     ///
     /// let explorer = Explorer { sequence: &nodes };
-    /// 
+    ///
     /// let mut executor = MyExecutor;
-
+    ///
     /// for cmd in SH1107G_NODES.iter() {
     ///     if !executor.exec(&mut i2c, 0x3C, cmd.bytes) {
     ///        let _ = writeln!(serial, "[error] failed to send command: {:X?}", cmd.bytes);
@@ -207,7 +207,8 @@ impl<'a> Explorer<'a> {
                 serial,
                 "[explorer] warning: Unresolved dependencies found. {} commands remain.",
                 remaining.len()
-            ).ok();
+            )
+            .ok();
         }
 
         let _ = writeln!(serial, "[explorer] Staged sequence:").ok();
@@ -305,7 +306,8 @@ impl<'a> Explorer<'a> {
                 let _ = writeln!(
                     &mut log_buf,
                     "[explorer] Success: Sequence works for addr 0x{addr:02X}"
-                ).ok();
+                )
+                .ok();
                 solved_addrs[addr as usize] = true;
             }
         }
