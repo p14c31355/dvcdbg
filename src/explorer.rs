@@ -16,9 +16,13 @@
 //! struct MyExecutor;
 //! impl<I2C: I2cCompat> CmdExecutor<I2C> for MyExecutor {
 //!     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool {
-//!         let mut buf = [0x00, 0x00];
-//!         buf[1] = cmd[0];
-//!         i2c.write(addr, &buf).is_ok()
+//!  // This example executor only supports single-byte commands for simplicity,
+//!  // and assumes a device protocol that requires a 0x00 control byte.
+//!  if cmd.len() != 1 {
+//!  return false;
+//!  }
+//!  let buf = [0x00, cmd[0]];
+//!  i2c.write(addr, &buf).is_ok()
 //!     }
 //! }
 //!
