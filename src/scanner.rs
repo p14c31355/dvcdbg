@@ -334,8 +334,8 @@ struct PrefixExecutor {
 }
 
 impl<'a> PrefixExecutor<'a> {
-    fn new(init_sequence: &'a mut [u8], prefix: u8) -> Self {
-        Self { init_sequence, prefix }
+    fn new(_, prefix: u8) -> Self {
+        Self { _, prefix }
     }
 }
 
