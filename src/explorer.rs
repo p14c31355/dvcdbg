@@ -143,14 +143,18 @@ impl<'a> Explorer<'a> {
             remaining.retain(|&idx| {
                 let node = &self.sequence[idx];
                 if node.deps.iter().all(|d| staged_set[*d as usize]) {
-                    staged.push(node.cmd).expect("staged vec should have enough capacity");
+                    staged
+                        .push(node.cmd)
+                        .expect("staged vec should have enough capacity");
                     staged_set[node.cmd as usize] = true;
                     false
                 } else {
                     true
                 }
             });
-            if staged.len() == before { break; }
+            if staged.len() == before {
+                break;
+            }
         }
 
         if !remaining.is_empty() {
@@ -181,7 +185,13 @@ impl<'a> Explorer<'a> {
             );
         }
 
-        self.permute(i2c, serial, &remaining, &mut current_state, &mut solved_addrs);
+        self.permute(
+            i2c,
+            serial,
+            &remaining,
+            &mut current_state,
+            &mut solved_addrs,
+        );
 
         Ok(())
     }
@@ -200,10 +210,14 @@ impl<'a> Explorer<'a> {
         'main_loop: loop {
             if state.current.len() == self.sequence.len() {
                 self.handle_full_permutation(i2c, serial, state, solved_addrs);
-                if !self.backtrack(unresolved, state, BacktrackReason::FoundPermutation) { break 'main_loop; }
+                if !self.backtrack(unresolved, state, BacktrackReason::FoundPermutation) {
+                    break 'main_loop;
+                }
             } else if !self.try_extend_permutation(unresolved, state) {
                 // Could not extend, backtrack
-                if !self.backtrack(unresolved, state, BacktrackReason::ExhaustedOptions) { break 'main_loop; }
+                if !self.backtrack(unresolved, state, BacktrackReason::ExhaustedOptions) {
+                    break 'main_loop;
+                }
             }
         }
     }
@@ -226,10 +240,18 @@ impl<'a> Explorer<'a> {
         self.write_sequence(serial, &state.current);
 
         for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-            if solved_addrs[addr as usize] { continue; }
-            let all_ok = state.current.iter().all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
+            if solved_addrs[addr as usize] {
+                continue;
+            }
+            let all_ok = state
+                .current
+                .iter()
+                .all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
             if all_ok {
-                let _ = writeln!(serial, "[explorer] success: sequence works for addr 0x{addr:02X}");
+                let _ = writeln!(
+                    serial,
+                    "[explorer] success: sequence works for addr 0x{addr:02X}"
+                );
                 solved_addrs[addr as usize] = true;
             }
         }
@@ -246,7 +268,9 @@ impl<'a> Explorer<'a> {
     ) -> bool {
         let current_loop_start_idx = *state.loop_start_indices.last().unwrap();
         for (pos, &idx) in unresolved.iter().enumerate().skip(current_loop_start_idx) {
-            if state.used[pos] { continue; }
+            if state.used[pos] {
+                continue;
+            }
             let node = &self.sequence[idx];
             if node.deps.iter().all(|d| state.current_set[*d as usize]) {
                 // Make choice
@@ -277,25 +301,22 @@ impl<'a> Explorer<'a> {
         reason: BacktrackReason,
     ) -> bool {
         if let Some(last_added_pos) = state.path_stack.pop() {
-    let node_cmd = self.sequence[unresolved[last_added_pos]].cmd;
-    state.used[last_added_pos] = false;
-    state.current_set[node_cmd as usize] = false;
-    state.current.pop();
+            let node_cmd = self.sequence[unresolved[last_added_pos]].cmd;
+            state.used[last_added_pos] = false;
+            state.current_set[node_cmd as usize] = false;
+            state.current.pop();
 
-    
-    state.loop_start_indices.pop();
+            state.loop_start_indices.pop();
 
-    
-    if let Some(last_loop_idx) = state.loop_start_indices.last_mut() {
-        *last_loop_idx += 1;
-    } else { 
-        return false;
-    }
-    true
-} else {
-    false
-}
-
+            if let Some(last_loop_idx) = state.loop_start_indices.last_mut() {
+                *last_loop_idx += 1;
+            } else {
+                return false;
+            }
+            true
+        } else {
+            false
+        }
     }
 
     fn hex_byte<W: core::fmt::Write>(w: &mut W, b: u8) {
