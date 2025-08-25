@@ -302,7 +302,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 /// - `explorer`: A reference to an `Explorer` that defines the exploration sequence.
 /// - `i2c`: A mutable reference to the I2C bus to communicate with devices.
 /// - `serial`: A mutable reference to a serial logger for debug output.
-/// - `init_sequence`: A mutable slice of bytes representing the initial I2C command sequence.
+/// - `init_sequence`: A slice of bytes representing the initial I2C command sequence.
 ///   This sequence will be scanned and sent to each device before running the explorer commands.
 /// - `prefix`: A byte to prepend to each command during execution.
 /// - `log_level`: A `LogLevel` controlling the verbosity of logging.
