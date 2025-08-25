@@ -315,8 +315,8 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 /// # Example
 ///
 /// ```ignore
-/// # use your_crate::{run_explorer, Explorer, LogLevel, compat::I2cCompat};
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # use dvcdbg::prelude::*;
+/// # fn main() -> ! {
 /// let mut i2c = /* your I2C instance */;
 /// let mut serial = /* your serial instance */;
 /// let mut init_sequence = [0u8; 16]; // Example initial sequence
@@ -327,7 +327,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 ///     &mut i2c,
 ///     &mut serial,
 ///     &mut init_sequence,
-///     0x80, // Example prefix
+///     0x3C, // Example prefix
 ///     LogLevel::Info,
 /// )?;
 /// # Ok(())
