@@ -164,7 +164,7 @@ macro_rules! define_scanner {
             serial: &mut W,
             init_sequence: &mut [u8],
             log_level: $crate::scanner::LogLevel,
-        ) -> &'static mut [u8]
+        ) -> Vec<u8, 64>
         where
             I2C: $i2c_trait,
             W: core::fmt::Write,
@@ -298,7 +298,7 @@ pub fn run_explorer<I2C, S, E>(
     init_sequence: &mut [u8],
     prefix: u8,
     log_level: LogLevel,
-) -> Result<(), (crate::explorer::ExplorerError)>
+) -> Result<(), crate::explorer::ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
     S: core::fmt::Write,
@@ -306,16 +306,16 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
     let _ = writeln!(serial, "[log] Scanning I2C bus...");
-    let init_sequence = scan_init_sequence(i2c, serial, init_sequence, log_level);
+    let mut init_sequence = scan_init_sequence(i2c, serial, init_sequence, log_level);
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
 
-    let successful_seq = scan_init_sequence(i2c, serial, init_sequence, log_level);
+    let mut successful_seq = scan_init_sequence(i2c, serial, &mut init_sequence, log_level);
     let _ = writeln!(serial, "[log] Start SH1107G safe init");
     match explorer.explore(
         i2c,
         serial,
         &mut PrefixExecutor::new(
-            successful_seq,
+            &mut successful_seq,
             prefix,
         ),
     ) {
