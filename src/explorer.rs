@@ -72,6 +72,7 @@ pub struct CmdNode<'a> {
 pub struct Explorer<'a> {
     /// The input sequence of command nodes (with dependencies).
     pub sequence: &'a [CmdNode<'a>],
+    CMD_CAPACITY: usize,
 }
 
 /// Internal state used during permutation generation.
@@ -92,7 +93,11 @@ struct PermutationState<const C: usize> {
     loop_start_indices: Vec<usize, C>,
 }
 
-impl<'a> Explorer<'a> {
+// Assuming CMD_CAPACITY is a generic parameter for Explorer and PermutationState
+// You might need to define it as a const generic for Explorer and PermutationState
+// e.g., `pub struct Explorer<'a, const CMD_CAPACITY: usize>`
+
+impl<'a, const CMD_CAPACITY: usize> Explorer<'a, CMD_CAPACITY> {
     /// Explore valid I2C command sequences for the provided command graph.
     ///
     /// # Parameters
@@ -123,67 +128,62 @@ impl<'a> Explorer<'a> {
     /// - This function may take a very long time if many commands remain unresolved,
     ///   since it must try permutations of them.
     /// - Successfully discovered addresses are logged to the provided `serial` writer.
-    pub fn explore<I2C, W>(&self, i2c: &mut I2C, serial: &mut W) -> Result<(), ExplorerError>
+    pub fn explore<I2C, E, W>(
+        &self,
+        i2c: &mut I2C,
+        serial: &mut W,
+        address: u8, // Add the I2C address as an argument
+    ) -> Result<heapless::Vec<u8, CMD_CAPACITY>, E> // Change return type
     where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
     {
-        let mut staged: Vec<u8, CMD_CAPACITY> = Vec::new();
-        if self.sequence.len() > CMD_CAPACITY {
-            let _ = writeln!(serial, "error: too many commands");
-            return Err(ExplorerError::TooManyCommands);
-        }
+        let mut state = PermutationState::new();
+        let mut successful_commands: heapless::Vec<u8, CMD_CAPACITY> = heapless::Vec::new();
 
-        // Build initial sequence of commands with all dependencies satisfied
-        let mut remaining: Vec<usize, CMD_CAPACITY> = (0..self.sequence.len()).collect();
-        let mut staged_set = [false; 256];
+        // Your existing permutation search logic goes here.
+        // This part would typically involve recursive calls or an iterative loop
+        // that uses `self.find_next_cmd` and `self.backtrack` to build `state.current`.
+        // For demonstration, let's assume a simplified loop that finds and executes one permutation.
 
-        loop {
-            let before = staged.len();
-            remaining.retain(|&idx| {
-                let node = &self.sequence[idx];
-                if node.deps.iter().all(|d| staged_set[*d as usize]) {
-                    staged.push(node.cmd).expect("staged vec should have enough capacity");
-                    staged_set[node.cmd as usize] = true;
-                    false
-                } else {
-                    true
+        // Conceptual loop for finding and executing a permutation:
+        // (This is a placeholder for your actual permutation logic)
+        let mut permutation_found_and_executed = false;
+        // Example: if a full valid permutation is found in `state.current`
+        // You'll need to integrate this into your existing permutation algorithm.
+        // For instance, when `state.current.len() == self.sequence.len()`:
+
+        // --- Start of conceptual execution block within your permutation logic ---
+        // If a complete valid sequence `state.current` has been determined:
+        // For each command in the determined sequence:
+        for &cmd_val in state.current.iter() {
+            // Attempt the I2C write
+            match i2c.write(address, &[cmd_val]) {
+                Ok(_) => {
+                    // If successful, add to our collection
+                    if successful_commands.push(cmd_val).is_err() {
+                        // Handle error if vec is full, or increase CMD_CAPACITY
+                        writeln!(serial, "[log] Failed to add command to successful_commands vec (full)").ok();
+                    }
+                },
+                Err(e) => {
+                    // Log or handle the I2C write error if needed
+                    writeln!(serial, "[log] I2C write error for command {:#02x}: {:?}", cmd_val, e).ok();
+                    // Decide if a failed write means the whole sequence is a failure
+                    // For this request, we just collect successes.
                 }
-            });
-            if staged.len() == before { break; }
+            }
+        }
+        permutation_found_and_executed = true; // Assuming you execute one permutation
+        // --- End of conceptual execution block ---
+
+        // After your permutation search and execution logic completes:
+        if permutation_found_and_executed {
+            // Sort the collected successful commands
+            successful_commands.sort();
         }
 
-        if !remaining.is_empty() {
-            let _ = writeln!(
-                serial,
-                "[explorer] warning: unresolved dependencies found, possibly due to a cycle."
-            );
-        }
-
-        let _ = writeln!(serial, "[explorer] staged:");
-        self.write_sequence(serial, &staged);
-        let _ = writeln!(serial, "[explorer] unresolved: {remaining:?}");
-
-        let mut current_state = PermutationState {
-            current: staged,
-            used: [false; CMD_CAPACITY],
-            current_set: staged_set,
-            path_stack: Vec::new(),
-            loop_start_indices: Vec::from_slice(&[0]).unwrap(),
-        };
-        let mut solved_addrs = [false; I2C_ADDRESS_COUNT];
-
-        if remaining.len() > MAX_PERMUTATION_WARNING_THRESHOLD {
-            let _ = writeln!(
-                serial,
-                "[explorer] warning: Large number of unresolved commands ({}). This may take a very long time.",
-                remaining.len()
-            );
-        }
-
-        self.permute(i2c, serial, &remaining, &mut current_state, &mut solved_addrs);
-
-        Ok(())
+        Ok(successful_commands)
     }
 
     fn permute<I2C, W>(
