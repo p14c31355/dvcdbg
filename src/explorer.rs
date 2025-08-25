@@ -69,10 +69,9 @@ pub struct CmdNode<'a> {
 /// - Then, for the remaining commands, iteratively generates permutations
 ///   that satisfy all dependency constraints.
 /// - For each candidate sequence, attempts it on all I2C addresses in the scan range.
-pub struct Explorer<'a> {
+pub struct Explorer<'a, const CMD_CAPACITY: usize> {
     /// The input sequence of command nodes (with dependencies).
     pub sequence: &'a [CmdNode<'a>],
-    CMD_CAPACITY: usize,
 }
 
 /// Internal state used during permutation generation.
