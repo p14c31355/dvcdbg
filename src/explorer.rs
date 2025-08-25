@@ -298,7 +298,7 @@ impl<'a> Explorer<'a> {
         &self,
         unresolved: &Vec<usize, CMD_CAPACITY>,
         state: &mut PermutationState<CMD_CAPACITY>,
-        reason: BacktrackReason,
+        _reason: BacktrackReason,
     ) -> bool {
         if let Some(last_added_pos) = state.path_stack.pop() {
             let node_cmd = self.sequence[unresolved[last_added_pos]].cmd;
