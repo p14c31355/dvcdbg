@@ -286,6 +286,53 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
     let _ = writeln!(serial);
 }
 
+/// Runs an I2C initialization exploration sequence using a provided `Explorer`.
+///
+/// This function scans the I2C bus for devices and attempts to apply
+/// a safe driver initialization sequence. It logs progress and errors
+/// to a serial interface implementing `core::fmt::Write`.
+///
+/// # Type Parameters
+///
+/// - `I2C`: The I2C interface type that implements `crate::compat::I2cCompat`.
+/// - `S`: The serial interface type used for logging, implementing `core::fmt::Write`.
+///
+/// # Parameters
+///
+/// - `explorer`: A reference to an `Explorer` that defines the exploration sequence.
+/// - `i2c`: A mutable reference to the I2C bus to communicate with devices.
+/// - `serial`: A mutable reference to a serial logger for debug output.
+/// - `init_sequence`: A mutable slice of bytes representing the initial I2C command sequence.
+///   This sequence will be scanned and sent to each device before running the explorer commands.
+/// - `prefix`: A byte to prepend to each command during execution.
+/// - `log_level`: A `LogLevel` controlling the verbosity of logging.
+///
+/// # Returns
+///
+/// Returns `Ok(())` if the explorer successfully applied the driver-safe init sequence,
+/// or `Err(ExplorerError)` if the exploration failed. Errors are also logged to `serial`.
+///
+/// # Example
+///
+/// ```ignore
+/// # use your_crate::{run_explorer, Explorer, LogLevel, compat::I2cCompat};
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let mut i2c = /* your I2C instance */;
+/// let mut serial = /* your serial instance */;
+/// let mut init_sequence = [0u8; 16]; // Example initial sequence
+/// let explorer = Explorer::new(/* ... */);
+///
+/// run_explorer(
+///     &explorer,
+///     &mut i2c,
+///     &mut serial,
+///     &mut init_sequence,
+///     0x80, // Example prefix
+///     LogLevel::Info,
+/// )?;
+/// # Ok(())
+/// # }
+/// ```
 pub fn run_explorer<I2C, S>(
     explorer: &crate::explorer::Explorer<'_>,
     i2c: &mut I2C,
@@ -322,6 +369,12 @@ where
         e
     })
 }
+
+/// Executor that prepends a prefix to each command and applies an initial sequence.
+///
+/// `PrefixExecutor` is used internally by `run_explorer` to ensure that each I2C
+/// command is sent with a fixed prefix and that the initial scanned sequence is
+/// executed for every device before the main exploration commands.
 struct PrefixExecutor {
     prefix: u8,
     init_sequence: heapless::Vec<u8, 64>,
@@ -329,6 +382,12 @@ struct PrefixExecutor {
 }
 
 impl PrefixExecutor {
+    /// Creates a new `PrefixExecutor` with the given prefix and initial sequence.
+    ///
+    /// # Parameters
+    ///
+    /// - `prefix`: Byte to prepend to every command.
+    /// - `init_sequence`: Initial command sequence to run before explorer commands.
     fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
         Self {
             prefix,
@@ -343,6 +402,12 @@ where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
+    /// Executes a command on the I2C device at `addr`.
+    ///
+    /// This method first sends the initial sequence with the prefix to the device,
+    /// then sends the provided command with the prefix.
+    ///
+    /// Returns `true` if the command was successfully written, or `false` on failure.
     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool {
         // Init sequence before exploring
         self.buffer.clear();
