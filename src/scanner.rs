@@ -201,14 +201,9 @@ macro_rules! define_scanner {
                 }
             }
 
-            let len = detected_cmds.len();
-            for (i, &cmd) in detected_cmds.iter().enumerate() {
-                init_sequence[i] = cmd;
-            }
-
             super::log_differences(serial, init_sequence, &detected_cmds);
             let _ = writeln!(serial, "[info] I2C scan with init sequence complete.");
-            &mut init_sequence[..len]
+            detected_cmds
         }
 
         fn internal_scan<I2C, W>(
@@ -306,11 +301,24 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
     let _ = writeln!(serial, "[log] Scanning I2C bus...");
-    let mut init_sequence = scan_init_sequence(i2c, serial, init_sequence, log_level);
+    let mut successful_seq = crate::scanner::scan_init_sequence(
+        i2c,
+        serial,
+        init_sequence,
+        log_level,
+    );
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
 
     let mut successful_seq = scan_init_sequence(i2c, serial, &mut init_sequence, log_level);
-    let _ = writeln!(serial, "[log] Start SH1107G safe init");
+    let _ = writeln!(serial, "[log] Start driver safe init");
+    let mut prefixed_sequence: Vec<u8, 64> = Vec::new();
+    for &cmd in successful_seq.iter() {
+        if prefixed_sequence.push(prefix).is_err() || prefixed_sequence.push(cmd).is_err() {
+            let _ = writeln!(serial, "[error] Failed to build prefixed command sequence.");
+            return Err(crate::explorer::ExplorerError::TooManyCommands);
+        }
+    }
+
     match explorer.explore(
         i2c,
         serial,
