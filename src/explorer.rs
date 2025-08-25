@@ -52,6 +52,7 @@ const MAX_PERMUTATION_WARNING_THRESHOLD: usize = 8;
 const I2C_ADDRESS_COUNT: usize = 128;
 
 /// Errors that can occur during exploration of command sequences.
+#[derive(Debug)]
 pub enum ExplorerError {
     /// The provided sequence contained more commands than supported (`CMD_CAPACITY`).
     TooManyCommands,
@@ -66,6 +67,7 @@ enum BacktrackReason {
 ///
 /// Each command may depend on other commands, meaning they must appear
 /// earlier in the sequence before this command can be executed.
+#[derive(Copy, Clone)]
 pub struct CmdNode<'a> {
     /// The I2C command bytes to be sent. Can be a single command or a command with parameters.
     pub bytes: &'a [u8],
@@ -159,9 +161,10 @@ impl<'a> Explorer<'a> {
     {
         let mut staged: Vec<&'a [u8], CMD_CAPACITY> = Vec::new();
         if self.sequence.len() > CMD_CAPACITY {
-            let _ = writeln!(serial, "error: too many commands");
+            let _ = writeln!(serial, "[explorer] error: Too many commands provided.").ok();
             return Err(ExplorerError::TooManyCommands);
         }
+        let _ = writeln!(serial, "[explorer] Staging initial sequence...").ok();
 
         // Build initial sequence of commands with all dependencies satisfied
         let mut remaining: Vec<usize, CMD_CAPACITY> = (0..self.sequence.len()).collect();
@@ -191,13 +194,14 @@ impl<'a> Explorer<'a> {
         if !remaining.is_empty() {
             let _ = writeln!(
                 serial,
-                "[explorer] warning: unresolved dependencies found, possibly due to a cycle."
-            );
+                "[explorer] warning: Unresolved dependencies found. {} commands remain.",
+                remaining.len()
+            ).ok();
         }
 
-        let _ = writeln!(serial, "[explorer] staged:");
+        let _ = writeln!(serial, "[explorer] Staged sequence:").ok();
         self.write_sequence(serial, &staged);
-        let _ = writeln!(serial, "[explorer] unresolved: {remaining:?}");
+        let _ = writeln!(serial, "[explorer] Unresolved commands: {remaining:?}").ok();
 
         let mut current_state = PermutationState {
             current: staged,
@@ -213,9 +217,10 @@ impl<'a> Explorer<'a> {
                 serial,
                 "[explorer] warning: Large number of unresolved commands ({}). This may take a very long time.",
                 remaining.len()
-            );
+            ).ok();
         }
 
+        let _ = writeln!(serial, "[explorer] Starting permutation exploration...").ok();
         self.permute(
             i2c,
             serial,
@@ -224,6 +229,7 @@ impl<'a> Explorer<'a> {
             &mut solved_addrs,
             executor,
         );
+        let _ = writeln!(serial, "[explorer] Exploration complete.").ok();
 
         Ok(())
     }
@@ -272,7 +278,7 @@ impl<'a> Explorer<'a> {
         W: core::fmt::Write,
         E: CmdExecutor<I2C>,
     {
-        let _ = writeln!(serial, "[explorer] candidate:");
+        let _ = writeln!(serial, "[explorer] Candidate sequence:").ok();
         self.write_sequence(serial, &state.current);
 
         for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
@@ -286,8 +292,8 @@ impl<'a> Explorer<'a> {
             if all_ok {
                 let _ = writeln!(
                     serial,
-                    "[explorer] success: sequence works for addr 0x{addr:02X}"
-                );
+                    "[explorer] Success: Sequence works for addr 0x{addr:02X}"
+                ).ok();
                 solved_addrs[addr as usize] = true;
             }
         }
