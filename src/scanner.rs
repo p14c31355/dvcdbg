@@ -316,19 +316,21 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 ///
 /// ```ignore
 /// # use dvcdbg::prelude::*;
-/// # fn main() -> ! {
+/// # use dvcdbg::explorer::ExplorerError;
+/// # use dvcdbg::scanner::LogLevel;
+/// # fn main() -> Result<(), ExplorerError> {
 /// let mut i2c = /* your I2C instance */;
 /// let mut serial = /* your serial instance */;
-/// let mut init_sequence = [0u8; 16]; // Example initial sequence
-/// let explorer = Explorer::new(/* ... */);
-///
+/// let init_sequence = [0u8; 16]; // Example initial sequence
+/// let explorer = Explorer { sequence: &[] }; // Dummy explorer
+
 /// run_explorer(
 ///     &explorer,
 ///     &mut i2c,
 ///     &mut serial,
-///     &mut init_sequence,
+///     &init_sequence,
 ///     0x3C, // Example prefix
-///     LogLevel::Info,
+///     LogLevel::Verbose,
 /// )?;
 /// # Ok(())
 /// # }
@@ -347,27 +349,23 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
     let _ = writeln!(serial, "[log] Scanning I2C bus...");
-    let successful_seq = crate::scanner::scan_init_sequence(
-        i2c,
-        serial,
-        init_sequence,
-        log_level,
-    );
+    let successful_seq = crate::scanner::scan_init_sequence(i2c, serial, init_sequence, log_level);
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
     let _ = writeln!(serial, "[log] Start driver safe init");
 
-    explorer.explore(
-        i2c,
-        serial,
-        &mut PrefixExecutor::new(prefix, successful_seq),
-    )
-    .map(|()| {
-        let _ = writeln!(serial, "[driver] init sequence applied");
-    })
-    .map_err(|e| {
-        let _ = writeln!(serial, "[error] explorer failed: {e:?}");
-        e
-    })
+    explorer
+        .explore(
+            i2c,
+            serial,
+            &mut PrefixExecutor::new(prefix, successful_seq),
+        )
+        .map(|()| {
+            let _ = writeln!(serial, "[driver] init sequence applied");
+        })
+        .map_err(|e| {
+            let _ = writeln!(serial, "[error] explorer failed: {e:?}");
+            e
+        })
 }
 
 /// Executor that prepends a prefix to each command and applies an initial sequence.
@@ -410,18 +408,15 @@ where
     /// Returns `true` if the command was successfully written, or `false` on failure.
     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool {
         // Init sequence before exploring
-        self.buffer.clear();
         for &c in self.init_sequence.iter() {
-            if self.buffer.push(self.prefix).is_err() || self.buffer.push(c).is_err() {
+            let command = [self.prefix, c];
+            if i2c.write(addr, &command).is_err() {
                 return false;
             }
-            if i2c.write(addr, &self.buffer).is_err() {
-                return false;
-            }
-            self.buffer.clear();
         }
 
         // Run the explorer command
+        self.buffer.clear();
         if self.buffer.push(self.prefix).is_err() || self.buffer.extend_from_slice(cmd).is_err() {
             return false;
         }

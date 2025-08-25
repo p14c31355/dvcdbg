@@ -220,7 +220,6 @@ impl<'a> Explorer<'a> {
         let _ = writeln!(serial, "[explorer] unresolved: ").ok();
         self.write_unresolved_sequence(serial, &remaining);
 
-
         let mut current_state = PermutationState {
             current: staged,
             used: [false; CMD_CAPACITY],
@@ -403,8 +402,12 @@ impl<'a> Explorer<'a> {
         }
         w.write_char('\n').ok();
     }
-    
-    fn write_unresolved_sequence<W: core::fmt::Write>(&self, w: &mut W, unresolved: &Vec<usize, CMD_CAPACITY>) {
+
+    fn write_unresolved_sequence<W: core::fmt::Write>(
+        &self,
+        w: &mut W,
+        unresolved: &Vec<usize, CMD_CAPACITY>,
+    ) {
         for &idx in unresolved {
             if let Some(first_byte) = self.sequence[idx].bytes.first() {
                 Self::hex_byte(w, *first_byte);
