@@ -373,7 +373,7 @@ where
 /// `PrefixExecutor` is used internally by `run_explorer` to ensure that each I2C
 /// command is sent with a fixed prefix and that the initial scanned sequence is
 /// executed for every device before the main exploration commands.
-struct PrefixExecutor {
+pub struct PrefixExecutor {
     prefix: u8,
     init_sequence: heapless::Vec<u8, 64>,
     buffer: heapless::Vec<u8, 64>,
@@ -386,7 +386,7 @@ impl PrefixExecutor {
     ///
     /// - `prefix`: Byte to prepend to every command.
     /// - `init_sequence`: Initial command sequence to run before explorer commands.
-    fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
+    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
         Self {
             prefix,
             init_sequence,
