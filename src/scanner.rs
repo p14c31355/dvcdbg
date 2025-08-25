@@ -162,9 +162,10 @@ macro_rules! define_scanner {
         pub fn scan_init_sequence<I2C, W>(
             i2c: &mut I2C,
             serial: &mut W,
-            init_sequence: &[u8],
+            init_sequence: &mut [u8],
             log_level: $crate::scanner::LogLevel,
-        ) where
+        ) -> &'static mut [u8]
+        where
             I2C: $i2c_trait,
             W: core::fmt::Write,
             <I2C as $i2c_trait>::Error: HalErrorExt,
@@ -176,7 +177,7 @@ macro_rules! define_scanner {
             let _ = writeln!(serial);
 
             let mut detected_cmds: Vec<u8, 64> = Vec::new();
-            for &cmd in init_sequence {
+            for &cmd in init_sequence.iter() {
                 let value = internal_scan(i2c, serial, &[0x00, cmd], log_level.clone());
                 match value {
                     Ok(found_addrs) => {
@@ -200,8 +201,14 @@ macro_rules! define_scanner {
                 }
             }
 
+            let len = detected_cmds.len();
+            for (i, &cmd) in detected_cmds.iter().enumerate() {
+                init_sequence[i] = cmd;
+            }
+
             super::log_differences(serial, init_sequence, &detected_cmds);
             let _ = writeln!(serial, "[info] I2C scan with init sequence complete.");
+            &mut init_sequence[..len]
         }
 
         fn internal_scan<I2C, W>(
@@ -282,4 +289,71 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
         let _ = writeln!(serial, " 0x{b:02X}");
     }
     let _ = writeln!(serial);
+}
+
+pub fn run_explorer<I2C, S, E>(
+    explorer: &crate::explorer::Explorer<'_>,
+    i2c: &mut I2C,
+    serial: &mut S,
+    init_sequence: &mut [u8],
+    prefix: u8,
+    log_level: LogLevel,
+) -> Result<(), (crate::explorer::ExplorerError)>
+where
+    I2C: crate::compat::I2cCompat,
+    S: core::fmt::Write,
+    E: crate::explorer::CmdExecutor<I2C>,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+{
+    let _ = writeln!(serial, "[log] Scanning I2C bus...");
+    let init_sequence = scan_init_sequence(i2c, serial, init_sequence, log_level);
+    let _ = writeln!(serial, "[scan] initial sequence scan completed");
+
+    let successful_seq = scan_init_sequence(i2c, serial, init_sequence, log_level);
+    let _ = writeln!(serial, "[log] Start SH1107G safe init");
+    match explorer.explore(
+        i2c,
+        serial,
+        &mut PrefixExecutor::new(
+            successful_seq,
+            prefix,
+        ),
+    ) {
+        Ok(()) => {
+            let _ = writeln!(serial, "[driver] init sequence applied");
+            Ok(())
+        }
+        Err(e) => {
+            let _ = writeln!(serial, "[error] explorer failed: {e:?}");
+            Err(crate::explorer::ExplorerError::TooManyCommands)
+        }
+    }
+}
+
+struct PrefixExecutor<'a> {
+    init_sequence: &'a mut [u8],
+    prefix: u8,
+}
+
+impl<'a> PrefixExecutor<'a> {
+    fn new(init_sequence: &'a mut [u8], prefix: u8) -> Self {
+        Self { init_sequence, prefix }
+    }
+}
+
+impl<'a, I2C> crate::explorer::CmdExecutor<I2C> for PrefixExecutor<'a>
+where
+    I2C: crate::compat::I2cCompat,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+{
+    fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool {
+        use heapless::Vec;
+        // This executor is a dummy for the explorer.
+        let mut buffer = Vec::<u8, 33>::new();
+
+        if buffer.push(self.prefix).is_err() || buffer.extend_from_slice(cmd).is_err() {
+            return false;
+        }
+        i2c.write(addr, &buffer).is_ok()
+    }
 }
