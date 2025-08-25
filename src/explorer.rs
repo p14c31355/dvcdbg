@@ -215,9 +215,11 @@ impl<'a> Explorer<'a> {
             .ok();
         }
 
-        let _ = writeln!(serial, "[explorer] Staged sequence:").ok();
+        let _ = writeln!(serial, "[explorer] staged: ").ok();
         self.write_sequence(serial, &staged);
-        let _ = writeln!(serial, "[explorer] Unresolved commands: {remaining:?}").ok();
+        let _ = writeln!(serial, "[explorer] unresolved: ").ok();
+        self.write_unresolved_sequence(serial, &remaining);
+
 
         let mut current_state = PermutationState {
             current: staged,
@@ -295,7 +297,7 @@ impl<'a> Explorer<'a> {
         E: CmdExecutor<I2C>,
     {
         let mut log_buf: String<LOG_BUFFER_CAPACITY> = String::new();
-        let _ = writeln!(&mut log_buf, "[explorer] Candidate sequence:").ok();
+        let _ = writeln!(&mut log_buf, "[explorer] candidate: ").ok();
         self.write_sequence(&mut log_buf, &state.current);
 
         for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
@@ -398,6 +400,16 @@ impl<'a> Explorer<'a> {
                 Self::hex_byte(w, b);
             }
             w.write_char(' ').ok();
+        }
+        w.write_char('\n').ok();
+    }
+    
+    fn write_unresolved_sequence<W: core::fmt::Write>(&self, w: &mut W, unresolved: &Vec<usize, CMD_CAPACITY>) {
+        for &idx in unresolved {
+            if let Some(first_byte) = self.sequence[idx].bytes.first() {
+                Self::hex_byte(w, *first_byte);
+                w.write_char(' ').ok();
+            }
         }
         w.write_char('\n').ok();
     }
