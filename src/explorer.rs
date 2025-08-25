@@ -12,6 +12,7 @@
 //! ## Usage
 //! ```ignore
 //! use crate::{Explorer, CmdNode, I2cCompat};
+//! use heapless::Vec;
 //!
 //! struct MyExecutor;
 //! impl<I2C: I2cCompat> CmdExecutor<I2C> for MyExecutor {
@@ -23,11 +24,11 @@
 //! }
 //!
 //! let cmds = [
-//!     CmdNode { bytes: vec![0x01], deps: vec![] },
-//!     CmdNode { bytes: vec![0x02], deps: vec![0x01] },
-//!     CmdNode { bytes: vec![0x03], deps: vec![0x01] },
+//!     CmdNode { bytes: Vec::from_slice(&[0x01]).unwrap(), deps: Vec::new() },
+//!     CmdNode { bytes: Vec::from_slice(&[0x02]).unwrap(), deps: Vec::from_slice(&[0x01]).unwrap() },
+//!     CmdNode { bytes: Vec::from_slice(&[0x03]).unwrap(), deps: Vec::from_slice(&[0x01]).unwrap() },
 //! ];
-//! let explorer = Explorer { sequence: cmds.to_vec() };
+//! let explorer = Explorer { sequence: Vec::from_slice(&cmds).unwrap() };
 //! let mut executor = MyExecutor;
 //! // explorer.explore(&mut i2c, &mut serial, &mut executor).unwrap();
 //! ```
@@ -50,6 +51,7 @@ use heapless::Vec;
 const CMD_CAPACITY: usize = 32;
 const MAX_PERMUTATION_WARNING_THRESHOLD: usize = 8;
 const I2C_ADDRESS_COUNT: usize = 128;
+const CMD_BYTES_CAPACITY: usize = 16;
 
 /// Errors that can occur during exploration of command sequences.
 pub enum ExplorerError {
@@ -68,9 +70,9 @@ enum BacktrackReason {
 /// earlier in the sequence before this command can be executed.
 pub struct CmdNode {
     /// The I2C command bytes to be sent. Can be a single command or a command with parameters.
-    pub bytes: Vec<u8>,
+    pub bytes: Vec<u8, CMD_BYTES_CAPACITY>,
     /// The list of command bytes that must precede this command. The dependency is on the *first* byte of the dependent command.
-    pub deps: Vec<u8>,
+    pub deps: Vec<u8, CMD_BYTES_CAPACITY>,
 }
 
 /// An explorer that attempts to discover valid I2C command sequences
@@ -83,7 +85,7 @@ pub struct CmdNode {
 /// - For each candidate sequence, attempts it on all I2C addresses in the scan range.
 pub struct Explorer {
     /// The input sequence of command nodes (with dependencies).
-    pub sequence: Vec<CmdNode>,
+    pub sequence: Vec<CmdNode, CMD_CAPACITY>,
 }
 
 /// Internal state used during permutation generation.
@@ -97,7 +99,7 @@ pub struct Explorer {
 /// - `path_stack`: stack of indices into `unresolved`, representing the order of decisions.
 /// - `loop_start_indices`: optimization to avoid retrying candidates already attempted at each recursion depth.
 struct PermutationState<const C: usize> {
-    current: Vec<Vec<u8>, C>,
+    current: Vec<Vec<u8, CMD_BYTES_CAPACITY>, C>,
     used: [bool; C],
     current_set: [bool; 256],
     path_stack: Vec<usize, C>,
@@ -133,11 +135,11 @@ impl Explorer {
     ///
     /// // Two commands: 0xA0 depends on 0x90, 0x90 has no deps.
     /// let nodes = [
-    ///     CmdNode { bytes: vec![0x90], deps: vec![] },
-    ///     CmdNode { bytes: vec![0xA0], deps: vec![0x90] },
+    ///     CmdNode { bytes: Vec::from_slice(&[0x90]).unwrap(), deps: Vec::new() },
+    ///     CmdNode { bytes: Vec::from_slice(&[0xA0]).unwrap(), deps: Vec::from_slice(&[0x90]).unwrap() },
     /// ];
     ///
-    /// let explorer = Explorer { sequence: nodes.to_vec() };
+    /// let explorer = Explorer { sequence: Vec::from_slice(&nodes).unwrap() };
     ///
     /// // Dummy I2C + Serial + Executor implementations would be injected here in real use.
     /// // explorer.explore(&mut i2c, &mut serial, &mut executor);
@@ -157,7 +159,7 @@ impl Explorer {
         W: core::fmt::Write,
         E: CmdExecutor<I2C>,
     {
-        let mut staged: Vec<Vec<u8>, CMD_CAPACITY> = Vec::new();
+        let mut staged: Vec<Vec<u8, CMD_BYTES_CAPACITY>, CMD_CAPACITY> = Vec::new();
         if self.sequence.len() > CMD_CAPACITY {
             let _ = writeln!(serial, "error: too many commands");
             return Err(ExplorerError::TooManyCommands);
@@ -367,7 +369,11 @@ impl Explorer {
         w.write_char(lo as char).ok();
     }
 
-    fn write_sequence<W: core::fmt::Write>(&self, w: &mut W, seq: &[Vec<u8>]) {
+    fn write_sequence<W: core::fmt::Write>(
+        &self,
+        w: &mut W,
+        seq: &[Vec<u8, CMD_BYTES_CAPACITY>],
+    ) {
         for bytes in seq {
             for &b in bytes {
                 Self::hex_byte(w, b);
