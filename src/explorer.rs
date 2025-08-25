@@ -45,11 +45,13 @@
 //! - The non-recursive approach is chosen to make the algorithm safer for small-memory MCUs.
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
-use heapless::Vec;
+use heapless::{Vec, String};
+use core::fmt::Write;
 
 const CMD_CAPACITY: usize = 32;
 const MAX_PERMUTATION_WARNING_THRESHOLD: usize = 8;
 const I2C_ADDRESS_COUNT: usize = 128;
+const LOG_BUFFER_CAPACITY: usize = 512;
 
 /// Errors that can occur during exploration of command sequences.
 #[derive(Debug)]
@@ -278,8 +280,9 @@ impl<'a> Explorer<'a> {
         W: core::fmt::Write,
         E: CmdExecutor<I2C>,
     {
-        let _ = writeln!(serial, "[explorer] Candidate sequence:").ok();
-        self.write_sequence(serial, &state.current);
+        let mut log_buf: String<LOG_BUFFER_CAPACITY> = String::new();
+        let _ = writeln!(&mut log_buf, "[explorer] Candidate sequence:").ok();
+        self.write_sequence(&mut log_buf, &state.current);
 
         for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
             if solved_addrs[addr as usize] {
@@ -291,12 +294,13 @@ impl<'a> Explorer<'a> {
                 .all(|&cmd| executor.exec(i2c, addr, cmd));
             if all_ok {
                 let _ = writeln!(
-                    serial,
+                    &mut log_buf,
                     "[explorer] Success: Sequence works for addr 0x{addr:02X}"
                 ).ok();
                 solved_addrs[addr as usize] = true;
             }
         }
+        let _ = serial.write_str(log_buf.as_str()).ok();
     }
 
     /// Attempts to extend the current partial permutation by adding
