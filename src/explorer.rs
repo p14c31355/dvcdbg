@@ -309,4 +309,21 @@ impl<'a, const CMD_CAPACITY: usize> Explorer<'a, CMD_CAPACITY> {
         }
         w.write_char('\n').ok();
     }
+
+    fn hex_byte<W: core::fmt::Write>(w: &mut W, b: u8) {
+        const HEX_CHARS: &[u8] = b"0123456789ABCDEF";
+        let hi = HEX_CHARS[((b >> 4) & 0x0F) as usize];
+        let lo = HEX_CHARS[(b & 0x0F) as usize];
+        w.write_char(hi as char).ok();
+        w.write_char(lo as char).ok();
+    }
+
+    fn write_sequence<W: core::fmt::Write>(&self, w: &mut W, seq: &[u8]) {
+        for &b in seq {
+            Self::hex_byte(w, b);
+            w.write_char(' ').ok();
+        }
+        w.write_char('\n').ok();
+    }
+    
 }
