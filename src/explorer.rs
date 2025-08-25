@@ -130,7 +130,7 @@ impl<'a> Explorer<'a> {
     /// - `Ok(())` if exploration ran to completion.
     /// - `Err(ExplorerError::TooManyCommands)` if the input sequence exceeded capacity.
     ///
-    /// # Example
+    /// # Example (in tiny MCU)
     ///
     /// ```ignore
     /// use your_crate::{Explorer, CmdNode};
@@ -142,6 +142,15 @@ impl<'a> Explorer<'a> {
     /// ];
     ///
     /// let explorer = Explorer { sequence: &nodes };
+    /// 
+    /// let mut executor = MyExecutor;
+
+    /// for cmd in SH1107G_NODES.iter() {
+    ///     if !executor.exec(&mut i2c, 0x3C, cmd.bytes) {
+    ///        let _ = writeln!(serial, "[error] failed to send command: {:X?}", cmd.bytes);
+    ///    }
+    ///    delay.delay_ms(1u16);
+    ///}
     ///
     /// // Dummy I2C + Serial + Executor implementations would be injected here in real use.
     /// // explorer.explore(&mut i2c, &mut serial, &mut executor);
