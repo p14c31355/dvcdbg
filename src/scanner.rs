@@ -286,7 +286,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
     let _ = writeln!(serial);
 }
 
-pub fn run_explorer<I2C, S, E>(
+pub fn run_explorer<I2C, S>(
     explorer: &crate::explorer::Explorer<'_>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -297,7 +297,6 @@ pub fn run_explorer<I2C, S, E>(
 where
     I2C: crate::compat::I2cCompat,
     S: core::fmt::Write,
-    E: crate::explorer::CmdExecutor<I2C>,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
     let _ = writeln!(serial, "[log] Scanning I2C bus...");
@@ -311,31 +310,29 @@ where
 
     let _ = writeln!(serial, "[log] Start driver safe init");
 
-    match explorer.explore(
+    explorer.explore(
         i2c,
         serial,
         &mut PrefixExecutor::new(
-            successful_seq.as_mut_slice(),
             prefix,
         ),
-    ) {
-        Ok(()) => {
-            let _ = writeln!(serial, "[driver] init sequence applied");
-            Ok(())
-        }
-        Err(e) => {
-            let _ = writeln!(serial, "[error] explorer failed: {e:?}");
-            Err(e)
-        }
-    }
+    )
+    .map(|()| {
+        let _ = writeln!(serial, "[driver] init sequence applied");
+    })
+    .map_err(|e| {
+        let _ = writeln!(serial, "[error] explorer failed: {e:?}");
+        e
+    })
 }
 struct PrefixExecutor {
     prefix: u8,
+    buffer: heapless::Vec<u8, 64>,
 }
 
 impl PrefixExecutor {
-    fn new<T>(_: T, prefix: u8) -> Self {
-        Self { prefix }
+    fn new(prefix: u8) -> Self {
+        Self { prefix, buffer: heapless::Vec::new() }
     }
 }
 
@@ -345,13 +342,12 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool {
-        use heapless::Vec;
         // This executor is a dummy for the explorer.
-        let mut buffer = Vec::<u8, 33>::new();
+        self.buffer.clear();
 
-        if buffer.push(self.prefix).is_err() || buffer.extend_from_slice(cmd).is_err() {
+        if self.buffer.push(self.prefix).is_err() || self.buffer.extend_from_slice(cmd).is_err() {
             return false;
         }
-        i2c.write(addr, &buffer).is_ok()
+        i2c.write(addr, &self.buffer).is_ok()
     }
 }
