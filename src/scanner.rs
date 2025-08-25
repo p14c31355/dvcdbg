@@ -300,7 +300,7 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
     let _ = writeln!(serial, "[log] Scanning I2C bus...");
-    let mut successful_seq = crate::scanner::scan_init_sequence(
+    let successful_seq = crate::scanner::scan_init_sequence(
         i2c,
         serial,
         init_sequence,
@@ -313,9 +313,7 @@ where
     explorer.explore(
         i2c,
         serial,
-        &mut PrefixExecutor::new(
-            prefix,
-        ),
+        &mut PrefixExecutor::new(prefix,successful_seq),
     )
     .map(|()| {
         let _ = writeln!(serial, "[driver] init sequence applied");
@@ -331,8 +329,11 @@ struct PrefixExecutor {
 }
 
 impl PrefixExecutor {
-    fn new(prefix: u8) -> Self {
-        Self { prefix, buffer: heapless::Vec::new() }
+    fn new(prefix: u8, buffer: heapless::Vec<u8, 64>) -> Self {
+        Self {
+            prefix,
+            buffer,
+        }
     }
 }
 
