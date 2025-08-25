@@ -11,13 +11,25 @@
 //!
 //! ## Usage
 //! ```ignore
+//! use crate::{Explorer, CmdNode, I2cCompat};
+//!
+//! struct MyExecutor;
+//! impl<I2C: I2cCompat> CmdExecutor<I2C> for MyExecutor {
+//!     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool {
+//!         let mut buf = [0x00, 0x00];
+//!         buf[1] = cmd[0];
+//!         i2c.write(addr, &buf).is_ok()
+//!     }
+//! }
+//!
 //! let cmds = &[
-//!     CmdNode { cmd: 0x01, deps: &[] },
-//!     CmdNode { cmd: 0x02, deps: &[0x01] },
-//!     CmdNode { cmd: 0x03, deps: &[0x01] },
+//!     CmdNode { bytes: &[0x01], deps: &[] },
+//!     CmdNode { bytes: &[0x02], deps: &[0x01] },
+//!     CmdNode { bytes: &[0x03], deps: &[0x01] },
 //! ];
 //! let explorer = Explorer { sequence: cmds };
-//! explorer.explore(&mut i2c, &mut serial).unwrap();
+//! let mut executor = MyExecutor;
+//! // explorer.explore(&mut i2c, &mut serial, &mut executor).unwrap();
 //! ```
 //!
 //! ## AVR / Embedded Constraints
@@ -55,9 +67,9 @@ enum BacktrackReason {
 /// Each command may depend on other commands, meaning they must appear
 /// earlier in the sequence before this command can be executed.
 pub struct CmdNode<'a> {
-    /// The I2C command byte.
-    pub cmd: u8,
-    /// The list of command bytes that must precede this command.
+    /// The I2C command bytes to be sent. Can be a single command or a command with parameters.
+    pub bytes: &'a [u8],
+    /// The list of command bytes that must precede this command. The dependency is on the *first* byte of the dependent command.
     pub deps: &'a [u8],
 }
 
@@ -79,17 +91,27 @@ pub struct Explorer<'a> {
 /// This struct is not exposed publicly, but its fields are documented
 /// to aid maintainers:
 ///
-/// - `current`: the sequence being built so far.
+/// - `current`: the sequence of command bytes being built so far.
 /// - `used`: flags marking which unresolved command indices are currently in `current`.
 /// - `current_set`: boolean lookup for whether a specific command byte is in `current`.
 /// - `path_stack`: stack of indices into `unresolved`, representing the order of decisions.
 /// - `loop_start_indices`: optimization to avoid retrying candidates already attempted at each recursion depth.
 struct PermutationState<const C: usize> {
-    current: Vec<u8, C>,
+    current: Vec<&'static [u8], C>,
     used: [bool; C],
     current_set: [bool; 256],
     path_stack: Vec<usize, C>,
     loop_start_indices: Vec<usize, C>,
+}
+
+/// A trait for executing a command on an I2C bus.
+///
+/// This abstraction allows the `Explorer` to be decoupled from the specific
+/// I2C protocol (e.g., adding a control byte like `0x00`).
+pub trait CmdExecutor<I2C> {
+    /// Executes a given command byte sequence on the specified I2C address.
+    /// Returns `true` on success, `false` otherwise.
+    fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool;
 }
 
 impl<'a> Explorer<'a> {
@@ -98,6 +120,7 @@ impl<'a> Explorer<'a> {
     /// # Parameters
     /// - `i2c`: An I2C implementation used to test candidate sequences against device addresses.
     /// - `serial`: A serial writer for logging progress and results.
+    /// - `executor`: The object responsible for executing a single command on the bus.
     ///
     /// # Returns
     /// - `Ok(())` if exploration ran to completion.
@@ -110,25 +133,31 @@ impl<'a> Explorer<'a> {
     ///
     /// // Two commands: 0xA0 depends on 0x90, 0x90 has no deps.
     /// let nodes = [
-    ///     CmdNode { cmd: 0x90, deps: &[] },
-    ///     CmdNode { cmd: 0xA0, deps: &[0x90] },
+    ///     CmdNode { bytes: &[0x90], deps: &[] },
+    ///     CmdNode { bytes: &[0xA0], deps: &[0x90] },
     /// ];
     ///
     /// let explorer = Explorer { sequence: &nodes };
     ///
-    /// // Dummy I2C + Serial implementations would be injected here in real use.
-    /// // explorer.explore(&mut i2c, &mut serial);
+    /// // Dummy I2C + Serial + Executor implementations would be injected here in real use.
+    /// // explorer.explore(&mut i2c, &mut serial, &mut executor);
     /// ```
     /// # Notes
     /// - This function may take a very long time if many commands remain unresolved,
     ///   since it must try permutations of them.
     /// - Successfully discovered addresses are logged to the provided `serial` writer.
-    pub fn explore<I2C, W>(&self, i2c: &mut I2C, serial: &mut W) -> Result<(), ExplorerError>
+    pub fn explore<I2C, W, E>(
+        &self,
+        i2c: &mut I2C,
+        serial: &mut W,
+        executor: &mut E,
+    ) -> Result<(), ExplorerError>
     where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
+        E: CmdExecutor<I2C>,
     {
-        let mut staged: Vec<u8, CMD_CAPACITY> = Vec::new();
+        let mut staged: Vec<&'static [u8], CMD_CAPACITY> = Vec::new();
         if self.sequence.len() > CMD_CAPACITY {
             let _ = writeln!(serial, "error: too many commands");
             return Err(ExplorerError::TooManyCommands);
@@ -144,9 +173,11 @@ impl<'a> Explorer<'a> {
                 let node = &self.sequence[idx];
                 if node.deps.iter().all(|d| staged_set[*d as usize]) {
                     staged
-                        .push(node.cmd)
+                        .push(node.bytes)
                         .expect("staged vec should have enough capacity");
-                    staged_set[node.cmd as usize] = true;
+                    if let Some(first_byte) = node.bytes.first() {
+                        staged_set[*first_byte as usize] = true;
+                    }
                     false
                 } else {
                     true
@@ -191,25 +222,28 @@ impl<'a> Explorer<'a> {
             &remaining,
             &mut current_state,
             &mut solved_addrs,
+            executor,
         );
 
         Ok(())
     }
 
-    fn permute<I2C, W>(
+    fn permute<I2C, W, E>(
         &self,
         i2c: &mut I2C,
         serial: &mut W,
         unresolved: &Vec<usize, CMD_CAPACITY>,
         state: &mut PermutationState<CMD_CAPACITY>,
         solved_addrs: &mut [bool; I2C_ADDRESS_COUNT],
+        executor: &mut E,
     ) where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
+        E: CmdExecutor<I2C>,
     {
         'main_loop: loop {
             if state.current.len() == self.sequence.len() {
-                self.handle_full_permutation(i2c, serial, state, solved_addrs);
+                self.handle_full_permutation(i2c, serial, state, solved_addrs, executor);
                 if !self.backtrack(unresolved, state, BacktrackReason::FoundPermutation) {
                     break 'main_loop;
                 }
@@ -226,15 +260,17 @@ impl<'a> Explorer<'a> {
     ///
     /// Attempts the sequence against all possible I2C addresses,
     /// marking those that succeed and logging the result.
-    fn handle_full_permutation<I2C, W>(
+    fn handle_full_permutation<I2C, W, E>(
         &self,
         i2c: &mut I2C,
         serial: &mut W,
         state: &mut PermutationState<CMD_CAPACITY>,
         solved_addrs: &mut [bool; I2C_ADDRESS_COUNT],
+        executor: &mut E,
     ) where
         I2C: crate::compat::I2cCompat,
         W: core::fmt::Write,
+        E: CmdExecutor<I2C>,
     {
         let _ = writeln!(serial, "[explorer] candidate:");
         self.write_sequence(serial, &state.current);
@@ -246,7 +282,7 @@ impl<'a> Explorer<'a> {
             let all_ok = state
                 .current
                 .iter()
-                .all(|&cmd| i2c.write(addr, &[cmd]).is_ok());
+                .all(|&cmd| executor.exec(i2c, addr, cmd));
             if all_ok {
                 let _ = writeln!(
                     serial,
@@ -274,8 +310,10 @@ impl<'a> Explorer<'a> {
             let node = &self.sequence[idx];
             if node.deps.iter().all(|d| state.current_set[*d as usize]) {
                 // Make choice
-                state.current.push(node.cmd).unwrap();
-                state.current_set[node.cmd as usize] = true;
+                state.current.push(node.bytes).unwrap();
+                if let Some(first_byte) = node.bytes.first() {
+                    state.current_set[*first_byte as usize] = true;
+                }
                 state.used[pos] = true;
 
                 let _ = state.path_stack.push(pos);
@@ -301,9 +339,11 @@ impl<'a> Explorer<'a> {
         _reason: BacktrackReason,
     ) -> bool {
         if let Some(last_added_pos) = state.path_stack.pop() {
-            let node_cmd = self.sequence[unresolved[last_added_pos]].cmd;
+            let node = &self.sequence[unresolved[last_added_pos]];
+            if let Some(first_byte) = node.bytes.first() {
+                state.current_set[*first_byte as usize] = false;
+            }
             state.used[last_added_pos] = false;
-            state.current_set[node_cmd as usize] = false;
             state.current.pop();
 
             state.loop_start_indices.pop();
@@ -327,9 +367,11 @@ impl<'a> Explorer<'a> {
         w.write_char(lo as char).ok();
     }
 
-    fn write_sequence<W: core::fmt::Write>(&self, w: &mut W, seq: &[u8]) {
-        for &b in seq {
-            Self::hex_byte(w, b);
+    fn write_sequence<W: core::fmt::Write>(&self, w: &mut W, seq: &[&[u8]]) {
+        for bytes in seq {
+            for &b in *bytes {
+                Self::hex_byte(w, b);
+            }
             w.write_char(' ').ok();
         }
         w.write_char('\n').ok();
