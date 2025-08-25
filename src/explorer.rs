@@ -245,22 +245,27 @@ impl<'a> Explorer<'a> {
         state: &mut PermutationState<CMD_CAPACITY>,
     ) -> bool {
         let current_loop_start_idx = *state.loop_start_indices.last().unwrap();
-        for (pos, &idx) in unresolved.iter().enumerate().skip(current_loop_start_idx) {
-            if state.used[pos] { continue; }
-            let node = &self.sequence[idx];
-            if node.deps.iter().all(|d| state.current_set[*d as usize]) {
-                // Make choice
-                state.current.push(node.cmd).unwrap();
-                state.current_set[node.cmd as usize] = true;
-                state.used[pos] = true;
 
-                let _ = state.path_stack.push(pos);
-                let _ = state.loop_start_indices.push(0);
-                return true;
+        for (pos, &idx) in unresolved.iter().enumerate().skip(current_loop_start_idx) {
+            if state.used[pos] {
+                continue;
             }
+
+            let node = &self.sequence[idx];
+
+            state.current.push(node.cmd).unwrap();
+            state.current_set[node.cmd as usize] = true;
+            state.used[pos] = true;
+
+            let _ = state.path_stack.push(pos);
+            let _ = state.loop_start_indices.push(0);
+
+            return true;
         }
+
         false
     }
+
 
     /// Backtracks to the previous decision point in the permutation search.
     ///
