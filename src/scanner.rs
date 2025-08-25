@@ -333,13 +333,13 @@ struct PrefixExecutor {
     prefix: u8,
 }
 
-impl<'a> PrefixExecutor<'a> {
-    fn new(_, prefix: u8) -> Self {
+impl<'a> PrefixExecutor {
+    fn new<T>(_: T, prefix: u8) -> Self {
         Self { _, prefix }
     }
 }
 
-impl<'a, I2C> crate::explorer::CmdExecutor<I2C> for PrefixExecutor<'a>
+impl<'a, I2C> crate::explorer::CmdExecutor<I2C> for PrefixExecutor
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
