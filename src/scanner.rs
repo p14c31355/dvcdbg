@@ -171,9 +171,9 @@ macro_rules! define_scanner {
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
             let _ = writeln!(serial, "[scan] Scanning I2C bus with init sequence:");
-            for b in init_sequence {
-                let _ = writeln!(serial, " 0x{:02X}", b);
-            }
+           for b in init_sequence.iter_mut() {
+    let _ = writeln!(serial, " 0x{b:02X}");
+}
             let _ = writeln!(serial);
 
             let mut detected_cmds: Vec<u8, 64> = Vec::new();
@@ -309,21 +309,13 @@ where
     );
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
 
-    let mut successful_seq = scan_init_sequence(i2c, serial, &mut init_sequence, log_level);
     let _ = writeln!(serial, "[log] Start driver safe init");
-    let mut prefixed_sequence: Vec<u8, 64> = Vec::new();
-    for &cmd in successful_seq.iter() {
-        if prefixed_sequence.push(prefix).is_err() || prefixed_sequence.push(cmd).is_err() {
-            let _ = writeln!(serial, "[error] Failed to build prefixed command sequence.");
-            return Err(crate::explorer::ExplorerError::TooManyCommands);
-        }
-    }
 
     match explorer.explore(
         i2c,
         serial,
         &mut PrefixExecutor::new(
-            &mut successful_seq,
+            successful_seq.as_mut_slice(),
             prefix,
         ),
     ) {
@@ -333,13 +325,11 @@ where
         }
         Err(e) => {
             let _ = writeln!(serial, "[error] explorer failed: {e:?}");
-            Err(crate::explorer::ExplorerError::TooManyCommands)
+            Err(e)
         }
     }
 }
-
-struct PrefixExecutor<'a> {
-    init_sequence: &'a mut [u8],
+struct PrefixExecutor {
     prefix: u8,
 }
 
