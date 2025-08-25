@@ -171,9 +171,9 @@ macro_rules! define_scanner {
             <I2C as $i2c_trait>::Error: HalErrorExt,
         {
             let _ = writeln!(serial, "[scan] Scanning I2C bus with init sequence:");
-           for b in init_sequence.iter_mut() {
-    let _ = writeln!(serial, " 0x{b:02X}");
-}
+            for b in init_sequence.iter() {
+                let _ = writeln!(serial, " 0x{b:02X}");
+            }
             let _ = writeln!(serial);
 
             let mut detected_cmds: Vec<u8, 64> = Vec::new();
