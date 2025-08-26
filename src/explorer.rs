@@ -93,6 +93,7 @@ pub enum ExplorerError {
 /// Errors that can occur during command execution.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ExecutorError {
+    I2cError(crate::error::ErrorKind),
     /// The command failed to execute (e.g., NACK, I/O error).
     ExecFailed,
     /// An internal buffer overflowed during command preparation.
@@ -126,6 +127,11 @@ pub trait Logger {
     fn log_info_fmt<F>(&mut self, fmt: F)
     where
         F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>;
+    
+    fn log_error_fmt<F>(&mut self, fmt: F)
+    where
+        F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>;
+
 }
 
 // Dummy logger for platforms without console output
@@ -138,6 +144,13 @@ impl Logger for NullLogger {
     where
         F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
     {
+    }
+
+    fn log_error_fmt<F>(&mut self, fmt: F)
+    where
+        F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>;
+    {
+
     }
 }
 
@@ -269,15 +282,14 @@ impl<'a, const N: usize> Explorer<'a, N> {
             let mut next_active_addrs: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
 
             for &addr in active_addrs.iter() {
-                let all_ok = sequence
-                    .iter()
-                    .all(|&cmd| executor.exec(i2c, addr, cmd).is_ok());
-
-                if all_ok {
-                    logger.log_info_fmt(|buf| {
-                        write!(buf, "[explorer] Success: Sequence works for addr ")?;
+            let mut all_ok = true;
+            for &cmd in sequence.iter() {
+                if let Err(e) = executor.exec(i2c, addr, cmd) {
+                    all_ok = false;
+                    logger.log_error_fmt(|buf| {
+                        write!(buf, "[explorer] Execution failed for addr ")?;
                         ascii::write_bytes_hex_prefixed(buf, &[addr])?;
-                        writeln!(buf)?;
+                        write!(buf, ": {:?}\r\n", e)?;
                         Ok(())
                     });
                     
@@ -291,8 +303,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
             active_addrs = next_active_addrs;
             if active_addrs.is_empty() {
                 break;
+                }
             }
-        }
         
         logger.log_info_fmt(|buf| {
             writeln!(
