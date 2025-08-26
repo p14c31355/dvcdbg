@@ -12,9 +12,10 @@ pub fn write_byte_hex<W: Write>(w: &mut W, byte: u8) -> fmt::Result {
 }
 
 pub fn write_bytes_hex<W: Write>(w: &mut W, bytes: &[u8]) -> fmt::Result {
-    for (i, &b) in bytes.iter().enumerate() {
-        write_byte_hex(w, b)?;
-        if i != bytes.len() - 1 {
+    let mut it = bytes.iter().peekable();
+    while let Some(b) = it.next() {
+        write_byte_hex(w, *b)?;
+        if it.peek().is_some() {
             w.write_char(' ')?;
         }
     }
