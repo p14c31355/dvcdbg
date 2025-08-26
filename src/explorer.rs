@@ -24,6 +24,7 @@
 //! ```ignore
 //! use crate::{Explorer, CmdNode, I2cCompat, Logger, CmdExecutor};
 //! use heapless::Vec;
+//! use core::fmt::Write; // Required for writeln! macro to work with heapless::String
 //!
 //! // Example implementations for a specific platform
 //! struct MyExecutor;
@@ -66,8 +67,8 @@
 //! }
 //! ```
 
+use heapless::{String, Vec};
 use core::fmt::Write;
-use heapless::{format, String, Vec};
 
 const I2C_SCAN_ADDR_END: u8 = 127;
 const I2C_SCAN_ADDR_START: u8 = 1;
@@ -226,13 +227,13 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut permutation_count = 0;
 
         let mut iter = self.permutations()?;
-        logger.log_info("Starting permutation exploration...");
+        logger.log_info("[explorer] Starting permutation exploration...");
 
         while let Some(sequence) = iter.next() {
             permutation_count += 1;
             let mut log_buf: String<LOG_BUFFER_CAPACITY> = String::new();
             if let Some(first_byte) = sequence.first().and_then(|b| b.first()) {
-                let _ = format!(&mut log_buf, "trying candidate starting with 0x{:02X}\n", first_byte).ok();
+                let _ = writeln!(&mut log_buf, "[explorer] trying candidate starting with 0x{:02X}", first_byte).ok();
             }
 
             for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
@@ -245,16 +246,21 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     .all(|&cmd| executor.exec(i2c, addr, cmd).is_ok());
 
                 if all_ok {
-                    let _ = format!(&mut log_buf, "Success: Sequence works for addr 0x{:02X}\n", addr).ok();
+                    let _ = writeln!(
+                        &mut log_buf,
+                        "[explorer] Success: Sequence works for addr 0x{:02X}",
+                        addr
+                    )
+                    .ok();
                     solved_addrs[addr as usize] = true;
                     num_solved_addrs += 1;
                 }
             }
             logger.log_info(log_buf.as_str());
         }
-
+        
         let mut log_buf: String<LOG_BUFFER_CAPACITY> = String::new();
-        let _ = format!(&mut log_buf, "Exploration complete. {} addresses solved across {} permutations.", num_solved_addrs, permutation_count).ok();
+        let _ = writeln!(&mut log_buf, "[explorer] Exploration complete. {} addresses solved across {} permutations.", num_solved_addrs, permutation_count).ok();
         logger.log_info(log_buf.as_str());
 
 
@@ -276,7 +282,7 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
 
         loop {
             // Check if we have a full permutation
-            if self.current.len() + self.staged.len() == self.unresolved_indices.len() + self.staged.len() {
+            if self.current.len() + self.staged.len() == self.sequence.len() {
                 // Return the full sequence by concatenating staged and current
                 let mut full_sequence = self.staged.clone();
                 full_sequence.extend_from_slice(&self.current).ok();

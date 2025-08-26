@@ -336,7 +336,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 /// # }
 /// ```
 pub fn run_explorer<I2C, S>(
-    explorer: &crate::explorer::Explorer<'_>,
+    explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
     init_sequence: &[u8],
@@ -406,7 +406,7 @@ where
     /// then sends the provided command with the prefix.
     ///
     /// Returns `true` if the command was successfully written, or `false` on failure.
-    fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool {
+    fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()> {
         // Init sequence before exploring
         for &c in self.init_sequence.iter() {
             let command = [self.prefix, c];
