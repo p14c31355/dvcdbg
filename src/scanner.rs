@@ -419,7 +419,7 @@ where
     struct PrefixExecutor {
         prefix: u8,
         init_sequence: heapless::Vec<u8, 64>,
-        initialized_addrs: heapless::Vec<u8, 128>,
+        initialized_addrs: [bool; 128], // Use a bitmask for O(1) checks
     }
 
     impl PrefixExecutor {
@@ -427,7 +427,7 @@ where
             Self {
                 prefix,
                 init_sequence,
-                initialized_addrs: heapless::Vec::new(),
+                initialized_addrs: [false; 128],
             }
         }
     }
@@ -439,9 +439,10 @@ where
     {
         fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()> {
             use heapless::Vec;
+            let addr_idx = addr as usize;
 
-            // Check if the address has already been initialized
-            if self.initialized_addrs.iter().find(|&&a| a == addr).is_none() {
+            // Check if the address has already been initialized (O(1) check)
+            if !self.initialized_addrs[addr_idx] {
                 // First, send the init_sequence with the prefix
                 let mut init_buf: Vec<u8, 64> = Vec::new();
                 init_buf.push(self.prefix).map_err(|_| ())?;
@@ -449,7 +450,7 @@ where
                 i2c.write(addr, &init_buf).map_err(|_| ())?;
 
                 // Mark this address as initialized
-                self.initialized_addrs.push(addr).map_err(|_| ())?;
+                self.initialized_addrs[addr_idx] = true;
             }
 
             // Then, send the regular command

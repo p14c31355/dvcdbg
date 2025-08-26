@@ -143,11 +143,10 @@ pub struct PermutationIter<'a> {
     sequence: &'a [CmdNode<'a>],
     staged: Vec<&'a [u8], 128>,
     unresolved_indices: Vec<usize, 128>,
-    current: Vec<&'a [u8], 128>,
+    current_permutation: Vec<&'a [u8], 128>,
     used: Vec<bool, 128>,
-    staged_and_current_indices: Vec<usize, 128>,
+    used_indices: [bool; 128], // Bitmask for O(1) checks
     path_stack: Vec<usize, 128>,
-    loop_start_indices: Vec<usize, 128>,
     is_done: bool,
 }
 
@@ -164,53 +163,67 @@ impl<'a> Explorer<'a> {
         (
             Vec<&'a [u8], 128>,
             Vec<usize, 128>,
-            Vec<usize, 128>,
+            [bool; 128],
         ),
         ExplorerError,
     > {
-        let mut staged: Vec<&'a [u8], 128> = Vec::new();
-        let mut staged_indices = Vec::<usize, 128>::new();
-        let mut remaining_indices: Vec<usize, 128> = (0..self.sequence.len()).collect();
+        let mut in_degree = Vec::<usize, 128>::new();
+        in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::BufferOverflow)?;
 
-        loop {
-            let before = staged.len();
-            let mut i = 0;
-            while i < remaining_indices.len() {
-                let node_idx = remaining_indices[i];
-                let node = &self.sequence[node_idx];
-                let deps_satisfied = node
-                    .deps
-                    .iter()
-                    .all(|&d| staged_indices.contains(&d));
-
-                if deps_satisfied {
-                    staged.push(node.bytes).map_err(|_| ExplorerError::BufferOverflow)?;
-                    staged_indices.push(node_idx).map_err(|_| ExplorerError::BufferOverflow)?;
-                    remaining_indices.swap_remove(i);
-                } else {
-                    i += 1;
-                }
-            }
-
-            if staged.len() == before {
-                if !remaining_indices.is_empty() {
-                    return Err(ExplorerError::DependencyCycle);
-                }
-                break;
+        for node in self.sequence.iter() {
+            for &dep in node.deps {
+                in_degree[dep] += 1;
             }
         }
-        Ok((staged, remaining_indices, staged_indices))
+        
+        let mut queue = Vec::<usize, 128>::new();
+        for (i, &degree) in in_degree.iter().enumerate() {
+            if degree == 0 {
+                queue.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+        }
+
+        let mut staged: Vec<&'a [u8], 128> = Vec::new();
+        let mut staged_indices = [false; 128];
+        let mut staged_count = 0;
+        let mut queue_idx = 0;
+        
+        while queue_idx < queue.len() {
+            let idx = queue[queue_idx];
+            queue_idx += 1;
+            
+            staged.push(self.sequence[idx].bytes).map_err(|_| ExplorerError::BufferOverflow)?;
+            staged_indices[idx] = true;
+            staged_count += 1;
+
+            for (i, node) in self.sequence.iter().enumerate() {
+                if node.deps.contains(&idx) {
+                    in_degree[i] -= 1;
+                    if in_degree[i] == 0 {
+                        queue.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+                    }
+                }
+            }
+        }
+
+        if staged_count != self.sequence.len() {
+            return Err(ExplorerError::DependencyCycle);
+        }
+        
+        let mut unresolved_indices = Vec::new();
+        for (i, &is_staged) in staged_indices.iter().enumerate() {
+            if !is_staged {
+                unresolved_indices.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+        }
+        
+        Ok((staged, unresolved_indices, staged_indices))
     }
 
     /// Returns a stack-safe iterator for all valid command permutations.
     pub fn permutations(&self) -> Result<PermutationIter<'a>, ExplorerError> {
         let (staged, unresolved_indices, staged_indices) = self.stage()?;
 
-        let mut staged_and_current_indices = Vec::new();
-        for i in staged_indices {
-            staged_and_current_indices.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
-        }
-        
         let mut used = Vec::new();
         used.resize(unresolved_indices.len(), false).map_err(|_| ExplorerError::BufferOverflow)?;
 
@@ -218,11 +231,10 @@ impl<'a> Explorer<'a> {
             sequence: self.sequence,
             staged,
             unresolved_indices,
-            current: Vec::new(),
+            current_permutation: Vec::new(),
             used,
-            staged_and_current_indices,
+            used_indices: staged_indices,
             path_stack: Vec::new(),
-            loop_start_indices: Vec::from_slice(&[0]).map_err(|_| ExplorerError::BufferOverflow)?,
             is_done: false,
         })
     }
@@ -239,6 +251,7 @@ impl<'a> Explorer<'a> {
         E: CmdExecutor<I2C>,
         L: Logger,
     {
+        let mut active_addrs: Vec<u8, I2C_ADDRESS_COUNT> = (I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END).collect();
         let mut solved_addrs = [false; I2C_ADDRESS_COUNT];
         let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
         let mut permutation_count = 0;
@@ -248,12 +261,10 @@ impl<'a> Explorer<'a> {
 
         while let Some(sequence) = iter.next() {
             permutation_count += 1;
+            
+            let mut next_active_addrs: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
 
-            for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                if solved_addrs[addr as usize] {
-                    continue;
-                }
-
+            for &addr in active_addrs.iter() {
                 let all_ok = sequence
                     .iter()
                     .all(|&cmd| executor.exec(i2c, addr, cmd).is_ok());
@@ -265,9 +276,17 @@ impl<'a> Explorer<'a> {
                         writeln!(buf, "")?;
                         Ok(())
                     });
-                    solved_addrs[addr as usize] = true;
-                    found_addresses.push(addr).map_err(|_| ExplorerError::BufferOverflow)?;
+                    
+                    if !solved_addrs[addr as usize] {
+                        solved_addrs[addr as usize] = true;
+                        found_addresses.push(addr).map_err(|_| ExplorerError::BufferOverflow)?;
+                    }
+                    next_active_addrs.push(addr).map_err(|_| ExplorerError::BufferOverflow)?;
                 }
+            }
+            active_addrs = next_active_addrs;
+            if active_addrs.is_empty() {
+                break;
             }
         }
         
@@ -302,10 +321,10 @@ impl<'a> Iterator for PermutationIter<'a> {
 
         loop {
             // Check if we have a full permutation
-            if self.current.len() + self.staged.len() == self.sequence.len() {
-                // Return the full sequence by concatenating staged and current
+            if self.current_permutation.len() + self.staged.len() == self.sequence.len() {
+                // Construct the full sequence by concatenating staged and current
                 let mut full_sequence = self.staged.clone();
-                full_sequence.extend_from_slice(&self.current).unwrap_or_else(|_| unreachable!());
+                full_sequence.extend_from_slice(&self.current_permutation).unwrap_or_else(|_| unreachable!());
                 
                 // Backtrack to find the next permutation
                 self.backtrack();
@@ -328,24 +347,23 @@ impl<'a> Iterator for PermutationIter<'a> {
 
 impl<'a> PermutationIter<'a> {
     fn try_extend(&mut self) -> bool {
-        let current_loop_start_idx = *self.loop_start_indices.last().unwrap();
-        for (pos, &idx) in self.unresolved_indices.iter().enumerate().skip(current_loop_start_idx) {
+        let last_pos = self.path_stack.last().map(|&p| p + 1).unwrap_or(0);
+        for pos in last_pos..self.unresolved_indices.len() {
+            let idx = self.unresolved_indices[pos];
+
             if self.used[pos] {
                 continue;
             }
 
             let node = &self.sequence[idx];
 
-            let deps_satisfied = node.deps.iter().all(|&d| {
-                self.staged_and_current_indices.contains(&d)
-            });
+            let deps_satisfied = node.deps.iter().all(|&d| self.used_indices[d]);
 
             if deps_satisfied {
-                self.current.push(node.bytes).unwrap();
-                self.staged_and_current_indices.push(idx).unwrap();
+                self.current_permutation.push(node.bytes).unwrap();
+                self.used_indices[idx] = true;
                 self.used[pos] = true;
                 self.path_stack.push(pos).unwrap();
-                self.loop_start_indices.push(0).unwrap();
                 return true;
             }
         }
@@ -355,19 +373,14 @@ impl<'a> PermutationIter<'a> {
     fn backtrack(&mut self) -> bool {
         if let Some(last_added_pos) = self.path_stack.pop() {
             let node_idx = self.unresolved_indices[last_added_pos];
-            let remove_idx = self.staged_and_current_indices.iter().position(|&x| x == node_idx).unwrap();
-            self.staged_and_current_indices.swap_remove(remove_idx);
+            self.used_indices[node_idx] = false;
             
             self.used[last_added_pos] = false;
-            self.current.pop();
+            self.current_permutation.pop();
 
-            self.loop_start_indices.pop();
-            
-            if let Some(last_loop_idx) = self.loop_start_indices.last_mut() {
-                *last_loop_idx += 1;
-            } else {
-                return false;
-            }
+            self.path_stack.pop();
+            self.path_stack.push(last_added_pos).unwrap();
+
             true
         } else {
             false
