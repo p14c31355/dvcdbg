@@ -271,7 +271,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
     for b in expected {
         let _ = write!(serial, " ");
         let _ = ascii::write_bytes_hex_prefixed(serial, &[*b]);
-        let _ = writeln!(serial, "");
+        let _ = writeln!(serial);
     }
     let _ = writeln!(serial);
 
@@ -279,7 +279,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
     for b in detected {
         let _ = write!(serial, " ");
         let _ = ascii::write_bytes_hex_prefixed(serial, &[*b]);
-        let _ = writeln!(serial, "");
+        let _ = writeln!(serial);
     }
     let _ = writeln!(serial);
 
@@ -304,7 +304,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
     for b in &missing_cmds {
         let _ = write!(serial, " ");
         let _ = ascii::write_bytes_hex_prefixed(serial, &[*b]);
-        let _ = writeln!(serial, "");
+        let _ = writeln!(serial);
     }
     let _ = writeln!(serial);
 }
@@ -467,7 +467,7 @@ where
     for addr in explorer.explore(i2c, &mut executor, &mut serial_logger)?.found_addrs.iter() {
         let _ = write!(serial, "[driver] Found device at ");
         let _ = ascii::write_bytes_hex_prefixed(serial, &[*addr]);
-        let _ = writeln!(serial, "");
+        let _ = writeln!(serial);
     }
     
     Ok(())
