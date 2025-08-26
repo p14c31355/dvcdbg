@@ -23,34 +23,51 @@
 //! ## Usage
 //! ```ignore
 //! use crate::{Explorer, CmdNode, I2cCompat, Logger, CmdExecutor};
+//! use heapless::Vec;
 //!
 //! // Example implementations for a specific platform
 //! struct MyExecutor;
-//! impl<I2C: I2cCompat> CmdExecutor<I2C> for MyExecutor { /* ... */ }
+//! impl<I2C: I2cCompat> CmdExecutor<I2C> for MyExecutor {
+//!     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()> {
+//!         // This example executor only supports single-byte commands for simplicity,
+//!         // and assumes a device protocol that requires a 0x00 control byte.
+//!         if cmd.len() != 1 {
+//!             return Err(());
+//!         }
+//!         let buf = [0x00, cmd[0]];
+//!         i2c.write(addr, &buf).map_err(|_| ())
+//!     }
+//! }
 //! struct NullLogger;
-//! impl Logger for NullLogger { /* ... */ }
+//! impl Logger for NullLogger {
+//!     fn log_info(&mut self, _msg: &str) {}
+//!     fn log_warning(&mut self, _msg: &str) {}
+//!     fn log_error(&mut self, _msg: &str) {}
+//! }
 //!
 //! // Define commands with dependencies
+//! const CAPACITY: usize = 32;
 //! let cmds = &[
 //!     CmdNode { bytes: &[0x01], deps: &[] },
-//!     CmdNode { bytes: &[0x02], deps: &[0x01] },
-//!     CmdNode { bytes: &[0x03], deps: &[0x01] },
+//!     CmdNode { bytes: &[0x02], deps: &[0] }, // Depends on the first command at index 0
+//!     CmdNode { bytes: &[0x03], deps: &[0] },
 //! ];
 //!
 //! // The generic parameter 32 matches the capacity of the Vecs
-//! let explorer = Explorer::<32> { sequence: cmds };
+//! let explorer = Explorer::<CAPACITY> { sequence: cmds };
 //! let mut executor = MyExecutor;
 //! let mut logger = NullLogger;
 //! let mut i2c = // ...
 //!
 //! let result = explorer.explore(&mut i2c, &mut executor, &mut logger);
 //! if let Err(e) = result {
+//!     // The logger here would be a more verbose one, e.g., one that prints to a serial console
 //!     logger.log_error(&format!("Exploration failed: {:?}", e));
 //! }
 //! ```
 
 use core::fmt::Write;
-use heapless::{String, Vec};
+use heapless::{format, String, Vec};
 
 const I2C_SCAN_ADDR_END: u8 = 127;
 const I2C_SCAN_ADDR_START: u8 = 1;
@@ -109,6 +126,7 @@ pub struct Explorer<'a, const N: usize> {
 
 /// An iterator that generates valid I2C command permutations.
 pub struct PermutationIter<'a, const N: usize> {
+    sequence: &'a [CmdNode<'a, N>], // Add a reference to the sequence
     staged: Vec<&'a [u8], N>,
     unresolved_indices: Vec<usize, N>,
     current: Vec<&'a [u8], N>,
@@ -131,14 +149,13 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
         loop {
             let before = staged.len();
-            let mut newly_staged_count = 0;
             let mut i = 0;
             while i < remaining.len() {
                 let node_idx = remaining[i];
                 let node = &self.sequence[node_idx];
                 let deps_satisfied = node.deps.iter().all(|&d| {
                     if d >= self.sequence.len() {
-                        return false; // Invalid dependency index
+                        return false;
                     }
                     if let Some(first_byte) = self.sequence[d].bytes.first() {
                         staged_set[*first_byte as usize]
@@ -148,14 +165,11 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 });
 
                 if deps_satisfied {
-                    staged
-                        .push(node.bytes)
-                        .expect("staged vec should have enough capacity");
+                    staged.push(node.bytes).map_err(|_| ExplorerError::TooManyCommands)?;
                     if let Some(first_byte) = node.bytes.first() {
                         staged_set[*first_byte as usize] = true;
                     }
                     remaining.swap_remove(i);
-                    newly_staged_count += 1;
                 } else {
                     i += 1;
                 }
@@ -183,13 +197,14 @@ impl<'a, const N: usize> Explorer<'a, N> {
         }
 
         Ok(PermutationIter {
+            sequence: self.sequence,
             staged,
             unresolved_indices,
             current: Vec::new(),
             used: [false; N],
             staged_and_current_set,
             path_stack: Vec::new(),
-            loop_start_indices: Vec::from_slice(&[0]).unwrap(),
+            loop_start_indices: Vec::from_slice(&[0]).map_err(|_| ExplorerError::TooManyCommands)?,
             is_done: false,
         })
     }
@@ -211,13 +226,13 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut permutation_count = 0;
 
         let mut iter = self.permutations()?;
-        logger.log_info("[explorer] Starting permutation exploration...");
+        logger.log_info("Starting permutation exploration...");
 
         while let Some(sequence) = iter.next() {
             permutation_count += 1;
             let mut log_buf: String<LOG_BUFFER_CAPACITY> = String::new();
             if let Some(first_byte) = sequence.first().and_then(|b| b.first()) {
-                let _ = writeln!(&mut log_buf, "[explorer] trying candidate starting with 0x{first_byte:02X}").ok();
+                let _ = format!(&mut log_buf, "trying candidate starting with 0x{:02X}\n", first_byte).ok();
             }
 
             for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
@@ -230,11 +245,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     .all(|&cmd| executor.exec(i2c, addr, cmd).is_ok());
 
                 if all_ok {
-                    let _ = writeln!(
-                        &mut log_buf,
-                        "[explorer] Success: Sequence works for addr 0x{addr:02X}"
-                    )
-                    .ok();
+                    let _ = format!(&mut log_buf, "Success: Sequence works for addr 0x{:02X}\n", addr).ok();
                     solved_addrs[addr as usize] = true;
                     num_solved_addrs += 1;
                 }
@@ -242,9 +253,10 @@ impl<'a, const N: usize> Explorer<'a, N> {
             logger.log_info(log_buf.as_str());
         }
 
-        logger.log_info(&format!(
-            "[explorer] Exploration complete. {num_solved_addrs} addresses solved across {permutation_count} permutations."
-        ));
+        let mut log_buf: String<LOG_BUFFER_CAPACITY> = String::new();
+        let _ = format!(&mut log_buf, "Exploration complete. {} addresses solved across {} permutations.", num_solved_addrs, permutation_count).ok();
+        logger.log_info(log_buf.as_str());
+
 
         if num_solved_addrs == 0 {
             Err(ExplorerError::NoValidAddressesFound)
@@ -296,25 +308,11 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 continue;
             }
 
-            let node = &self.unresolved_indices.get(pos).and_then(|&i| self.path_stack.get(i)).and_then(|&i| Some(&self.path_stack)).map_or(
-                self.unresolved_indices.get(pos).and_then(|&i| self.path_stack.get(i)).and_then(|&i| Some(&self.path_stack)).map_or(
-                    self.unresolved_indices.get(pos).and_then(|&i| self.path_stack.get(i)).and_then(|&i| Some(&self.path_stack)).map_or(
-                        self.unresolved_indices.get(pos).and_then(|&i| self.path_stack.get(i)).and_then(|&i| Some(&self.path_stack)).map_or(
-                            self.unresolved_indices.get(pos).and_then(|&i| Some(&self.unresolved_indices)),
-                            |x| x
-                        ),
-                        |x| x
-                    ),
-                    |x| x
-                ),
-                |x| x
-            );
-
-            let node = &self.unresolved_indices.get(pos).and_then(|&i| Some(&self.sequence[i])).unwrap();
+            let node = &self.sequence[idx];
 
             let deps_satisfied = node.deps.iter().all(|&d| {
-                if let Some(first_byte) = self.staged_and_current_set.get(d as usize) {
-                    *first_byte
+                if let Some(first_byte) = self.sequence[d].bytes.first() {
+                    self.staged_and_current_set[*first_byte as usize]
                 } else {
                     false
                 }
@@ -336,7 +334,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
 
     fn backtrack(&mut self) -> bool {
         if let Some(last_added_pos) = self.path_stack.pop() {
-            let node = &self.unresolved_indices.get(last_added_pos).and_then(|&i| Some(&self.sequence[i])).unwrap();
+            let node = &self.sequence[self.unresolved_indices[last_added_pos]];
             if let Some(first_byte) = node.bytes.first() {
                 self.staged_and_current_set[*first_byte as usize] = false;
             }
