@@ -4,7 +4,7 @@
 //! This module provides functions to scan the I2C bus for connected devices,
 //! optionally testing with control bytes or initialization command sequences.
 
-use crate::compat::{ascii, HalErrorExt};
+use crate::compat::{HalErrorExt, ascii};
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -75,7 +75,8 @@ macro_rules! define_scanner {
                         }
                         Err(e) => {
                             let e_kind = e.to_compat(Some(addr));
-                            if e_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
+                            if e_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)
+                            {
                                 continue;
                             }
                             if let LogLevel::Verbose = log_level {
@@ -83,12 +84,16 @@ macro_rules! define_scanner {
                                 let _ = ascii::write_bytes_hex_prefixed(serial, &[addr]);
                                 let _ = writeln!(serial, ": {}", e_kind);
                             }
-                            if last_error.is_none() { last_error = Some(e_kind); }
+                            if last_error.is_none() {
+                                last_error = Some(e_kind);
+                            }
                         }
                     }
                 }
                 if success {
-                    found_addrs.push(addr).map_err(|_| crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow))?;
+                    found_addrs.push(addr).map_err(|_| {
+                        crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+                    })?;
                     if let LogLevel::Verbose = log_level {
                         let _ = writeln!(serial, " Found");
                     }
@@ -148,8 +153,7 @@ macro_rules! define_scanner {
             serial: &mut S,
             control_bytes: &[u8],
             log_level: LogLevel,
-        )
-        where
+        ) where
             I2C: $i2c_trait,
             <I2C as $i2c_trait>::Error: crate::compat::HalErrorExt,
             S: $write_trait,
@@ -222,16 +226,19 @@ macro_rules! define_scanner {
                     Ok(found_addrs) => {
                         if !found_addrs.is_empty() {
                             for addr in found_addrs {
-                                let _ = write!(serial,
-                                    "[ok] Found device at ",
+                                let _ = write!(serial, "[ok] Found device at ",);
+                                let _ = $crate::compat::ascii::write_bytes_hex_prefixed(
+                                    serial,
+                                    &[addr],
                                 );
-                                let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[addr]);
                                 let _ = write!(serial, " responding to ");
-                                let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[cmd]);
+                                let _ =
+                                    $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[cmd]);
                                 let _ = writeln!(serial, "");
                             }
                             if detected_cmds.push(cmd).is_err() {
-                                let _ = writeln!(serial, "[error] Buffer overflow in detected_cmds");
+                                let _ =
+                                    writeln!(serial, "[error] Buffer overflow in detected_cmds");
                             }
                         }
                     }
@@ -249,12 +256,19 @@ macro_rules! define_scanner {
             detected_cmds
         }
 
-        fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detected: &heapless::Vec<u8, 64>) {
+        fn log_differences<W: core::fmt::Write>(
+            serial: &mut W,
+            expected: &[u8],
+            detected: &heapless::Vec<u8, 64>,
+        ) {
             let mut missing_cmds = heapless::Vec::<u8, 64>::new();
             for &b in expected {
                 if !detected.contains(&b) {
                     if missing_cmds.push(b).is_err() {
-                        let _ = writeln!(serial, "[warn] Missing commands buffer is full, list is truncated.");
+                        let _ = writeln!(
+                            serial,
+                            "[warn] Missing commands buffer is full, list is truncated."
+                        );
                         break;
                     }
                 }
@@ -495,4 +509,8 @@ where
     Ok(())
 }
 
-define_scanner!(crate::compat::I2cCompat, crate::compat::HalErrorExt, core::fmt::Write);
+define_scanner!(
+    crate::compat::I2cCompat,
+    crate::compat::HalErrorExt,
+    core::fmt::Write
+);
