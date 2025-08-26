@@ -12,5 +12,5 @@ pub use crate::compat::ascii::{write_byte_hex, write_bytes_hex, write_bytes_hex_
 pub use crate::compat::{HalErrorExt, I2cCompat, SerialCompat, SerialEio, UartLike};
 pub use crate::explorer::{CmdExecutor, CmdNode, Explorer};
 pub use crate::scanner::{
-    LogLevel, run_explorer, scan_i2c, scan_i2c_with_ctrl, scan_init_sequence,
+    LogLevel, run_explorer, scan_i2c, scan_init_sequence,
 };

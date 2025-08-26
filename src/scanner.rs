@@ -114,10 +114,12 @@ macro_rules! define_scanner {
         ///
         /// - `i2c`: The I2C bus instance.
         /// - `serial`: The serial writer for logging.
+        /// - `ctrl_byte`: The control byte
         /// - `log_level`: The desired logging level.
         pub fn scan_i2c<I2C, S>(
             i2c: &mut I2C,
             serial: &mut S,
+            ctrl_byte: &[u8],
             log_level: LogLevel,
         ) -> Result<heapless::Vec<u8, 128>, crate::error::ErrorKind>
         where
@@ -128,7 +130,7 @@ macro_rules! define_scanner {
             if let LogLevel::Verbose = log_level {
                 let _ = writeln!(serial, "[log] Scanning I2C bus...");
             }
-            let result = internal_scan(i2c, serial, &[0x00], log_level);
+            let result = internal_scan(i2c, serial, ctrl_byte, log_level);
             if let Ok(found_addrs) = &result {
                 if !found_addrs.is_empty() {
                     let _ = writeln!(serial, "[ok] Found devices at:");
@@ -144,48 +146,6 @@ macro_rules! define_scanner {
                 let _ = writeln!(serial, "[info] I2C scan complete.");
             }
             result
-        }
-        /// Scans the I2C bus for devices using a provided list of control bytes.
-        ///
-        /// # Parameters
-        ///
-        /// - `i2c`: The I2C bus instance.
-        /// - `serial`: The serial writer for logging.
-        /// - `control_bytes`: An array of control bytes to try for each address.
-        /// - `log_level`: The desired logging level.
-        pub fn scan_i2c_with_ctrl<I2C, S>(
-            i2c: &mut I2C,
-            serial: &mut S,
-            control_bytes: &[u8],
-            log_level: LogLevel,
-        ) where
-            I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: crate::compat::HalErrorExt,
-            S: $write_trait,
-        {
-            if let LogLevel::Verbose = log_level {
-                let _ = writeln!(serial, "[scan] Scanning I2C bus with control bytes:");
-                for b in control_bytes {
-                    let _ = write!(serial, " ");
-                    let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[*b]);
-                    let _ = writeln!(serial, "");
-                }
-                let _ = writeln!(serial);
-            }
-            if let Ok(found_addrs) = internal_scan(i2c, serial, control_bytes, log_level) {
-                if !found_addrs.is_empty() {
-                    let _ = writeln!(serial, "[ok] Found devices at:");
-                    for addr in &found_addrs {
-                        let _ = write!(serial, " ");
-                        let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[*addr]);
-                        let _ = writeln!(serial, "");
-                    }
-                    let _ = writeln!(serial);
-                }
-            }
-            if let LogLevel::Verbose = log_level {
-                let _ = writeln!(serial, "[info] I2C scan with control bytes complete.");
-            }
         }
 
         /// Scans the I2C bus for devices that respond to a given initialization sequence.
