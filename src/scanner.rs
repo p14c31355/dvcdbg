@@ -253,7 +253,10 @@ macro_rules! define_scanner {
             let mut missing_cmds = heapless::Vec::<u8, 64>::new();
             for &b in expected {
                 if !detected.contains(&b) {
-                    missing_cmds.push(b).ok();
+                    if missing_cmds.push(b).is_err() {
+                        let _ = writeln!(serial, "[warn] Missing commands buffer is full, list is truncated.");
+                        break;
+                    }
                 }
             }
 

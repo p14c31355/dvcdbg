@@ -283,9 +283,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
             logger.log_info("[explorer] No commands provided for exploration. Returning no valid addresses.\r\n");
             return Err(ExplorerError::NoValidAddressesFound);
         }
-        let mut active_addrs: Vec<u8, I2C_ADDRESS_COUNT> =
-            (I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END).collect();
-        let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
+                let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
+        let mut solved_addrs = [false; I2C_ADDRESS_COUNT];
         let mut permutation_count = 0;
 
         let iter = self.permutations()?;
@@ -294,37 +293,40 @@ impl<'a, const N: usize> Explorer<'a, N> {
         for sequence in iter {
             permutation_count += 1;
 
-            let mut next_active_addrs: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
+            for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+                let addr_idx = addr_val as usize;
+                if solved_addrs[addr_idx] {
+                    continue;
+                }
 
-            for &addr in active_addrs.iter() {
                 let mut all_ok = true;
                 for &cmd in sequence.iter() {
-                    if let Err(e) = executor.exec(i2c, addr, cmd) {
+                    if let Err(e) = executor.exec(i2c, addr_val, cmd) {
                         all_ok = false;
                         logger.log_error_fmt(|buf| {
                             write!(buf, "[explorer] Execution failed for addr ")?;
-                            ascii::write_bytes_hex_prefixed(buf, &[addr])?;
+                            ascii::write_bytes_hex_prefixed(buf, &[addr_val])?;
                             write!(buf, ": {:?}\r\n", e)?;
                             Ok(())
                         });
                         break;
                     }
                 }
+
                 if all_ok {
-                    next_active_addrs
-                        .push(addr)
-                        .map_err(|_| ExplorerError::BufferOverflow)?;
+                    if found_addresses.push(addr_val).is_ok() {
+                        solved_addrs[addr_idx] = true;
+                    } else {
+                        return Err(ExplorerError::BufferOverflow);
+                    }
                 }
             }
-            active_addrs = next_active_addrs;
-            if active_addrs.is_empty() {
+
+            // Optimization: if all possible addresses have been found, we can stop.
+            if found_addresses.len() == (I2C_SCAN_ADDR_END - I2C_SCAN_ADDR_START + 1) as usize {
                 break;
             }
         }
-
-        found_addresses
-            .extend_from_slice(&active_addrs)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
 
         logger.log_info_fmt(|buf| {
             writeln!(
