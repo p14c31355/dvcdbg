@@ -335,7 +335,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 /// # Ok(())
 /// # }
 /// ```
-pub fn run_explorer<I2C, S>(
+pub fn run_explorer<I2C, S, const N: usize>(
     explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -411,16 +411,16 @@ where
         for &c in self.init_sequence.iter() {
             let command = [self.prefix, c];
             if i2c.write(addr, &command).is_err() {
-                return false;
+                return Err(());
             }
         }
 
         // Run the explorer command
         self.buffer.clear();
         if self.buffer.push(self.prefix).is_err() || self.buffer.extend_from_slice(cmd).is_err() {
-            return false;
+            return Err(());
         }
 
-        i2c.write(addr, &self.buffer).is_ok()
+        i2c.write(addr, &self.buffer).is_ok().then_some(()).ok_or(())
     }
 }

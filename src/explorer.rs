@@ -24,7 +24,6 @@
 //! ```ignore
 //! use crate::{Explorer, CmdNode, I2cCompat, Logger, CmdExecutor};
 //! use heapless::Vec;
-//! use core::fmt::Write; // Required for writeln! macro to work with heapless::String
 //!
 //! // Example implementations for a specific platform
 //! struct MyExecutor;
@@ -67,8 +66,8 @@
 //! }
 //! ```
 
-use heapless::{String, Vec};
 use core::fmt::Write;
+use heapless::{String, Vec};
 
 const I2C_SCAN_ADDR_END: u8 = 127;
 const I2C_SCAN_ADDR_START: u8 = 1;
