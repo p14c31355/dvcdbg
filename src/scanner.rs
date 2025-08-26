@@ -353,11 +353,25 @@ where
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
     let _ = writeln!(serial, "[log] Start driver safe init");
 
+    // Wrapper for serial interface to implement the Logger trait
+    struct SerialLogger<'a, S: core::fmt::Write>(&'a mut S);
+    impl<'a, S: core::fmt::Write> crate::explorer::Logger for SerialLogger<'a, S> {
+        fn log_info(&mut self, msg: &str) {
+            let _ = self.0.write_str(msg);
+        }
+        fn log_warning(&mut self, msg: &str) {
+            let _ = self.0.write_str(msg);
+        }
+        fn log_error(&mut self, msg: &str) {
+            let _ = self.0.write_str(msg);
+        }
+    }
+
     explorer
         .explore(
             i2c,
             &mut PrefixExecutor::new(prefix, successful_seq),
-            serial,
+            &mut SerialLogger(serial),
         )
         .map(|()| {
             let _ = writeln!(serial, "[driver] init sequence applied");
