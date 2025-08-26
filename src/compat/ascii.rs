@@ -22,10 +22,13 @@ pub fn write_bytes_hex<W: Write>(w: &mut W, bytes: &[u8]) -> fmt::Result {
 }
 
 pub fn write_bytes_hex_prefixed<W: Write>(w: &mut W, bytes: &[u8]) -> fmt::Result {
-    for &b in bytes {
+    let mut it = bytes.iter().peekable();
+    while let Some(b) = it.next() {
         w.write_str("0x")?;
-        write_byte_hex(w, b)?;
-        w.write_char(' ')?;
+        write_byte_hex(w, *b)?;
+        if it.peek().is_some() {
+            w.write_char(' ')?;
+        }
     }
     Ok(())
 }
