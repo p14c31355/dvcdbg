@@ -169,7 +169,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         ExplorerError,
     > {
         let mut in_degree = Vec::<usize, N>::new();
-        in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::BufferOverflow)?;
+        in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::TooManyCommands)?;
 
         // Calculate in-degrees for all nodes.
         // in_degree[i] will store the number of dependencies for self.sequence[i].
