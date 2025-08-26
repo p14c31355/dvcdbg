@@ -188,10 +188,22 @@ impl<'a, const N: usize> Explorer<'a, N> {
         in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::TooManyCommands)?;
 
         // Calculate in-degrees for all nodes.
-        // in_degree[i] will store the number of dependencies for self.sequence[i].
-        for (i, node) in self.sequence.iter().enumerate() {
-            in_degree[i] = node.deps.len();
+        // Build adjacency list for reverse dependencies (nodes that depend on current node)
+// adj_list_rev[k] will contain a list of indices 'j' where self.sequence[j] depends on self.sequence[k]
+let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
+adj_list_rev.resize(self.sequence.len(), Vec::new()).map_err(|_| ExplorerError::BufferOverflow)?;
+
+// Populate in-degrees and reverse adjacency list
+for (i, node) in self.sequence.iter().enumerate() {
+    in_degree[i] = node.deps.len();
+    for &dep_idx in node.deps.iter() {
+        // Basic validation for dependency index
+        if dep_idx >= self.sequence.len() {
+            return Err(ExplorerError::BufferOverflow); // Or a more specific error like InvalidDependencyIndex
         }
+        adj_list_rev[dep_idx].push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+    }
+}
         
         let mut queue = Vec::<usize, N>::new();
         for (i, &degree) in in_degree.iter().enumerate() {
@@ -213,12 +225,11 @@ impl<'a, const N: usize> Explorer<'a, N> {
             staged_indices[idx] = true;
             staged_count += 1;
 
-            for (i, node) in self.sequence.iter().enumerate() {
-                if node.deps.contains(&idx) {
-                    in_degree[i] -= 1;
-                    if in_degree[i] == 0 {
-                        queue.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
-                    }
+             // For each node v that depends on u (which is 'idx' in this loop)
+            for &v in adj_list_rev[idx].iter() {
+                in_degree[v] -= 1;
+                if in_degree[v] == 0 {
+                    queue.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
         }
