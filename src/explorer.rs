@@ -66,7 +66,6 @@
 //!     logger.log_error(&format!("Exploration failed: {:?}", e));
 //! }
 //! ```
-
 use crate::compat::ascii;
 use core::fmt::Write;
 use heapless::{String, Vec};
@@ -261,7 +260,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut iter = self.permutations()?;
         logger.log_info("[explorer] Starting permutation exploration...");
 
-        while let Some(sequence) = iter.next() {
+        for sequence in iter {
             permutation_count += 1;
             
             let mut next_active_addrs: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
