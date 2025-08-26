@@ -60,7 +60,7 @@ fn test_full_stack() {
     assert!(i2c.read(0x42, &mut buf).is_ok());
     assert!(i2c.write_read(0x42, &[1, 2], &mut buf).is_ok());
 
-    scan_i2c(&mut i2c, &mut serial, &[0x00], dvcdbg::scanner::LogLevel::Verbose);
+    let _ = scan_i2c(&mut i2c, &mut serial, &[0x00], dvcdbg::scanner::LogLevel::Verbose);
 
     assert_log!(false, &mut serial, "test log macro");
 
