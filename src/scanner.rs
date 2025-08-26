@@ -273,8 +273,6 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
         let _ = ascii::write_bytes_hex_prefixed(serial, &[*b]);
         let _ = writeln!(serial);
     }
-    let _ = writeln!(serial);
-
     let _ = writeln!(serial, "Commands with response:");
     for b in detected {
         let _ = write!(serial, " ");
@@ -416,23 +414,25 @@ where
     }
 
     // Executor that prepends a prefix and applies an initial sequence once per address.
-    struct PrefixExecutor {
+    struct PrefixExecutor<const BUF_CAP: usize> {
         prefix: u8,
         init_sequence: heapless::Vec<u8, 64>,
         initialized_addrs: [bool; 128], // Use a bitmask for O(1) checks
+        buffer: heapless::Vec<u8, BUF_CAP>,
     }
 
-    impl PrefixExecutor {
+    impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
         fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
             Self {
                 prefix,
                 init_sequence,
                 initialized_addrs: [false; 128],
+                buffer: heapless::Vec::new(),
             }
         }
     }
 
-    impl<I2C> crate::explorer::CmdExecutor<I2C> for PrefixExecutor
+    impl<I2C, const BUF_CAP: usize> crate::explorer::CmdExecutor<I2C> for PrefixExecutor<BUF_CAP>
     where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -452,11 +452,11 @@ where
                 self.initialized_addrs[addr_idx] = true;
             }
 
-            // Then, send the regular command. Ensure buffer has enough capacity.
-            let mut buf: heapless::Vec<u8, 128> = heapless::Vec::new(); // Increased capacity
-            buf.push(self.prefix).map_err(|_| ())?;
-            buf.extend_from_slice(cmd).map_err(|_| ())?;
-            i2c.write(addr, &buf).map_err(|_| ())
+            // Then, send the regular command. Reuse the buffer.
+            self.buffer.clear();
+            self.buffer.push(self.prefix).map_err(|_| ())?;
+            self.buffer.extend_from_slice(cmd).map_err(|_| ())?;
+            i2c.write(addr, &self.buffer).map_err(|_| ())
         }
     }
 
