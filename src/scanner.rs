@@ -126,13 +126,26 @@ macro_rules! define_scanner {
             let result = internal_scan(i2c, serial, ctrl_byte, log_level);
             if let Ok(found_addrs) = &result {
                 if !found_addrs.is_empty() {
-                    let _ = writeln!(serial, "[ok] Found devices at:");
-                    for addr in found_addrs {
-                        let _ = write!(serial, " ");
-                        let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[*addr]);
-                        let _ = writeln!(serial, "");
+                    match log_level {
+                        LogLevel::Verbose => {
+                            let _ = writeln!(serial, "[ok] Found devices at:");
+                            for addr in found_addrs {
+                                let _ = write!(serial, " ");
+                                let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[*addr]);
+                                let _ = writeln!(serial, "");
+                            }
+                            let _ = writeln!(serial);
+                        }
+                        LogLevel::Normal => {
+                            let _ = writeln!(serial, "[ok] Found devices at:");
+                            for addr in found_addrs {
+                                let _ = writeln!(serial, " 0x{:02X}", addr);
+                            }
+                            let _ = writeln!(serial);
+                        }
+                        LogLevel::Quiet => {
+                        }
                     }
-                    let _ = writeln!(serial);
                 }
             }
             if let LogLevel::Verbose = log_level {
