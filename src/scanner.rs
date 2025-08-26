@@ -356,8 +356,8 @@ where
     explorer
         .explore(
             i2c,
-            serial,
             &mut PrefixExecutor::new(prefix, successful_seq),
+            serial,
         )
         .map(|()| {
             let _ = writeln!(serial, "[driver] init sequence applied");
