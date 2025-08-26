@@ -411,12 +411,29 @@ where
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     {
         fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()> {
-            let mut buf: heapless::Vec<u8, 64> = heapless::Vec::new();
-            if buf.push(self.prefix).is_err() || buf.extend_from_slice(cmd).is_err() {
+        use heapless::Vec;
+
+        let mut buf: Vec<u8, 64> = Vec::new();
+        if buf.push(self.prefix).is_err() {
+            return Err(());
+        }
+        if buf.extend_from_slice(cmd).is_err() {
+            return Err(());
+        }
+
+        if !self.init_sequence.is_empty() {
+            let mut init_buf: Vec<u8, 64> = Vec::new();
+            if init_buf.push(self.prefix).is_err() {
                 return Err(());
             }
-            i2c.write(addr, &buf).is_ok().then_some(()).ok_or(())
+            if init_buf.extend_from_slice(&self.init_sequence).is_err() {
+                return Err(());
+            }
+            i2c.write(addr, &init_buf).map_err(|_| ())?;
         }
+
+        i2c.write(addr, &buf).map_err(|_| ())
+    }
     }
 
     let mut serial_logger = SerialLogger::new(serial);
