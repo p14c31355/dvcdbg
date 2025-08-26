@@ -438,23 +438,22 @@ where
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     {
         fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()> {
-            use heapless::Vec;
             let addr_idx = addr as usize;
 
             // Check if the address has already been initialized (O(1) check)
             if !self.initialized_addrs[addr_idx] {
-                // First, send the init_sequence with the prefix
-                let mut init_buf: Vec<u8, 64> = Vec::new();
-                init_buf.push(self.prefix).map_err(|_| ())?;
-                init_buf.extend_from_slice(&self.init_sequence).map_err(|_| ())?;
-                i2c.write(addr, &init_buf).map_err(|_| ())?;
+                // First, send the init_sequence with the prefix, one command at a time.
+                for &c in self.init_sequence.iter() {
+                    let command = [self.prefix, c];
+                    i2c.write(addr, &command).map_err(|_| ())?;
+                }
 
                 // Mark this address as initialized
                 self.initialized_addrs[addr_idx] = true;
             }
 
-            // Then, send the regular command
-            let mut buf: Vec<u8, 64> = Vec::new();
+            // Then, send the regular command. Ensure buffer has enough capacity.
+            let mut buf: heapless::Vec<u8, 128> = heapless::Vec::new(); // Increased capacity
             buf.push(self.prefix).map_err(|_| ())?;
             buf.extend_from_slice(cmd).map_err(|_| ())?;
             i2c.write(addr, &buf).map_err(|_| ())
