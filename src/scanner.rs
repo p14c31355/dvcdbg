@@ -227,8 +227,10 @@ macro_rules! define_scanner {
             detected: &heapless::Vec<u8, 64>,
         ) {
             let mut missing_cmds = heapless::Vec::<u8, 64>::new();
+            let mut sorted_detected = detected.clone();
+            sorted_detected.sort_unstable();
             for &b in expected {
-                if !detected.contains(&b) {
+                if sorted_detected.binary_search(&b).is_err() {
                     if missing_cmds.push(b).is_err() {
                         let _ = writeln!(
                             serial,
