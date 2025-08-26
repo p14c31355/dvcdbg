@@ -188,7 +188,7 @@ macro_rules! assert_log {
 /// ```
 #[macro_export]
 macro_rules! quick_diag {
-    ($serial:expr, $i2c:expr, $ctrl_byte:expr, $timer:expr, $test_expr:block, $log_level:expr) => {{
+    ($serial:expr, $i2c:expr, $ctrl_byte:expr, $log_level:expr) => {{
         quick_diag!(@inner $serial, $i2c, $ctrl_byte, $log_level);
 
         // Test expression timing
@@ -202,10 +202,8 @@ macro_rules! quick_diag {
         let _ = core::writeln!($serial, "=== Quick Diagnostic Complete ===");
     }};
     // Internal rule for common diagnostic steps.
-    (@inner $serial:expr, $i2c:expr, $log_level:expr) => {
-        let _ = core::writeln!($serial, "=== Quick Diagnostic Start ===");
-        // I2C bus scan
-        let _ = core::writeln!($serial, "Scanning I2C bus...");
-        $crate::scanner::scan_i2c($i2c, $serial, &[$ctrl_byte], $log_level);
-    };
+    (@inner $serial:expr, $i2c:expr, $ctrl_byte:expr, $log_level:expr) => {{
+    let _ = core::writeln!($serial, "=== Quick Diagnostic Start ===");
+    $crate::scanner::scan_i2c($i2c, $serial, &[$ctrl_byte], $log_level);
+    }};
 }
