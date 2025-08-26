@@ -88,6 +88,8 @@ pub enum ExplorerError {
     ExecutionFailed,
     /// An internal buffer overflowed.
     BufferOverflow,
+    /// A dependency index is out of bounds.
+    InvalidDependencyIndex,
 }
 
 /// Errors that can occur during command execution.
