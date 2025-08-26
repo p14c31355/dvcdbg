@@ -49,7 +49,7 @@ macro_rules! define_scanner {
         fn internal_scan<I2C, S>(
             i2c: &mut I2C,
             serial: &mut S,
-            control_bytes: &[u8],
+            data: &[u8],
             log_level: LogLevel,
         ) -> Result<heapless::Vec<u8, 128>, crate::error::ErrorKind>
         where
@@ -59,46 +59,39 @@ macro_rules! define_scanner {
         {
             let mut found_addrs = heapless::Vec::<u8, 128>::new();
             let mut last_error: Option<crate::error::ErrorKind> = None;
-
             for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 if let LogLevel::Verbose = log_level {
                     let _ = write!(serial, "[log] Scanning 0x");
                     let _ = ascii::write_byte_hex(serial, addr);
                     let _ = write!(serial, "...");
                 }
-                let mut success = false;
-                for &ctrl_byte in control_bytes {
-                    match i2c.write(addr, &[ctrl_byte]) {
-                        Ok(_) => {
-                            success = true;
-                            break;
+                match i2c.write(addr, data) {
+                    Ok(_) => {
+                        found_addrs.push(addr).map_err(|_| {
+                            crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+                        })?;
+                        if let LogLevel::Verbose = log_level {
+                            let _ = writeln!(serial, " Found");
                         }
-                        Err(e) => {
-                            let e_kind = e.to_compat(Some(addr));
-                            if e_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)
-                            {
-                                continue;
-                            }
+                    }
+                    Err(e) => {
+                        let e_kind = e.to_compat(Some(addr));
+                        if e_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)
+                        {
                             if let LogLevel::Verbose = log_level {
-                                let _ = write!(serial, "[error] write failed at ");
-                                let _ = ascii::write_bytes_hex_prefixed(serial, &[addr]);
-                                let _ = writeln!(serial, ": {}", e_kind);
+                                let _ = writeln!(serial, " No response (NACK)");
                             }
-                            if last_error.is_none() {
-                                last_error = Some(e_kind);
-                            }
+                            continue;
+                        }
+                        if let LogLevel::Verbose = log_level {
+                            let _ = write!(serial, "[error] write failed at ");
+                            let _ = ascii::write_bytes_hex_prefixed(serial, &[addr]);
+                            let _ = writeln!(serial, ": {}", e_kind);
+                        }
+                        if last_error.is_none() {
+                            last_error = Some(e_kind);
                         }
                     }
-                }
-                if success {
-                    found_addrs.push(addr).map_err(|_| {
-                        crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
-                    })?;
-                    if let LogLevel::Verbose = log_level {
-                        let _ = writeln!(serial, " Found");
-                    }
-                } else if let LogLevel::Verbose = log_level {
-                    let _ = writeln!(serial, " No response");
                 }
             }
             if let Some(e) = last_error {
@@ -351,29 +344,37 @@ where
     let _ = writeln!(serial, "[log] Start driver safe init");
 
     // Wrapper for serial interface to implement the Logger trait
-    struct SerialLogger<'a, S: core::fmt::Write> {
+        struct SerialLogger<'a, S: core::fmt::Write> {
         writer: &'a mut S,
         buffer: heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
+        log_level: LogLevel,
     }
 
     impl<'a, S: core::fmt::Write> SerialLogger<'a, S> {
-        fn new(writer: &'a mut S) -> Self {
+        fn new(writer: &'a mut S, log_level: LogLevel) -> Self {
             Self {
                 writer,
                 buffer: heapless::String::new(),
+                log_level,
             }
         }
     }
 
     impl<'a, S: core::fmt::Write> crate::explorer::Logger for SerialLogger<'a, S> {
         fn log_info(&mut self, msg: &str) {
-            let _ = self.writer.write_str(msg);
+            if self.log_level == LogLevel::Verbose {
+                let _ = self.writer.write_str(msg);
+            }
         }
         fn log_warning(&mut self, msg: &str) {
-            let _ = self.writer.write_str(msg);
+            if self.log_level != LogLevel::Quiet {
+                let _ = self.writer.write_str(msg);
+            }
         }
         fn log_error(&mut self, msg: &str) {
-            let _ = self.writer.write_str(msg);
+            if self.log_level != LogLevel::Quiet {
+                let _ = self.writer.write_str(msg);
+            }
         }
 
         fn log_info_fmt<F>(&mut self, fmt: F)
@@ -382,9 +383,11 @@ where
                 &mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
             ) -> Result<(), core::fmt::Error>,
         {
-            self.buffer.clear();
-            if fmt(&mut self.buffer).is_ok() {
-                let _ = self.writer.write_str(self.buffer.as_str());
+            if self.log_level == LogLevel::Verbose {
+                self.buffer.clear();
+                if fmt(&mut self.buffer).is_ok() {
+                    let _ = self.writer.write_str(self.buffer.as_str());
+                }
             }
         }
 
@@ -394,9 +397,11 @@ where
                 &mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
             ) -> Result<(), core::fmt::Error>,
         {
-            self.buffer.clear();
-            if fmt(&mut self.buffer).is_ok() {
-                let _ = self.writer.write_str(self.buffer.as_str());
+            if self.log_level != LogLevel::Quiet {
+                self.buffer.clear();
+                if fmt(&mut self.buffer).is_ok() {
+                    let _ = self.writer.write_str(self.buffer.as_str());
+                }
             }
         }
     }
@@ -460,8 +465,8 @@ where
         }
     }
 
-    let mut serial_logger = SerialLogger::new(serial);
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, successful_seq);
+    let mut serial_logger = SerialLogger::new(serial, log_level);
 
     for addr in explorer
         .explore(i2c, &mut executor, &mut serial_logger)?
