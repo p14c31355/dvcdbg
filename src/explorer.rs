@@ -12,7 +12,7 @@
 //! ## Key Refinements
 //! 1. **Separation of Concerns**: The core algorithm (`PermutationIter`) is separate from
 //!    the I2C execution logic (`explore`).
-//! 2. **Iterator-based API**: The `permutations()` method returns an iterator,
+//! 2. **Iterator-based API**: The `permutating()` method returns an iterator,
 //!    making the code more testable and composable.
 //! 3. **Generic Capacity**: `CMD_CAPACITY` is now a generic parameter `N`,
 //!    allowing for code reuse across devices with different memory constraints.
@@ -29,14 +29,14 @@
 //! // Example implementations for a specific platform
 //! struct MyExecutor;
 //! impl<I2C: I2cCompat> CmdExecutor<I2C> for MyExecutor {
-//!     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()> {
+//!     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), crate::explorer::ExecutorError> {
 //!         // This example executor only supports single-byte commands for simplicity,
 //!         // and assumes a device protocol that requires a 0x00 control byte.
 //!         if cmd.len() != 1 {
-//!             return Err(());
+//!             return Err(crate::explorer::ExecutorError::ExecFailed);
 //!         }
 //!         let buf = [0x00, cmd[0]];
-//!         i2c.write(addr, &buf).map_err(|_| ())
+//!         i2c.write(addr, &buf).map_err(|e| crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr))))
 //!     }
 //! }
 //! struct NullLogger;
@@ -44,6 +44,8 @@
 //!     fn log_info(&mut self, _msg: &str) {}
 //!     fn log_warning(&mut self, _msg: &str) {}
 //!     fn log_error(&mut self, _msg: &str) {}
+//!     fn log_info_fmt<F>(&mut self, _fmt: F) where F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error>, {}
+//!     fn log_error_fmt<F>(&mut self, _fmt: F) where F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error>, {}
 //! }
 //!
 //! // Define commands with dependencies
@@ -160,22 +162,21 @@ pub struct Explorer<'a, const N: usize> {
     pub sequence: &'a [CmdNode<'a>],
 }
 
-/// An iterator that generates valid I2C command permutations.
+/// An iterator that generates valid I2C command permutations (topological sorts).
+///
+/// This iterator uses an iterative backtracking approach to find all possible
+/// valid sequences of commands, respecting their dependencies.
 pub struct PermutationIter<'a, const N: usize> {
     sequence: &'a [CmdNode<'a>],
-    staged: Vec<&'a [u8], N>,
-    unresolved_indices: Vec<usize, N>,
     current_permutation: Vec<&'a [u8], N>,
-    used: Vec<bool, N>,
-    used_indices: [bool; N], // Bitmask for O(1) checks
-    path_stack: Vec<usize, N>,
-    loop_start_indices: Vec<usize, N>, // Tracks search progress at each level
+    used: [bool; N], // Tracks which original command indices are currently in `current_permutation`
+    in_degree: Vec<usize, N>, // Current in-degrees, updated dynamically during permutation generation
+    adj_list_rev: Vec<Vec<usize, N>, N>, // Reverse adjacency list: adj_list_rev[i] contains nodes that depend on node 'i'
+    path_stack: Vec<usize, N>, // Stack of original command indices added to `current_permutation`
+    loop_start_indices: Vec<usize, N>, // Tracks search progress at each level of the permutation tree
     is_done: bool,
+    total_nodes: usize,
 }
-
-/// The return type for the stage function.
-type StageResult<'a, const N: usize> =
-    Result<(Vec<&'a [u8], N>, Vec<usize, N>, [bool; N]), ExplorerError>;
 
 pub struct ExploreResult {
     pub found_addrs: Vec<u8, I2C_ADDRESS_COUNT>,
@@ -183,104 +184,89 @@ pub struct ExploreResult {
 }
 
 impl<'a, const N: usize> Explorer<'a, N> {
-    /// Performs an initial topological sort to stage commands without unresolved dependencies.
-    fn stage(&self) -> StageResult<'a, N> {
-        let mut in_degree = Vec::<usize, N>::new();
-        in_degree
-            .resize(self.sequence.len(), 0)
-            .map_err(|_| ExplorerError::TooManyCommands)?;
+    /// Returns a stack-safe iterator for all valid command permutations (topological sorts).
+    ///
+    /// This function first performs cycle detection using a modified Kahn's algorithm.
+    /// If a cycle is detected, it returns an `ExplorerError::DependencyCycle`.
+    /// Otherwise, it initializes and returns a `PermutationIter` to generate all valid permutations.
+    pub fn permutations(&self) -> Result<PermutationIter<'a, N>, ExplorerError> {
+        if self.sequence.len() > N {
+            return Err(ExplorerError::TooManyCommands);
+        }
 
-        // Calculate in-degrees for all nodes.
-        // Build adjacency list for reverse dependencies (nodes that depend on current node)
-        // adj_list_rev[k] will contain a list of indices 'j' where self.sequence[j] depends on self.sequence[k]
+        let mut initial_in_degree = Vec::<usize, N>::new();
+ initial_in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::BufferOverflow)?;
+
         let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
-        adj_list_rev
-            .resize(self.sequence.len(), Vec::new())
-            .map_err(|_| ExplorerError::BufferOverflow)?;
+        adj_list_rev.resize(self.sequence.len(), Vec::new()).map_err(|_| ExplorerError::BufferOverflow)?;
 
-        // Populate in-degrees and reverse adjacency list
         for (i, node) in self.sequence.iter().enumerate() {
-            in_degree[i] = node.deps.len();
+            // The in-degree of a node is the number of dependencies it has.
+            initial_in_degree[i] = node.deps.len();
             for &dep_idx in node.deps.iter() {
-                // Basic validation for dependency index
                 if dep_idx >= self.sequence.len() {
-                    return Err(ExplorerError::InvalidDependencyIndex); // Or a more specific error like InvalidDependencyIndex
+                    return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_list_rev[dep_idx]
-                    .push(i)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
+                // Add 'i' to the list of nodes that depend on 'dep_idx'
+                adj_list_rev[dep_idx].push(i).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
-        let mut queue = Vec::<usize, N>::new();
-        for (i, &degree) in in_degree.iter().enumerate() {
-            if degree == 0 {
-                queue.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+        // Cycle detection using a modified Kahn's algorithm
+        let mut temp_in_degree = initial_in_degree.clone();
+        let mut q = Vec::<usize, N>::new();
+        for i in 0..self.sequence.len() {
+            if temp_in_degree[i] == 0 {
+                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
-        let mut staged: Vec<&'a [u8], N> = Vec::new();
-        let mut staged_indices = [false; N];
-        let mut staged_count = 0;
-        let mut queue_idx = 0;
+        let mut count = 0;
+        let mut q_idx = 0;
+        while q_idx < q.len() {
+            let u = q[q_idx];
+            q_idx += 1;
+            count += 1;
 
-        while queue_idx < queue.len() {
-            let idx = queue[queue_idx];
-            queue_idx += 1;
-
-            staged
-                .push(self.sequence[idx].bytes)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
-            staged_indices[idx] = true;
-            staged_count += 1;
-
-            // For each node v that depends on u (which is 'idx' in this loop)
-            for &v in adj_list_rev[idx].iter() {
-                in_degree[v] -= 1;
-                if in_degree[v] == 0 {
-                    queue.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
+            for &v in adj_list_rev[u].iter() {
+                temp_in_degree[v] -= 1;
+                if temp_in_degree[v] == 0 {
+                    q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
         }
 
-        if staged_count != self.sequence.len() {
+        if count != self.sequence.len() {
             return Err(ExplorerError::DependencyCycle);
         }
 
-        let mut unresolved_indices = Vec::new();
-        for (i, &is_staged) in staged_indices.iter().enumerate() {
-            if !is_staged {
-                unresolved_indices
-                    .push(i)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-        }
-
-        Ok((staged, unresolved_indices, staged_indices))
-    }
-
-    /// Returns a stack-safe iterator for all valid command permutations.
-    pub fn permutations(&self) -> Result<PermutationIter<'a, N>, ExplorerError> {
-        let (staged, unresolved_indices, staged_indices) = self.stage()?;
-
-        let mut used = Vec::new();
-        used.resize(unresolved_indices.len(), false)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-
         Ok(PermutationIter {
             sequence: self.sequence,
-            staged,
-            unresolved_indices,
             current_permutation: Vec::new(),
-            used,
-            used_indices: staged_indices,
+            used: [false; N], // Initialize all to false
+            in_degree: initial_in_degree,
+            adj_list_rev,
             path_stack: Vec::new(),
-            loop_start_indices: Vec::new(),
+            loop_start_indices: Vec::new(), // Start empty, will be pushed to
             is_done: false,
+            total_nodes: self.sequence.len(),
         })
     }
 
     /// Explores valid sequences, attempting to execute them on an I2C bus.
+    ///
+    /// This function iterates through all valid command permutations generated by `PermutationIter`,
+    /// and for each permutation, attempts to execute it on all active I2C addresses.
+    /// It filters out addresses that fail to respond to any command in a sequence.
+    ///
+    /// # Parameters
+    /// - `i2c`: An I2C implementation used to test candidate sequences against device addresses.
+    /// - `executor`: The object responsible for executing a single command on the bus.
+    /// - `logger`: The object responsible for logging progress and results.
+    ///
+    /// # Returns
+    /// - `Ok(ExploreResult)` containing the list of found addresses and the number of permutations tested.
+    /// - `Err(ExplorerError)` if an error occurs during permutation generation or I2C execution.
     pub fn explore<I2C, E, L>(
         &self,
         i2c: &mut I2C,
@@ -371,14 +357,9 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
         }
 
         loop {
-            // Check if we have a full permutation
-            if self.current_permutation.len() + self.staged.len() == self.sequence.len() {
-                // Construct the full sequence by concatenating staged and current
-                let mut full_sequence = self.staged.clone();
-                full_sequence
-                    .extend_from_slice(&self.current_permutation)
-                    .unwrap_or_else(|_| unreachable!());
-
+            // If we have a complete permutation, return it and prepare for the next one.
+            if self.current_permutation.len() == self.total_nodes {
+                let full_sequence = self.current_permutation.clone();
                 // Backtrack to find the next permutation
                 if !self.backtrack() {
                     self.is_done = true;
@@ -388,9 +369,10 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
 
             // Try to extend the current partial permutation
             if self.try_extend() {
-                continue; // Extended, continue to next level of recursion
+                // Successfully extended, continue building the permutation
+                continue;
             } else {
-                // Could not extend, backtrack
+                // Could not extend, backtrack and try a different path
                 if !self.backtrack() {
                     self.is_done = true;
                     return None; // No more permutations
@@ -401,42 +383,82 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
 }
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
+    /// Attempts to extend the current partial permutation by adding a new command.
+    ///
+    /// It iterates through all available (not yet used) commands and checks if their
+    /// dependencies are satisfied (i.e., their in-degree is 0). If a valid command
+    /// is found, it's added to the current permutation, its `used` status is updated,
+    /// and the in-degrees of its dependent nodes are decremented.
+    ///
+    /// Returns `true` if a command was successfully added, `false` otherwise.
     fn try_extend(&mut self) -> bool {
-        let last_pos = self.loop_start_indices.last().copied().unwrap_or(0);
-        for pos in last_pos..self.unresolved_indices.len() {
-            let idx = self.unresolved_indices[pos];
+        // The `loop_start_indices` tracks the starting point for the search at the current depth.
+        // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
+        let start_idx_for_level = self.loop_start_indices.last().copied().unwrap_or(0);
 
-            if self.used[pos] {
+        // Iterate through all possible nodes (0 to total_nodes-1)
+        for idx in start_idx_for_level..self.total_nodes {
+            // If this node is already used in the current permutation, skip it
+            if self.used[idx] {
                 continue;
             }
 
-            let node = &self.sequence[idx];
+            // Check if this node's dependencies are satisfied (i.e., its current in-degree is 0)
+            if self.in_degree[idx] == 0 {
+                // Make choice: Add this node to the current permutation
+                // Note: unwrap() is used here assuming N is sufficiently large based on initial checks.
+                self.current_permutation.push(self.sequence[idx].bytes).unwrap();
+                self.used[idx] = true; // Mark as used
 
-            let deps_satisfied = node.deps.iter().all(|&d| self.used_indices[d]);
+                // Decrement in-degrees for all nodes that depend on this one
+                for &dependent_idx in self.adj_list_rev[idx].iter() {
+                    self.in_degree[dependent_idx] -= 1;
+                }
 
-            if deps_satisfied {
-                self.current_permutation.push(node.bytes).unwrap();
-                self.used_indices[idx] = true;
-                self.used[pos] = true;
-                self.path_stack.push(pos).unwrap();
-                self.loop_start_indices.push(pos + 1).unwrap();
-                return true;
+                self.path_stack.push(idx).unwrap(); // Push the original index of the command
+                self.loop_start_indices.push(0).unwrap(); // Reset loop start for the next level (start from 0 for the next command)
+                return true; // Successfully extended
             }
         }
-        false
+        false // No node found to extend the current permutation
     }
 
+    /// Backtracks to the previous decision point in the permutation search.
+    ///
+    /// This method undoes the last choice made: it removes the last added command
+    /// from the current permutation, unmarks it as used, and increments the
+    /// in-degrees of its dependent nodes (reversing the decrement).
+    /// It then updates the `loop_start_indices` to ensure the next search
+    /// at the parent level continues from the next sibling.
+    ///
+    /// Returns `true` if backtracking can continue (i.e., there are more options
+    /// at a previous level), or `false` if the root was reached and no more
+    /// permutations can be generated.
     fn backtrack(&mut self) -> bool {
-        if let Some(last_added_pos) = self.path_stack.pop() {
-            let node_idx = self.unresolved_indices[last_added_pos];
-            self.used_indices[node_idx] = false;
-
-            self.used[last_added_pos] = false;
+        if let Some(last_added_idx) = self.path_stack.pop() {
+            // Undo the choice: Remove the last added node from the permutation
             self.current_permutation.pop();
-            self.loop_start_indices.pop();
+            self.used[last_added_idx] = false; // Unmark as used
 
+            // Increment in-degrees for all nodes that depend on this one (undo decrement)
+            for &dependent_idx in self.adj_list_rev[last_added_idx].iter() {
+                self.in_degree[dependent_idx] += 1;
+            }
+
+            self.loop_start_indices.pop(); // Pop the loop start for the level we just finished
+
+            // If there's a parent level, update its loop_start_indices to try the next sibling
+            if let Some(parent_loop_start_idx) = self.loop_start_indices.last_mut() {
+                *parent_loop_start_idx = last_added_idx + 1; // Start search from next sibling
+            } else {
+                // If path_stack is empty after pop, we've backtracked past the root
+                self.is_done = true;
+                return false;
+            }
             true
         } else {
+            // Already at the root and no more options
+            self.is_done = true;
             false
         }
     }
