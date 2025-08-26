@@ -314,7 +314,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                         logger.log_error_fmt(|buf| {
                             write!(buf, "[explorer] Execution failed for addr ")?;
                             ascii::write_bytes_hex_prefixed(buf, &[addr_val])?;
-                            write!(buf, ": {:?}\r\n", e)?;
+                            write!(buf, ": {e:?}\r\n")?;
                             Ok(())
                         });
                         break;

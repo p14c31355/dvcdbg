@@ -60,13 +60,13 @@ fn test_full_stack() {
     assert!(i2c.read(0x42, &mut buf).is_ok());
     assert!(i2c.write_read(0x42, &[1, 2], &mut buf).is_ok());
 
-    scan_i2c(&mut i2c, &mut serial, dvcdbg::scanner::LogLevel::Verbose);
+    scan_i2c(&mut i2c, &mut serial, &[0x00], dvcdbg::scanner::LogLevel::Verbose);
 
     assert_log!(false, &mut serial, "test log macro");
 
     assert_log!(true, &mut serial, "this won't log");
 
-    quick_diag!(&mut serial, &mut i2c);
+    quick_diag!(&mut serial, &mut i2c,);
 
     write_bin!(&mut serial, &[0x00, 0xFF]);
     write_hex!(&mut serial, &[0xAA, 0xBB]);
