@@ -115,7 +115,11 @@ macro_rules! define_scanner {
         /// - `i2c`: The I2C bus instance.
         /// - `serial`: The serial writer for logging.
         /// - `log_level`: The desired logging level.
-        pub fn scan_i2c<I2C, S>(i2c: &mut I2C, serial: &mut S, log_level: LogLevel)
+        pub fn scan_i2c<I2C, S>(
+            i2c: &mut I2C,
+            serial: &mut S,
+            log_level: LogLevel,
+        ) -> Result<heapless::Vec<u8, 128>, crate::error::ErrorKind>
         where
             I2C: $i2c_trait,
             <I2C as $i2c_trait>::Error: crate::compat::HalErrorExt,
@@ -124,10 +128,11 @@ macro_rules! define_scanner {
             if let LogLevel::Verbose = log_level {
                 let _ = writeln!(serial, "[log] Scanning I2C bus...");
             }
-            if let Ok(found_addrs) = internal_scan(i2c, serial, &[0x00], log_level) {
+            let result = internal_scan(i2c, serial, &[0x00], log_level);
+            if let Ok(found_addrs) = &result {
                 if !found_addrs.is_empty() {
                     let _ = writeln!(serial, "[ok] Found devices at:");
-                    for addr in &found_addrs {
+                    for addr in found_addrs {
                         let _ = write!(serial, " ");
                         let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[*addr]);
                         let _ = writeln!(serial, "");
@@ -138,8 +143,8 @@ macro_rules! define_scanner {
             if let LogLevel::Verbose = log_level {
                 let _ = writeln!(serial, "[info] I2C scan complete.");
             }
+            result
         }
-
         /// Scans the I2C bus for devices using a provided list of control bytes.
         ///
         /// # Parameters
