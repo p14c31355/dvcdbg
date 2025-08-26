@@ -273,6 +273,8 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
         let _ = ascii::write_bytes_hex_prefixed(serial, &[*b]);
         let _ = writeln!(serial);
     }
+    let _ = writeln!(serial);
+
     let _ = writeln!(serial, "Commands with response:");
     for b in detected {
         let _ = write!(serial, " ");
@@ -439,7 +441,7 @@ where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     {
-        fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()> {
+        fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), crate::explorer::ExecutorError> {
             let addr_idx = addr as usize;
 
             // Check if the address has already been initialized (O(1) check)
@@ -447,7 +449,7 @@ where
                 // First, send the init_sequence with the prefix, one command at a time.
                 for &c in self.init_sequence.iter() {
                     let command = [self.prefix, c];
-                    i2c.write(addr, &command).map_err(|_| ())?;
+                    i2c.write(addr, &command).map_err(|_| crate::explorer::ExecutorError::ExecFailed)?;
                 }
 
                 // Mark this address as initialized
@@ -456,9 +458,9 @@ where
 
             // Then, send the regular command. Reuse the buffer.
             self.buffer.clear();
-            self.buffer.push(self.prefix).map_err(|_| ())?;
-            self.buffer.extend_from_slice(cmd).map_err(|_| ())?;
-            i2c.write(addr, &self.buffer).map_err(|_| ())
+            self.buffer.push(self.prefix).map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
+            self.buffer.extend_from_slice(cmd).map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
+            i2c.write(addr, &self.buffer).map_err(|_| crate::explorer::ExecutorError::ExecFailed)
         }
     }
 

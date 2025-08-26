@@ -90,6 +90,15 @@ pub enum ExplorerError {
     BufferOverflow,
 }
 
+/// Errors that can occur during command execution.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExecutorError {
+    /// The command failed to execute (e.g., NACK, I/O error).
+    ExecFailed,
+    /// An internal buffer overflowed during command preparation.
+    BufferOverflow,
+}
+
 /// Represents a single I2C command in the dependency graph.
 ///
 /// The dependency is now on the index of the dependent command in the sequence.
@@ -104,7 +113,7 @@ pub struct CmdNode<'a> {
 /// A trait for executing a command on an I2C bus.
 pub trait CmdExecutor<I2C> {
     /// Executes a given command byte sequence.
-    fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()>;
+    fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ExecutorError>;
 }
 
 /// A trait for logging progress and results.
@@ -150,6 +159,9 @@ pub struct PermutationIter<'a, const N: usize> {
     is_done: bool,
 }
 
+/// The return type for the stage function.
+type StageResult<'a, const N: usize> = Result<(Vec<&'a [u8], N>, Vec<usize, N>, [bool; N]), ExplorerError>;
+
 pub struct ExploreResult {
     pub found_addrs: Vec<u8, I2C_ADDRESS_COUNT>,
     pub permutations_tested: usize,
@@ -157,16 +169,7 @@ pub struct ExploreResult {
 
 impl<'a, const N: usize> Explorer<'a, N> {
     /// Performs an initial topological sort to stage commands without unresolved dependencies.
-    fn stage(
-        &self,
-    ) -> Result<
-        (
-            Vec<&'a [u8], N>,
-            Vec<usize, N>,
-            [bool; N],
-        ),
-        ExplorerError,
-    > {
+    fn stage(&self) -> StageResult<'a, N> {
         let mut in_degree = Vec::<usize, N>::new();
         in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::TooManyCommands)?;
 
