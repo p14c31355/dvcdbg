@@ -438,3 +438,27 @@ where
         i2c.write(addr, &self.buffer).is_ok().then_some(()).ok_or(())
     }
 }
+
+// Wrapper for serial interface to implement the Logger trait
+struct SerialLogger<'a, S: core::fmt::Write>(&'a mut S);
+impl<'a, S: core::fmt::Write> crate::explorer::Logger for SerialLogger<'a, S> {
+    fn log_info(&mut self, msg: &str) {
+        let _ = self.0.write_str(msg);
+    }
+    fn log_warning(&mut self, msg: &str) {
+        let _ = self.0.write_str(msg);
+    }
+    fn log_error(&mut self, msg: &str) {
+        let _ = self.0.write_str(msg);
+    }
+    
+    fn log_info_fmt<F>(&mut self, fmt: F)
+    where
+        F: FnOnce(&mut heapless::String<crate::explorer::LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
+    {
+        let mut buffer = heapless::String::new();
+        if fmt(&mut buffer).is_ok() {
+            let _ = self.0.write_str(buffer.as_str());
+        }
+    }
+}
