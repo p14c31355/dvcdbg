@@ -257,7 +257,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
         let mut permutation_count = 0;
 
-        let mut iter = self.permutations()?;
+        let iter = self.permutations()?;
         logger.log_info("[explorer] Starting permutation exploration...");
 
         for sequence in iter {
