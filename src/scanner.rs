@@ -173,6 +173,7 @@ macro_rules! define_scanner {
         pub fn scan_init_sequence<I2C, S>(
             i2c: &mut I2C,
             serial: &mut S,
+            ctrl_byte: u8,
             init_sequence: &[u8],
             log_level: LogLevel,
         ) -> heapless::Vec<u8, 64>
@@ -193,7 +194,7 @@ macro_rules! define_scanner {
 
             let mut detected_cmds = heapless::Vec::<u8, 64>::new();
             for &cmd in init_sequence.iter() {
-                match internal_scan(i2c, serial, &[cmd], log_level) {
+                match internal_scan(i2c, serial, &[ctrl_byte,cmd], log_level) {
                     Ok(found_addrs) => {
                         if !found_addrs.is_empty() {
                             for addr in found_addrs {
@@ -340,6 +341,7 @@ pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
     explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
+    ctrl_byte: u8,
     init_sequence: &[u8],
     prefix: u8,
     log_level: LogLevel,
@@ -352,7 +354,7 @@ where
     if let LogLevel::Verbose = log_level {
         let _ = writeln!(serial, "[log] Scanning I2C bus...");
     }
-    let successful_seq = crate::scanner::scan_init_sequence(i2c, serial, init_sequence, log_level);
+    let successful_seq = crate::scanner::scan_init_sequence(i2c, serial, ctrl_byte, init_sequence, log_level);
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
     let _ = writeln!(serial, "[log] Start driver safe init");
 
