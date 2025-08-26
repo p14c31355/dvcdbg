@@ -391,9 +391,10 @@ where
     }
 
     // Executor that prepends a prefix and applies an initial sequence once per address.
-    pub struct PrefixExecutor {
+    struct PrefixExecutor {
         prefix: u8,
         init_sequence: heapless::Vec<u8, 64>,
+        initialized_addrs: heapless::Vec<u8, 128>,
     }
 
     impl PrefixExecutor {
@@ -401,6 +402,7 @@ where
             Self {
                 prefix,
                 init_sequence,
+                initialized_addrs: heapless::Vec::new(),
             }
         }
     }
@@ -411,29 +413,26 @@ where
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     {
         fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()> {
-        use heapless::Vec;
+            use heapless::Vec;
 
-        let mut buf: Vec<u8, 64> = Vec::new();
-        if buf.push(self.prefix).is_err() {
-            return Err(());
-        }
-        if buf.extend_from_slice(cmd).is_err() {
-            return Err(());
-        }
+            // Check if the address has already been initialized
+            if self.initialized_addrs.iter().find(|&&a| a == addr).is_none() {
+                // First, send the init_sequence with the prefix
+                let mut init_buf: Vec<u8, 64> = Vec::new();
+                init_buf.push(self.prefix).map_err(|_| ())?;
+                init_buf.extend_from_slice(&self.init_sequence).map_err(|_| ())?;
+                i2c.write(addr, &init_buf).map_err(|_| ())?;
 
-        if !self.init_sequence.is_empty() {
-            let mut init_buf: Vec<u8, 64> = Vec::new();
-            if init_buf.push(self.prefix).is_err() {
-                return Err(());
+                // Mark this address as initialized
+                self.initialized_addrs.push(addr).map_err(|_| ())?;
             }
-            if init_buf.extend_from_slice(&self.init_sequence).is_err() {
-                return Err(());
-            }
-            i2c.write(addr, &init_buf).map_err(|_| ())?;
-        }
 
-        i2c.write(addr, &buf).map_err(|_| ())
-    }
+            // Then, send the regular command
+            let mut buf: Vec<u8, 64> = Vec::new();
+            buf.push(self.prefix).map_err(|_| ())?;
+            buf.extend_from_slice(cmd).map_err(|_| ())?;
+            i2c.write(addr, &buf).is_ok().then_some(()).ok_or(())
+        }
     }
 
     let mut serial_logger = SerialLogger::new(serial);
