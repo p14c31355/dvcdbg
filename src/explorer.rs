@@ -261,7 +261,7 @@ impl<'a> Explorer<'a> {
                 if all_ok {
                     logger.log_info_fmt(|buf| {
                         write!(buf, "[explorer] Success: Sequence works for addr ")?;
-                        ascii::write_u8_hex_prefixed(buf, addr)?;
+                        ascii::write_bytes_hex_prefixed(buf, &[addr])?;
                         writeln!(buf, "")?;
                         Ok(())
                     });
