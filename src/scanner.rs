@@ -1,3 +1,4 @@
+// scanner.rs
 //! Scanner utilities for I2C bus device discovery and analysis.
 //!
 //! This module provides functions to scan the I2C bus for connected devices,
@@ -296,6 +297,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 ///
 /// - `I2C`: The I2C interface type that implements `crate::compat::I2cCompat`.
 /// - `S`: The serial interface type used for logging, implementing `core::fmt::Write`.
+/// - `N`: A const generic for the maximum number of commands.
 ///
 /// # Parameters
 ///
@@ -322,6 +324,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 /// let mut i2c = /* your I2C instance */;
 /// let mut serial = /* your serial instance */;
 /// let init_sequence = [0u8; 16]; // Example initial sequence
+/// const CAPACITY: usize = 32;
 /// let explorer = Explorer { sequence: &[] }; // Dummy explorer
 ///
 /// run_explorer(
@@ -336,7 +339,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 /// # }
 /// ```
 pub fn run_explorer<I2C, S, const N: usize>(
-    explorer: &crate::explorer::Explorer<'_, N>,
+    explorer: &crate::explorer::Explorer<'_>,
     i2c: &mut I2C,
     serial: &mut S,
     init_sequence: &[u8],
