@@ -142,11 +142,16 @@ pub struct PermutationIter<'a, const N: usize> {
     staged: Vec<&'a [u8], N>,
     unresolved_indices: Vec<usize, N>,
     current: Vec<&'a [u8], N>,
-    used: Vec<bool, N>,
+    used: [bool; N],
     staged_and_current_indices: Vec<usize, N>,
     path_stack: Vec<usize, N>,
     loop_start_indices: Vec<usize, N>,
     is_done: bool,
+}
+
+pub struct ExploreResult {
+    pub found_addrs: Vec<u8, I2C_ADDRESS_COUNT>,
+    pub permutations_tested: usize,
 }
 
 impl<'a, const N: usize> Explorer<'a, N> {
@@ -194,30 +199,33 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let (staged, unresolved_indices) = self.stage()?;
 
         let mut staged_and_current_indices = Vec::new();
-        for i in 0..staged.len() {
+        for i in staged_indices {
             staged_and_current_indices.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
         }
+        
+        let mut used = [false; N];
+        if unresolved_indices.len() > N { return Err(ExplorerError::TooManyCommands) }
 
         Ok(PermutationIter {
             sequence: self.sequence,
             staged,
             unresolved_indices,
             current: Vec::new(),
-            used: Vec::new(),
+            used,
             staged_and_current_indices,
             path_stack: Vec::new(),
             loop_start_indices: Vec::from_slice(&[0]).map_err(|_| ExplorerError::TooManyCommands)?,
             is_done: false,
         })
     }
-
+    
     /// Explores valid sequences, attempting to execute them on an I2C bus.
     pub fn explore<I2C, E, L>(
         &self,
         i2c: &mut I2C,
         executor: &mut E,
         logger: &mut L,
-    ) -> Result<Vec<u8, I2C_ADDRESS_COUNT>, ExplorerError>
+    ) -> Result<ExploreResult, ExplorerError>
     where
         I2C: crate::compat::I2cCompat,
         E: CmdExecutor<I2C>,
@@ -269,7 +277,10 @@ impl<'a, const N: usize> Explorer<'a, N> {
         if found_addresses.is_empty() {
             Err(ExplorerError::NoValidAddressesFound)
         } else {
-            Ok(found_addresses)
+            Ok(ExploreResult {
+                found_addrs: found_addresses,
+                permutations_tested: permutation_count,
+            })
         }
     }
 }
@@ -312,7 +323,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
     fn try_extend(&mut self) -> bool {
         let current_loop_start_idx = *self.loop_start_indices.last().unwrap();
         for (pos, &idx) in self.unresolved_indices.iter().enumerate().skip(current_loop_start_idx) {
-            if self.used.get(pos).cloned().unwrap_or(false) {
+            if self.used[pos] {
                 continue;
             }
 
@@ -325,9 +336,6 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             if deps_satisfied {
                 self.current.push(node.bytes).unwrap();
                 self.staged_and_current_indices.push(idx).unwrap();
-                if self.used.len() <= pos {
-                    self.used.resize(pos + 1, false).unwrap();
-                }
                 self.used[pos] = true;
                 self.path_stack.push(pos).unwrap();
                 self.loop_start_indices.push(0).unwrap();
@@ -343,9 +351,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             let remove_idx = self.staged_and_current_indices.iter().position(|&x| x == node_idx).unwrap();
             self.staged_and_current_indices.swap_remove(remove_idx);
             
-            if self.used.len() > last_added_pos {
-                self.used[last_added_pos] = false;
-            }
+            self.used[last_added_pos] = false;
             self.current.pop();
 
             self.loop_start_indices.pop();

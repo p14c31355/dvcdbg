@@ -354,98 +354,77 @@ where
     let _ = writeln!(serial, "[log] Start driver safe init");
 
     // Wrapper for serial interface to implement the Logger trait
-    struct SerialLogger<'a, S: core::fmt::Write>(&'a mut S);
+    struct SerialLogger<'a, S: core::fmt::Write> {
+        writer: &'a mut S,
+        buffer: heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
+    }
+
+    impl<'a, S: core::fmt::Write> SerialLogger<'a, S> {
+        fn new(writer: &'a mut S) -> Self {
+            Self {
+                writer,
+                buffer: heapless::String::new(),
+            }
+        }
+    }
+
     impl<'a, S: core::fmt::Write> crate::explorer::Logger for SerialLogger<'a, S> {
         fn log_info(&mut self, msg: &str) {
-            let _ = self.0.write_str(msg);
+            let _ = self.writer.write_str(msg);
         }
         fn log_warning(&mut self, msg: &str) {
-            let _ = self.0.write_str(msg);
+            let _ = self.writer.write_str(msg);
         }
         fn log_error(&mut self, msg: &str) {
-            let _ = self.0.write_str(msg);
+            let _ = self.writer.write_str(msg);
         }
         
         fn log_info_fmt<F>(&mut self, fmt: F)
         where
             F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error>,
         {
-            let mut buffer = heapless::String::new();
-            if fmt(&mut buffer).is_ok() {
-                let _ = self.0.write_str(buffer.as_str());
+            self.buffer.clear();
+            if fmt(&mut self.buffer).is_ok() {
+                let _ = self.writer.write_str(self.buffer.as_str());
             }
         }
     }
 
-    // Now, run_explorer correctly handles the new return value.
-    explorer
-        .explore(
-            i2c,
-            &mut PrefixExecutor::new(prefix, successful_seq),
-            &mut SerialLogger(serial),
-        )
-        .map(|_| {
-            let _ = writeln!(serial, "[driver] init sequence applied");
-        })
-        .map_err(|e| {
-            let _ = writeln!(serial, "[error] explorer failed: {e:?}");
-            e
-        })
-}
+    // Executor that prepends a prefix and applies an initial sequence once per address.
+    pub struct PrefixExecutor {
+        prefix: u8,
+        init_sequence: heapless::Vec<u8, 64>,
+    }
 
-/// Executor that prepends a prefix to each command and applies an initial sequence.
-///
-/// `PrefixExecutor` is used internally by `run_explorer` to ensure that each I2C
-/// command is sent with a fixed prefix and that the initial scanned sequence is
-/// executed for every device before the main exploration commands.
-pub struct PrefixExecutor {
-    prefix: u8,
-    init_sequence: heapless::Vec<u8, 64>,
-    buffer: heapless::Vec<u8, 64>,
-}
-
-impl PrefixExecutor {
-    /// Creates a new `PrefixExecutor` with the given prefix and initial sequence.
-    ///
-    /// # Parameters
-    ///
-    /// - `prefix`: Byte to prepend to every command.
-    /// - `init_sequence`: Initial command sequence to run before explorer commands.
-    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
-        Self {
-            prefix,
-            init_sequence,
-            buffer: heapless::Vec::new(),
+    impl PrefixExecutor {
+        fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
+            Self {
+                prefix,
+                init_sequence,
+            }
         }
     }
-}
 
-impl<I2C> crate::explorer::CmdExecutor<I2C> for PrefixExecutor
-where
-    I2C: crate::compat::I2cCompat,
-    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-{
-    /// Executes a command on the I2C device at `addr`.
-    ///
-    /// This method first sends the initial sequence with the prefix to the device,
-    /// then sends the provided command with the prefix.
-    ///
-    /// Returns `true` if the command was successfully written, or `false` on failure.
-    fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()> {
-        // Init sequence before exploring
-        for &c in self.init_sequence.iter() {
-            let command = [self.prefix, c];
-            if i2c.write(addr, &command).is_err() {
+    impl<I2C> crate::explorer::CmdExecutor<I2C> for PrefixExecutor
+    where
+        I2C: crate::compat::I2cCompat,
+        <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+    {
+        fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()> {
+            let mut buf: heapless::Vec<u8, 64> = heapless::Vec::new();
+            if buf.push(self.prefix).is_err() || buf.extend_from_slice(cmd).is_err() {
                 return Err(());
             }
+            i2c.write(addr, &buf).is_ok().then_some(()).ok_or(())
         }
-
-        // Run the explorer command
-        self.buffer.clear();
-        if self.buffer.push(self.prefix).is_err() || self.buffer.extend_from_slice(cmd).is_err() {
-            return Err(());
-        }
-
-        i2c.write(addr, &self.buffer).is_ok().then_some(()).ok_or(())
     }
+
+    let mut serial_logger = SerialLogger::new(serial);
+    let mut executor = PrefixExecutor::new(prefix, successful_seq);
+
+    for addr in explorer.explore(i2c, &mut executor, &mut serial_logger)?.found_addrs.iter() {
+        let _ = writeln!(serial, "[driver] Found device at 0x{:02X}", addr);
+    }
+    
+    Ok(())
 }
