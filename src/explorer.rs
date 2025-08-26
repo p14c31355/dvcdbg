@@ -147,6 +147,7 @@ pub struct PermutationIter<'a, const N: usize> {
     used: Vec<bool, N>,
     used_indices: [bool; N], // Bitmask for O(1) checks
     path_stack: Vec<usize, N>,
+    loop_start_indices: Vec<usize, N>, // Tracks search progress at each level
     is_done: bool,
 }
 
@@ -235,6 +236,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
             used,
             used_indices: staged_indices,
             path_stack: Vec::new(),
+            loop_start_indices: Vec::new(),
             is_done: false,
         })
     }
@@ -347,7 +349,7 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
     fn try_extend(&mut self) -> bool {
-        let last_pos = self.path_stack.last().map(|&p| p + 1).unwrap_or(0);
+        let last_pos = self.loop_start_indices.last().copied().unwrap_or(0);
         for pos in last_pos..self.unresolved_indices.len() {
             let idx = self.unresolved_indices[pos];
 
@@ -364,6 +366,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 self.used_indices[idx] = true;
                 self.used[pos] = true;
                 self.path_stack.push(pos).unwrap();
+                self.loop_start_indices.push(pos + 1).unwrap();
                 return true;
             }
         }
@@ -377,6 +380,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             
             self.used[last_added_pos] = false;
             self.current_permutation.pop();
+            self.loop_start_indices.pop();
 
             true
         } else {
