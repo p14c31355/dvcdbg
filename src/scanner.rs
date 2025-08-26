@@ -457,7 +457,7 @@ where
             let mut buf: Vec<u8, 64> = Vec::new();
             buf.push(self.prefix).map_err(|_| ())?;
             buf.extend_from_slice(cmd).map_err(|_| ())?;
-            i2c.write(addr, &buf).is_ok().then_some(()).ok_or(())
+            i2c.write(addr, &buf).map_err(|_| ())
         }
     }
 
