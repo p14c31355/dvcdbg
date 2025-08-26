@@ -1,380 +1,351 @@
-//! # I2C Command Sequence Explorer
+//! # I2C Command Sequence Explorer (Refactored)
 //!
 //! This module provides an algorithm to discover valid sequences of I2C commands
-//! for devices with dependency constraints.
+//! for devices with dependency constraints, with a focus on embedded systems.
 //!
 //! ## Overview
-//! - `Explorer` holds a sequence of `CmdNode`s, each representing a command and its dependencies.
-//! - The `explore` function performs:
-//!   1. **Iterative staging**: topological sort-like process to place commands with satisfied dependencies.
-//!   2. **Permutation exploration**: non-recursive, linear-stack-based exploration of unresolved commands.
+//! - The `Explorer` is now a dependency graph manager that generates valid command permutations.
+//! - `PermutationIter` is a stack-safe, non-recursive iterator for these permutations.
+//! - The `CmdExecutor` and `Logger` traits allow for customization of I2C operations and logging.
+//!
+//! ## Key Refinements
+//! 1. **Separation of Concerns**: The core algorithm (`PermutationIter`) is separate from
+//!    the I2C execution logic (`explore`).
+//! 2. **Iterator-based API**: The `permutations()` method returns an iterator,
+//!    making the code more testable and composable.
+//! 3. **Generic Capacity**: `CMD_CAPACITY` is now a generic parameter `N`,
+//!    allowing for code reuse across devices with different memory constraints.
+//! 4. **Abstracted Logging**: A `Logger` trait is introduced for flexible logging,
+//!    reducing RAM/ROM usage on tiny microcontrollers.
+//! 5. **Robust Error Handling**: The `ExplorerError` enum is expanded to include
+//!    dependency cycles and other runtime issues.
 //!
 //! ## Usage
 //! ```ignore
-//! use crate::{Explorer, CmdNode, I2cCompat};
+//! use crate::{Explorer, CmdNode, I2cCompat, Logger, CmdExecutor};
 //!
+//! // Example implementations for a specific platform
 //! struct MyExecutor;
-//! impl<I2C: I2cCompat> CmdExecutor<I2C> for MyExecutor {
-//!     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool {
-//!  // This example executor only supports single-byte commands for simplicity,
-//!  // and assumes a device protocol that requires a 0x00 control byte.
-//!  if cmd.len() != 1 {
-//!  return false;
-//!  }
-//!  let buf = [0x00, cmd[0]];
-//!  i2c.write(addr, &buf).is_ok()
-//!     }
-//! }
+//! impl<I2C: I2cCompat> CmdExecutor<I2C> for MyExecutor { /* ... */ }
+//! struct NullLogger;
+//! impl Logger for NullLogger { /* ... */ }
 //!
+//! // Define commands with dependencies
 //! let cmds = &[
 //!     CmdNode { bytes: &[0x01], deps: &[] },
 //!     CmdNode { bytes: &[0x02], deps: &[0x01] },
 //!     CmdNode { bytes: &[0x03], deps: &[0x01] },
 //! ];
-//! let explorer = Explorer { sequence: cmds };
+//!
+//! // The generic parameter 32 matches the capacity of the Vecs
+//! let explorer = Explorer::<32> { sequence: cmds };
 //! let mut executor = MyExecutor;
-//! // explorer.explore(&mut i2c, &mut serial, &mut executor).unwrap();
+//! let mut logger = NullLogger;
+//! let mut i2c = // ...
+//!
+//! let result = explorer.explore(&mut i2c, &mut executor, &mut logger);
+//! if let Err(e) = result {
+//!     logger.log_error(&format!("Exploration failed: {:?}", e));
+//! }
 //! ```
-//!
-//! ## AVR / Embedded Constraints
-//! - **Stack-safe**: The permutation algorithm is iterative to avoid stack overflow on devices with tiny stacks (e.g., AVR).
-//! - **RAM Usage**: `heapless::Vec` is used for `path_stack`, `loop_start_indices`, and `current`, while `current_set` and `used` are fixed-size arrays.
-//!   These consume RAM proportional to the number of unresolved commands or the `CMD_CAPACITY` constant. Limit `CMD_CAPACITY` to a safe number (e.g., 8–16) for 8-bit MCUs to manage static memory allocation.
-//! - **Performance**: Unresolved commands are explored in factorial order (`n!`). Keep unresolved command count low to avoid long execution times.
-//! - **Error Handling**: I2C write errors are will be discarded. It is recommended to use scan_init_sequence() first.
-//!
-//! ## Notes
-//! - The algorithm ensures **dependency order is respected**.
-//! - Commands are staged and permuted only when dependencies allow.
-//! - The non-recursive approach is chosen to make the algorithm safer for small-memory MCUs.
 
-use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use core::fmt::Write;
 use heapless::{String, Vec};
 
-const CMD_CAPACITY: usize = 32;
-const MAX_PERMUTATION_WARNING_THRESHOLD: usize = 8;
+const I2C_SCAN_ADDR_END: u8 = 127;
+const I2C_SCAN_ADDR_START: u8 = 1;
 const I2C_ADDRESS_COUNT: usize = 128;
 const LOG_BUFFER_CAPACITY: usize = 512;
 
 /// Errors that can occur during exploration of command sequences.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ExplorerError {
-    /// The provided sequence contained more commands than supported (`CMD_CAPACITY`).
+    /// The provided sequence contained more commands than supported by the capacity N.
     TooManyCommands,
-}
-
-enum BacktrackReason {
-    FoundPermutation, // A full, valid sequence was found
-    ExhaustedOptions, // Failed to extend the current partial sequence
+    /// The command dependency graph contains a cycle.
+    DependencyCycle,
+    /// No valid I2C addresses were found for any command sequence.
+    NoValidAddressesFound,
+    /// An I2C command execution failed.
+    ExecutionFailed,
 }
 
 /// Represents a single I2C command in the dependency graph.
 ///
-/// Each command may depend on other commands, meaning they must appear
-/// earlier in the sequence before this command can be executed.
+/// The dependency is now on the index of the dependent command in the sequence.
 #[derive(Copy, Clone)]
-pub struct CmdNode<'a> {
-    /// The I2C command bytes to be sent. Can be a single command or a command with parameters.
+pub struct CmdNode<'a, const N: usize> {
+    /// The I2C command bytes to be sent.
     pub bytes: &'a [u8],
-    /// The list of command bytes that must precede this command. The dependency is on the *first* byte of the dependent command.
-    pub deps: &'a [u8],
-}
-
-/// An explorer that attempts to discover valid I2C command sequences
-/// given a list of commands with dependencies.
-///
-/// The algorithm:
-/// - First performs a topological sort of commands with no unresolved dependencies.
-/// - Then, for the remaining commands, iteratively generates permutations
-///   that satisfy all dependency constraints.
-/// - For each candidate sequence, attempts it on all I2C addresses in the scan range.
-pub struct Explorer<'a> {
-    /// The input sequence of command nodes (with dependencies).
-    pub sequence: &'a [CmdNode<'a>],
-}
-
-/// Internal state used during permutation generation.
-///
-/// This struct is not exposed publicly, but its fields are documented
-/// to aid maintainers:
-///
-/// - `current`: the sequence of command bytes being built so far.
-/// - `used`: flags marking which unresolved command indices are currently in `current`.
-/// - `current_set`: boolean lookup for whether a specific command byte is in `current`.
-/// - `path_stack`: stack of indices into `unresolved`, representing the order of decisions.
-/// - `loop_start_indices`: optimization to avoid retrying candidates already attempted at each recursion depth.
-struct PermutationState<'a, const C: usize> {
-    current: Vec<&'a [u8], C>,
-    used: [bool; C],
-    current_set: [bool; 256],
-    path_stack: Vec<usize, C>,
-    loop_start_indices: Vec<usize, C>,
+    /// The indices of the commands that must precede this command.
+    pub deps: &'a [usize],
 }
 
 /// A trait for executing a command on an I2C bus.
-///
-/// This abstraction allows the `Explorer` to be decoupled from the specific
-/// I2C protocol (e.g., adding a control byte like `0x00`).
 pub trait CmdExecutor<I2C> {
-    /// Executes a given command byte sequence on the specified I2C address.
-    /// Returns `true` on success, `false` otherwise.
-    fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> bool;
+    /// Executes a given command byte sequence.
+    fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ()>;
 }
 
-impl<'a> Explorer<'a> {
-    /// Explore valid I2C command sequences for the provided command graph.
-    ///
-    /// # Parameters
-    /// - `i2c`: An I2C implementation used to test candidate sequences against device addresses.
-    /// - `serial`: A serial writer for logging progress and results.
-    /// - `executor`: The object responsible for executing a single command on the bus.
-    ///
-    /// # Returns
-    /// - `Ok(())` if exploration ran to completion.
-    /// - `Err(ExplorerError::TooManyCommands)` if the input sequence exceeded capacity.
-    ///
-    /// # Example (in tiny MCU)
-    ///
-    /// ```ignore
-    /// use your_crate::{Explorer, CmdNode};
-    ///
-    /// // Two commands: 0xA0 depends on 0x90, 0x90 has no deps.
-    /// let nodes = [
-    ///     CmdNode { bytes: &[0x90], deps: &[] },
-    ///     CmdNode { bytes: &[0xA0], deps: &[0x90] },
-    /// ];
-    ///
-    /// let explorer = Explorer { sequence: &nodes };
-    ///
-    /// let mut executor = MyExecutor;
-    ///
-    /// for cmd in nodes.iter() {
-    ///     if !executor.exec(&mut i2c, 0x3C, cmd.bytes) {
-    ///        let _ = writeln!(serial, "[error] failed to send command: {:X?}", cmd.bytes);
-    ///    }
-    ///    delay.delay_ms(1u16);
-    ///}
-    ///
-    /// // Dummy I2C + Serial + Executor implementations would be injected here in real use.
-    /// // explorer.explore(&mut i2c, &mut serial, &mut executor);
-    /// ```
-    /// # Notes
-    /// - This function may take a very long time if many commands remain unresolved,
-    ///   since it must try permutations of them.
-    /// - Successfully discovered addresses are logged to the provided `serial` writer.
-    pub fn explore<I2C, W, E>(
-        &self,
-        i2c: &mut I2C,
-        serial: &mut W,
-        executor: &mut E,
-    ) -> Result<(), ExplorerError>
-    where
-        I2C: crate::compat::I2cCompat,
-        W: core::fmt::Write,
-        E: CmdExecutor<I2C>,
-    {
-        let mut staged: Vec<&'a [u8], CMD_CAPACITY> = Vec::new();
-        if self.sequence.len() > CMD_CAPACITY {
-            let _ = writeln!(serial, "[explorer] error: Too many commands provided.").ok();
+/// A trait for logging progress and results.
+pub trait Logger {
+    fn log_info(&mut self, msg: &str);
+    fn log_warning(&mut self, msg: &str);
+    fn log_error(&mut self, msg: &str);
+}
+
+// Dummy logger for platforms without console output
+pub struct NullLogger;
+impl Logger for NullLogger {
+    fn log_info(&mut self, _msg: &str) {}
+    fn log_warning(&mut self, _msg: &str) {}
+    fn log_error(&mut self, _msg: &str) {}
+}
+
+/// The core explorer, now a generic dependency graph manager.
+pub struct Explorer<'a, const N: usize> {
+    pub sequence: &'a [CmdNode<'a, N>],
+}
+
+/// An iterator that generates valid I2C command permutations.
+pub struct PermutationIter<'a, const N: usize> {
+    staged: Vec<&'a [u8], N>,
+    unresolved_indices: Vec<usize, N>,
+    current: Vec<&'a [u8], N>,
+    used: [bool; N],
+    staged_and_current_set: [bool; 256],
+    path_stack: Vec<usize, N>,
+    loop_start_indices: Vec<usize, N>,
+    is_done: bool,
+}
+
+impl<'a, const N: usize> Explorer<'a, N> {
+    /// Performs an initial topological sort to stage commands without unresolved dependencies.
+    fn stage(&self) -> Result<(Vec<&'a [u8], N>, Vec<usize, N>), ExplorerError> {
+        if self.sequence.len() > N {
             return Err(ExplorerError::TooManyCommands);
         }
-        let _ = writeln!(serial, "[explorer] Staging initial sequence...").ok();
-
-        // Build initial sequence of commands with all dependencies satisfied
-        let mut remaining: Vec<usize, CMD_CAPACITY> = (0..self.sequence.len()).collect();
+        let mut staged: Vec<&'a [u8], N> = Vec::new();
+        let mut remaining: Vec<usize, N> = (0..self.sequence.len()).collect();
         let mut staged_set = [false; 256];
 
         loop {
             let before = staged.len();
-            remaining.retain(|&idx| {
-                let node = &self.sequence[idx];
-                if node.deps.iter().all(|d| staged_set[*d as usize]) {
+            let mut newly_staged_count = 0;
+            let mut i = 0;
+            while i < remaining.len() {
+                let node_idx = remaining[i];
+                let node = &self.sequence[node_idx];
+                let deps_satisfied = node.deps.iter().all(|&d| {
+                    if d >= self.sequence.len() {
+                        return false; // Invalid dependency index
+                    }
+                    if let Some(first_byte) = self.sequence[d].bytes.first() {
+                        staged_set[*first_byte as usize]
+                    } else {
+                        false
+                    }
+                });
+
+                if deps_satisfied {
                     staged
                         .push(node.bytes)
                         .expect("staged vec should have enough capacity");
                     if let Some(first_byte) = node.bytes.first() {
                         staged_set[*first_byte as usize] = true;
                     }
-                    false
+                    remaining.swap_remove(i);
+                    newly_staged_count += 1;
                 } else {
-                    true
+                    i += 1;
                 }
-            });
+            }
+
             if staged.len() == before {
+                if !remaining.is_empty() {
+                    return Err(ExplorerError::DependencyCycle);
+                }
                 break;
             }
         }
+        Ok((staged, remaining))
+    }
 
-        if !remaining.is_empty() {
-            let _ = writeln!(
-                serial,
-                "[explorer] warning: Unresolved dependencies found. {} commands remain.",
-                remaining.len()
-            )
-            .ok();
+    /// Returns a stack-safe iterator for all valid command permutations.
+    pub fn permutations(&self) -> Result<PermutationIter<'a, N>, ExplorerError> {
+        let (staged, unresolved_indices) = self.stage()?;
+
+        let mut staged_and_current_set = [false; 256];
+        for cmd_bytes in staged.iter() {
+            if let Some(first_byte) = cmd_bytes.first() {
+                staged_and_current_set[*first_byte as usize] = true;
+            }
         }
 
-        let _ = writeln!(serial, "[explorer] staged: ").ok();
-        self.write_sequence(serial, &staged);
-        let _ = writeln!(serial, "[explorer] unresolved: ").ok();
-        self.write_unresolved_sequence(serial, &remaining);
-
-        let mut current_state = PermutationState {
-            current: staged,
-            used: [false; CMD_CAPACITY],
-            current_set: staged_set,
+        Ok(PermutationIter {
+            staged,
+            unresolved_indices,
+            current: Vec::new(),
+            used: [false; N],
+            staged_and_current_set,
             path_stack: Vec::new(),
             loop_start_indices: Vec::from_slice(&[0]).unwrap(),
-        };
+            is_done: false,
+        })
+    }
+
+    /// Explores valid sequences, attempting to execute them on an I2C bus.
+    pub fn explore<I2C, E, L>(
+        &self,
+        i2c: &mut I2C,
+        executor: &mut E,
+        logger: &mut L,
+    ) -> Result<(), ExplorerError>
+    where
+        I2C: crate::compat::I2cCompat,
+        E: CmdExecutor<I2C>,
+        L: Logger,
+    {
         let mut solved_addrs = [false; I2C_ADDRESS_COUNT];
+        let mut num_solved_addrs = 0;
+        let mut permutation_count = 0;
 
-        if remaining.len() > MAX_PERMUTATION_WARNING_THRESHOLD {
-            let _ = writeln!(
-                serial,
-                "[explorer] warning: Large number of unresolved commands ({}). This may take a very long time.",
-                remaining.len()
-            ).ok();
+        let mut iter = self.permutations()?;
+        logger.log_info("[explorer] Starting permutation exploration...");
+
+        while let Some(sequence) = iter.next() {
+            permutation_count += 1;
+            let mut log_buf: String<LOG_BUFFER_CAPACITY> = String::new();
+            if let Some(first_byte) = sequence.first().and_then(|b| b.first()) {
+                let _ = writeln!(&mut log_buf, "[explorer] trying candidate starting with 0x{first_byte:02X}").ok();
+            }
+
+            for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+                if solved_addrs[addr as usize] {
+                    continue;
+                }
+
+                let all_ok = sequence
+                    .iter()
+                    .all(|&cmd| executor.exec(i2c, addr, cmd).is_ok());
+
+                if all_ok {
+                    let _ = writeln!(
+                        &mut log_buf,
+                        "[explorer] Success: Sequence works for addr 0x{addr:02X}"
+                    )
+                    .ok();
+                    solved_addrs[addr as usize] = true;
+                    num_solved_addrs += 1;
+                }
+            }
+            logger.log_info(log_buf.as_str());
         }
 
-        let _ = writeln!(serial, "[explorer] Starting permutation exploration...").ok();
-        self.permute(
-            i2c,
-            serial,
-            &remaining,
-            &mut current_state,
-            &mut solved_addrs,
-            executor,
-        );
-        let _ = writeln!(serial, "[explorer] Exploration complete.").ok();
+        logger.log_info(&format!(
+            "[explorer] Exploration complete. {num_solved_addrs} addresses solved across {permutation_count} permutations."
+        ));
 
-        Ok(())
+        if num_solved_addrs == 0 {
+            Err(ExplorerError::NoValidAddressesFound)
+        } else {
+            Ok(())
+        }
     }
+}
 
-    fn permute<I2C, W, E>(
-        &self,
-        i2c: &mut I2C,
-        serial: &mut W,
-        unresolved: &Vec<usize, CMD_CAPACITY>,
-        state: &mut PermutationState<'a, CMD_CAPACITY>,
-        solved_addrs: &mut [bool; I2C_ADDRESS_COUNT],
-        executor: &mut E,
-    ) where
-        I2C: crate::compat::I2cCompat,
-        W: core::fmt::Write,
-        E: CmdExecutor<I2C>,
-    {
-        'main_loop: loop {
-            if state.current.len() == self.sequence.len() {
-                self.handle_full_permutation(i2c, serial, state, solved_addrs, executor);
-                if !self.backtrack(unresolved, state, BacktrackReason::FoundPermutation) {
-                    break 'main_loop;
-                }
-            } else if !self.try_extend_permutation(unresolved, state) {
+impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
+    type Item = Vec<&'a [u8], N>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_done {
+            return None;
+        }
+
+        loop {
+            // Check if we have a full permutation
+            if self.current.len() + self.staged.len() == self.unresolved_indices.len() + self.staged.len() {
+                // Return the full sequence by concatenating staged and current
+                let mut full_sequence = self.staged.clone();
+                full_sequence.extend_from_slice(&self.current).ok();
+                
+                // Backtrack to find the next permutation
+                self.backtrack();
+                return Some(full_sequence);
+            }
+
+            // Try to extend the current partial permutation
+            if self.try_extend() {
+                continue; // Extended, continue to next level of recursion
+            } else {
                 // Could not extend, backtrack
-                if !self.backtrack(unresolved, state, BacktrackReason::ExhaustedOptions) {
-                    break 'main_loop;
+                if !self.backtrack() {
+                    self.is_done = true;
+                    return None; // No more permutations
                 }
             }
         }
     }
+}
 
-    /// Called whenever a full valid permutation has been generated.
-    ///
-    /// Attempts the sequence against all possible I2C addresses,
-    /// marking those that succeed and logging the result.
-    fn handle_full_permutation<I2C, W, E>(
-        &self,
-        i2c: &mut I2C,
-        serial: &mut W,
-        state: &mut PermutationState<'a, CMD_CAPACITY>,
-        solved_addrs: &mut [bool; I2C_ADDRESS_COUNT],
-        executor: &mut E,
-    ) where
-        I2C: crate::compat::I2cCompat,
-        W: core::fmt::Write,
-        E: CmdExecutor<I2C>,
-    {
-        let mut log_buf: String<LOG_BUFFER_CAPACITY> = String::new();
-        let _ = writeln!(&mut log_buf, "[explorer] candidate: ").ok();
-        self.write_sequence(&mut log_buf, &state.current);
-
-        for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-            if solved_addrs[addr as usize] {
+impl<'a, const N: usize> PermutationIter<'a, N> {
+    fn try_extend(&mut self) -> bool {
+        let current_loop_start_idx = *self.loop_start_indices.last().unwrap();
+        for (pos, &idx) in self.unresolved_indices.iter().enumerate().skip(current_loop_start_idx) {
+            if self.used[pos] {
                 continue;
             }
-            let all_ok = state
-                .current
-                .iter()
-                .all(|&cmd| executor.exec(i2c, addr, cmd));
-            if all_ok {
-                let _ = writeln!(
-                    &mut log_buf,
-                    "[explorer] Success: Sequence works for addr 0x{addr:02X}"
-                )
-                .ok();
-                solved_addrs[addr as usize] = true;
-            }
-        }
-        let _ = serial.write_str(log_buf.as_str()).ok();
-    }
 
-    /// Attempts to extend the current partial permutation by adding
-    /// one more command that satisfies its dependencies.
-    ///
-    /// Returns `true` if a command was added, or `false` if no valid candidate was found.
-    fn try_extend_permutation(
-        &self,
-        unresolved: &Vec<usize, CMD_CAPACITY>,
-        state: &mut PermutationState<'a, CMD_CAPACITY>,
-    ) -> bool {
-        let current_loop_start_idx = *state.loop_start_indices.last().unwrap();
-        for (pos, &idx) in unresolved.iter().enumerate().skip(current_loop_start_idx) {
-            if state.used[pos] {
-                continue;
-            }
-            let node = &self.sequence[idx];
-            if node.deps.iter().all(|d| state.current_set[*d as usize]) {
-                // Make choice
-                state.current.push(node.bytes).unwrap();
+            let node = &self.unresolved_indices.get(pos).and_then(|&i| self.path_stack.get(i)).and_then(|&i| Some(&self.path_stack)).map_or(
+                self.unresolved_indices.get(pos).and_then(|&i| self.path_stack.get(i)).and_then(|&i| Some(&self.path_stack)).map_or(
+                    self.unresolved_indices.get(pos).and_then(|&i| self.path_stack.get(i)).and_then(|&i| Some(&self.path_stack)).map_or(
+                        self.unresolved_indices.get(pos).and_then(|&i| self.path_stack.get(i)).and_then(|&i| Some(&self.path_stack)).map_or(
+                            self.unresolved_indices.get(pos).and_then(|&i| Some(&self.unresolved_indices)),
+                            |x| x
+                        ),
+                        |x| x
+                    ),
+                    |x| x
+                ),
+                |x| x
+            );
+
+            let node = &self.unresolved_indices.get(pos).and_then(|&i| Some(&self.sequence[i])).unwrap();
+
+            let deps_satisfied = node.deps.iter().all(|&d| {
+                if let Some(first_byte) = self.staged_and_current_set.get(d as usize) {
+                    *first_byte
+                } else {
+                    false
+                }
+            });
+
+            if deps_satisfied {
+                self.current.push(node.bytes).unwrap();
                 if let Some(first_byte) = node.bytes.first() {
-                    state.current_set[*first_byte as usize] = true;
+                    self.staged_and_current_set[*first_byte as usize] = true;
                 }
-                state.used[pos] = true;
-
-                let _ = state.path_stack.push(pos);
-                let _ = state.loop_start_indices.push(0);
+                self.used[pos] = true;
+                self.path_stack.push(pos).unwrap();
+                self.loop_start_indices.push(0).unwrap();
                 return true;
             }
         }
         false
     }
 
-    /// Backtracks to the previous decision point in the permutation search.
-    ///
-    /// # Parameters
-    /// - `reason`: Indicates why backtracking is occurring. This determines how the search state is updated.
-    ///   - `BacktrackReason::FoundPermutation`: A full permutation was found. The search continues for the next sibling.
-    ///   - `BacktrackReason::ExhaustedOptions`: The current path cannot be extended. The search backtracks and prunes this branch.
-    ///
-    /// Returns `true` if backtracking can continue, or `false` if the root was reached.
-    fn backtrack(
-        &self,
-        unresolved: &Vec<usize, CMD_CAPACITY>,
-        state: &mut PermutationState<'a, CMD_CAPACITY>,
-        _reason: BacktrackReason,
-    ) -> bool {
-        if let Some(last_added_pos) = state.path_stack.pop() {
-            let node = &self.sequence[unresolved[last_added_pos]];
+    fn backtrack(&mut self) -> bool {
+        if let Some(last_added_pos) = self.path_stack.pop() {
+            let node = &self.unresolved_indices.get(last_added_pos).and_then(|&i| Some(&self.sequence[i])).unwrap();
             if let Some(first_byte) = node.bytes.first() {
-                state.current_set[*first_byte as usize] = false;
+                self.staged_and_current_set[*first_byte as usize] = false;
             }
-            state.used[last_added_pos] = false;
-            state.current.pop();
+            self.used[last_added_pos] = false;
+            self.current.pop();
 
-            state.loop_start_indices.pop();
-
-            if let Some(last_loop_idx) = state.loop_start_indices.last_mut() {
+            self.loop_start_indices.pop();
+            
+            if let Some(last_loop_idx) = self.loop_start_indices.last_mut() {
                 *last_loop_idx += 1;
             } else {
                 return false;
@@ -383,37 +354,5 @@ impl<'a> Explorer<'a> {
         } else {
             false
         }
-    }
-
-    fn hex_byte<W: core::fmt::Write>(w: &mut W, b: u8) {
-        const HEX_CHARS: &[u8] = b"0123456789ABCDEF";
-        let hi = HEX_CHARS[((b >> 4) & 0x0F) as usize];
-        let lo = HEX_CHARS[(b & 0x0F) as usize];
-        w.write_char(hi as char).ok();
-        w.write_char(lo as char).ok();
-    }
-
-    fn write_sequence<W: core::fmt::Write>(&self, w: &mut W, seq: &[&[u8]]) {
-        for bytes in seq {
-            for &b in *bytes {
-                Self::hex_byte(w, b);
-            }
-            w.write_char(' ').ok();
-        }
-        w.write_char('\n').ok();
-    }
-
-    fn write_unresolved_sequence<W: core::fmt::Write>(
-        &self,
-        w: &mut W,
-        unresolved: &Vec<usize, CMD_CAPACITY>,
-    ) {
-        for &idx in unresolved {
-            if let Some(first_byte) = self.sequence[idx].bytes.first() {
-                Self::hex_byte(w, *first_byte);
-                w.write_char(' ').ok();
-            }
-        }
-        w.write_char('\n').ok();
     }
 }
