@@ -378,9 +378,6 @@ impl<'a> PermutationIter<'a> {
             self.used[last_added_pos] = false;
             self.current_permutation.pop();
 
-            self.path_stack.pop();
-            self.path_stack.push(last_added_pos).unwrap();
-
             true
         } else {
             false
