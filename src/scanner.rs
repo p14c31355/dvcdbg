@@ -10,66 +10,121 @@ use heapless::Vec;
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
 
-#[derive(Clone, Copy)]
+/// Defines the logging level for scanner functions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogLevel {
-    Quiet,
+    /// Log verbose information, including scan progress and detailed errors.
     Verbose,
+    /// Log only warnings and errors.
+    Normal,
+    /// Suppress all logging output.
+    Quiet,
 }
 
-#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
-pub mod ehal_0_2 {
-    use crate::define_scanner;
-    define_scanner!(crate::compat::I2cCompat);
-}
-
-#[cfg(feature = "ehal_1_0")]
-pub mod ehal_1_0 {
-    use crate::define_scanner;
-    define_scanner!(crate::compat::I2cCompat);
-}
-
-#[cfg(feature = "ehal_1_0")]
-pub use self::ehal_1_0::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
-
-#[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
-pub use self::ehal_0_2::{scan_i2c, scan_i2c_with_ctrl, scan_init_sequence};
-
-#[macro_export]
+/// Macro to define common I2C scanner functions.
+///
+/// This macro generates `scan_i2c`, `scan_i2c_with_ctrl`, and `scan_init_sequence`
+/// functions, which are used to discover I2C devices.
+///
+/// # Parameters
+///
+/// - `$i2c_trait`: The trait that defines the I2C interface (e.g., `embedded_hal::i2c::I2c`).
+/// - `$error_trait`: The trait that defines the I2C error type (e.g., `embedded_hal::i2c::Error`).
+/// - `$write_trait`: The trait that defines the serial writer (e.g., `core::fmt::Write`).
 macro_rules! define_scanner {
-    ($i2c_trait:path) => {
-        use heapless::Vec;
-        use $crate::error::{ErrorKind, I2cError};
-        use $crate::compat::HalErrorExt;
-        /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
+    ($i2c_trait:ident, $error_trait:ident, $write_trait:ident) => {
+        use $i2c_trait;
+        use $error_trait;
+        use $write_trait;
+
+        /// Internal function to perform an I2C scan.
         ///
-        /// This function probes each possible I2C device address by attempting to
-        /// write an empty buffer (`[]`). Devices that acknowledge are reported
-        /// through the provided logger.
+        /// Attempts to write a single byte to each address in the I2C range.
         ///
-        /// # Arguments
+        /// # Parameters
         ///
-        /// * `i2c` - Mutable reference to an I2C interface implementing the `write` method.
-        /// * `serial` - Mutable reference to a type implementing [`core::fmt::Write`].
-        /// * `log_level` - Controls the verbosity of the log output.
-        /// # Example
+        /// - `i2c`: The I2C bus instance.
+        /// - `serial`: The serial writer for logging.
+        /// - `control_bytes`: An array of control bytes to try for each address.
+        /// - `log_level`: The desired logging level.
         ///
-        /// ```ignore
-        /// use embedded_hal::i2c::I2c;
-        /// use dvcdbg::scanner::scan_i2c;
+        /// # Returns
         ///
-        /// let mut i2c = /* your i2c interface */;
-        /// let mut serial = /* your type implementing core::fmt::Write */;
-        ///
-        /// scan_i2c(&mut i2c, &mut serial, Quiet);
-        /// ```
-        pub fn scan_i2c<I2C, W>(i2c: &mut I2C, serial: &mut W, log_level: $crate::scanner::LogLevel)
+        /// A `Result` containing a `Vec` of found addresses on success, or an `ErrorKind` on failure.
+        fn internal_scan<I2C, S>(
+            i2c: &mut I2C,
+            serial: &mut S,
+            control_bytes: &[u8],
+            log_level: LogLevel,
+        ) -> Result<heapless::Vec<u8, 128>, crate::error::ErrorKind>
         where
             I2C: $i2c_trait,
-            W: core::fmt::Write,
-            <I2C as $i2c_trait>::Error: HalErrorExt,
+            <I2C as $i2c_trait>::Error: crate::compat::HalErrorExt,
+            S: $write_trait,
         {
-            let _ = writeln!(serial, "[scan] Scanning I2C bus...");
-            if let Ok(found_addrs) = internal_scan(i2c, serial, &[], log_level) {
+            let mut found_addrs = heapless::Vec::<u8, 128>::new();
+            let mut last_error: Option<crate::error::ErrorKind> = None;
+
+            for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+                if let LogLevel::Verbose = log_level {
+                    let _ = write!(serial, "[log] Scanning 0x");
+                    let _ = ascii::write_byte_hex(serial, addr);
+                    let _ = write!(serial, "...");
+                }
+                let mut success = false;
+                for &ctrl_byte in control_bytes {
+                    match i2c.write(addr, &[ctrl_byte]) {
+                        Ok(_) => {
+                            success = true;
+                            break;
+                        }
+                        Err(e) => {
+                            let e_kind = e.to_compat(Some(addr));
+                            if e_kind == crate::error::ErrorKind::NACK {
+                                continue;
+                            }
+                            if let LogLevel::Verbose = log_level {
+                                let _ = write!(serial, "[error] write failed at ");
+                                let _ = ascii::write_bytes_hex_prefixed(serial, &[addr]);
+                                let _ = writeln!(serial, ": {}", e_kind);
+                            }
+                            if last_error.is_none() { last_error = Some(e_kind); }
+                        }
+                    }
+                }
+                if success {
+                    found_addrs.push(addr).map_err(|_| crate::error::ErrorKind::BufferOverflow)?;
+                    if let LogLevel::Verbose = log_level {
+                        let _ = writeln!(serial, " Found");
+                    }
+                } else if let LogLevel::Verbose = log_level {
+                    let _ = writeln!(serial, " No response");
+                }
+            }
+            if let Some(e) = last_error {
+                Err(e)
+            } else {
+                Ok(found_addrs)
+            }
+        }
+
+        /// Scans the I2C bus for devices by attempting to write a single byte (0x00) to each address.
+        ///
+        /// # Parameters
+        ///
+        /// - `i2c`: The I2C bus instance.
+        /// - `serial`: The serial writer for logging.
+        /// - `log_level`: The desired logging level.
+        pub fn scan_i2c<I2C, S>(i2c: &mut I2C, serial: &mut S, log_level: LogLevel)
+        where
+            I2C: $i2c_trait,
+            <I2C as $i2c_trait>::Error: crate::compat::HalErrorExt,
+            S: $write_trait,
+        {
+            if let LogLevel::Verbose = log_level {
+                let _ = writeln!(serial, "[log] Scanning I2C bus...");
+            }
+            if let Ok(found_addrs) = internal_scan(i2c, serial, &[0x00], log_level) {
                 if !found_addrs.is_empty() {
                     let _ = writeln!(serial, "[ok] Found devices at:");
                     for addr in &found_addrs {
@@ -80,50 +135,39 @@ macro_rules! define_scanner {
                     let _ = writeln!(serial);
                 }
             }
-            let _ = writeln!(serial, "[info] I2C scan complete.");
+            if let LogLevel::Verbose = log_level {
+                let _ = writeln!(serial, "[info] I2C scan complete.");
+            }
         }
 
-        /// Scan the I2C bus for devices by sending specified control bytes.
+        /// Scans the I2C bus for devices using a provided list of control bytes.
         ///
-        /// This variant allows specifying control bytes (e.g., `0x00`) to send
-        /// alongside the probe. Devices that acknowledge the transmission are
-        /// reported.
+        /// # Parameters
         ///
-        /// # Arguments
-        ///
-        /// * `i2c` - Mutable reference to an I2C interface implementing the `write` method.
-        /// * `serial` - Mutable reference to a type implementing [`core::fmt::Write`].
-        /// * `control_bytes` - Slice of bytes to send when probing each device.
-        /// * `log_level` - Controls the verbosity of the log output.
-        ///
-        /// # Example
-        ///
-        /// ```ignore
-        /// use embedded_hal::i2c::I2c;
-        /// use dvcdbg::scanner::scan_i2c_with_ctrl;
-        ///
-        /// let mut i2c = /* your i2c interface */;
-        /// let mut serial = /* your type implementing core::fmt::Write */;
-        ///
-        /// scan_i2c_with_ctrl(&mut i2c, &mut serial, &[0x00], Quiet);
-        /// ```
-        pub fn scan_i2c_with_ctrl<I2C, W>(
+        /// - `i2c`: The I2C bus instance.
+        /// - `serial`: The serial writer for logging.
+        /// - `control_bytes`: An array of control bytes to try for each address.
+        /// - `log_level`: The desired logging level.
+        pub fn scan_i2c_with_ctrl<I2C, S>(
             i2c: &mut I2C,
-            serial: &mut W,
+            serial: &mut S,
             control_bytes: &[u8],
-            log_level: $crate::scanner::LogLevel,
-        ) where
+            log_level: LogLevel,
+        )
+        where
             I2C: $i2c_trait,
-            W: core::fmt::Write,
-            <I2C as $i2c_trait>::Error: HalErrorExt,
+            <I2C as $i2c_trait>::Error: crate::compat::HalErrorExt,
+            S: $write_trait,
         {
-            let _ = writeln!(serial, "[scan] Scanning I2C bus with control bytes:");
-            for b in control_bytes {
-                let _ = write!(serial, " ");
-                let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[*b]);
-                let _ = writeln!(serial, "");
+            if let LogLevel::Verbose = log_level {
+                let _ = writeln!(serial, "[scan] Scanning I2C bus with control bytes:");
+                for b in control_bytes {
+                    let _ = write!(serial, " ");
+                    let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[*b]);
+                    let _ = writeln!(serial, "");
+                }
+                let _ = writeln!(serial);
             }
-            let _ = writeln!(serial);
             if let Ok(found_addrs) = internal_scan(i2c, serial, control_bytes, log_level) {
                 if !found_addrs.is_empty() {
                     let _ = writeln!(serial, "[ok] Found devices at:");
@@ -135,61 +179,51 @@ macro_rules! define_scanner {
                     let _ = writeln!(serial);
                 }
             }
-            let _ = writeln!(serial, "[info] I2C scan complete.");
+            if let LogLevel::Verbose = log_level {
+                let _ = writeln!(serial, "[info] I2C scan with control bytes complete.");
+            }
         }
 
-        /// Scan the I2C bus using an initialization sequence of commands.
+        /// Scans the I2C bus for devices that respond to a given initialization sequence.
         ///
-        /// Each command in the sequence is transmitted to all possible device
-        /// addresses using the control byte `0x00`. The function records which
-        /// commands receive responses and highlights any **differences** between
-        /// the expected and observed responses.
+        /// This function iterates through each byte in `init_sequence` and attempts to write it
+        /// to all I2C addresses. It returns a `Vec` of the bytes from `init_sequence` that
+        /// received a response from at least one device.
         ///
-        /// This is useful for verifying whether a device supports the expected
-        /// initialization commands (e.g., when testing display controllers).
+        /// # Parameters
         ///
-        /// # Arguments
+        /// - `i2c`: The I2C bus instance.
+        /// - `serial`: The serial writer for logging.
+        /// - `init_sequence`: The sequence of bytes to test.
+        /// - `log_level`: The desired logging level.
         ///
-        /// * `i2c` - Mutable reference to an I2C interface implementing the `write` method.
-        /// * `serial` - Mutable reference to a type implementing [`core::fmt::Write`].
-        /// * `init_sequence` - Slice of initialization commands to test.
-        /// * `log_level` - Controls the verbosity of the log output.
+        /// # Returns
         ///
-        /// # Example
-        ///
-        /// ```ignore
-        /// use embedded_hal::i2c::I2c;
-        /// use dvcdbg::scanner::scan_init_sequence;
-        ///
-        /// let mut i2c = /* your i2c interface */;
-        /// let mut serial = /* your type implementing core::fmt::Write */;
-        ///
-        /// let init_sequence: [u8; 3] = [0xAE, 0xA1, 0xAF]; // example init cmds
-        /// scan_init_sequence(&mut i2c, &mut serial, &init_sequence, Quiet);
-        /// ```
-        pub fn scan_init_sequence<I2C, W>(
+        /// A `heapless::Vec<u8, 64>` containing the bytes from `init_sequence` that elicited a response.
+        pub fn scan_init_sequence<I2C, S>(
             i2c: &mut I2C,
-            serial: &mut W,
+            serial: &mut S,
             init_sequence: &[u8],
-            log_level: $crate::scanner::LogLevel,
-        ) -> Vec<u8, 64>
+            log_level: LogLevel,
+        ) -> heapless::Vec<u8, 64>
         where
             I2C: $i2c_trait,
-            W: core::fmt::Write,
-            <I2C as $i2c_trait>::Error: HalErrorExt,
+            <I2C as $i2c_trait>::Error: crate::compat::HalErrorExt,
+            S: $write_trait,
         {
-            let _ = writeln!(serial, "[scan] Scanning I2C bus with init sequence:");
-            for b in init_sequence.iter() {
-                let _ = write!(serial, " ");
-                let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[*b]);
-                let _ = writeln!(serial, "");
+            if let LogLevel::Verbose = log_level {
+                let _ = writeln!(serial, "[scan] Scanning I2C bus with init sequence:");
+                for b in init_sequence.iter() {
+                    let _ = write!(serial, " ");
+                    let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[*b]);
+                    let _ = writeln!(serial, "");
+                }
+                let _ = writeln!(serial);
             }
-            let _ = writeln!(serial);
 
-            let mut detected_cmds: Vec<u8, 64> = Vec::new();
+            let mut detected_cmds = heapless::Vec::<u8, 64>::new();
             for &cmd in init_sequence.iter() {
-                let value = internal_scan(i2c, serial, &[0x00, cmd], log_level.clone());
-                match value {
+                match internal_scan(i2c, serial, &[cmd], log_level) {
                     Ok(found_addrs) => {
                         if !found_addrs.is_empty() {
                             for addr in found_addrs {
@@ -202,9 +236,7 @@ macro_rules! define_scanner {
                                 let _ = writeln!(serial, "");
                             }
                             if detected_cmds.push(cmd).is_err() {
-                                let _ = writeln!(serial,
-                                    "[warn] Detected commands buffer is full, results may be incomplete!"
-                                );
+                                let _ = writeln!(serial, "[error] Buffer overflow in detected_cmds");
                             }
                         }
                     }
@@ -215,105 +247,53 @@ macro_rules! define_scanner {
                     }
                 }
             }
-
-            super::log_differences(serial, init_sequence, &detected_cmds);
-            let _ = writeln!(serial, "[info] I2C scan with init sequence complete.");
+            if let LogLevel::Verbose = log_level {
+                let _ = writeln!(serial, "[info] I2C scan with init sequence complete.");
+            }
+            log_differences(serial, init_sequence, &detected_cmds);
             detected_cmds
         }
 
-        fn internal_scan<I2C, W>(
-            i2c: &mut I2C,
-            serial: &mut W,
-            data: &[u8],
-            log_level: $crate::scanner::LogLevel,
-        ) -> Result<Vec<u8, 128>, ErrorKind>
-        where
-            I2C: $i2c_trait,
-            W: core::fmt::Write,
-            <I2C as $i2c_trait>::Error: HalErrorExt,
-        {
-            let mut found_devices: Vec<u8, 128> = Vec::new();
-            let mut last_error: Option<ErrorKind> = None;
-
-            for addr in super::I2C_SCAN_ADDR_START..=super::I2C_SCAN_ADDR_END {
-                match i2c.write(addr, data) {
-                    Ok(_) => { let _ = found_devices.push(addr); }
-                    Err(e) => {
-                        let e_kind = e.to_compat(Some(addr));
-                        if e_kind == ErrorKind::I2c(I2cError::Nack) {
-                            continue;
-                        }
-                        if let $crate::scanner::LogLevel::Verbose = log_level {
-                            let _ = write!(serial, "[error] write failed at ");
-                            let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[addr]);
-                            let _ = writeln!(serial, ": {}", e_kind);
-                        }
-if last_error.is_none() { last_error = Some(e_kind); }
-                    }
+        fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detected: &heapless::Vec<u8, 64>) {
+            let mut missing_cmds = heapless::Vec::<u8, 64>::new();
+            for &b in expected {
+                if !detected.contains(&b) {
+                    missing_cmds.push(b).ok();
                 }
             }
 
-            if found_devices.is_empty() {
-                if let Some(e) = last_error {
-                    Err(e)
-                } else {
-                    Ok(found_devices)
-                }
-            } else {
-                Ok(found_devices)
+            let _ = writeln!(serial, "Expected sequence:");
+            for b in expected {
+                let _ = write!(serial, " ");
+                let _ = ascii::write_bytes_hex_prefixed(serial, &[*b]);
+                let _ = writeln!(serial);
             }
+            let _ = writeln!(serial);
+
+            let _ = writeln!(serial, "Commands with response:");
+            for b in detected {
+                let _ = write!(serial, " ");
+                let _ = ascii::write_bytes_hex_prefixed(serial, &[*b]);
+                let _ = writeln!(serial);
+            }
+            let _ = writeln!(serial);
+
+            let _ = writeln!(serial, "Commands with no response:");
+            for b in &missing_cmds {
+                let _ = write!(serial, " ");
+                let _ = ascii::write_bytes_hex_prefixed(serial, &[*b]);
+                let _ = writeln!(serial);
+            }
+            let _ = writeln!(serial);
         }
-    }
+    };
 }
 
-fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detected: &Vec<u8, 64>) {
-    let _ = writeln!(serial, "Expected sequence:");
-    for b in expected {
-        let _ = write!(serial, " ");
-        let _ = ascii::write_bytes_hex_prefixed(serial, &[*b]);
-        let _ = writeln!(serial);
-    }
-    let _ = writeln!(serial);
-
-    let _ = writeln!(serial, "Commands with response:");
-    for b in detected {
-        let _ = write!(serial, " ");
-        let _ = ascii::write_bytes_hex_prefixed(serial, &[*b]);
-        let _ = writeln!(serial);
-    }
-    let _ = writeln!(serial);
-
-    let mut sorted = detected.clone();
-    sorted.sort_unstable();
-    let mut missing_cmds: Vec<u8, 64> = Vec::new();
-    for cmd in expected
-        .iter()
-        .copied()
-        .filter(|c| sorted.binary_search(c).is_err())
-    {
-        if missing_cmds.push(cmd).is_err() {
-            let _ = writeln!(
-                serial,
-                "[warn] Missing commands buffer is full, list is truncated."
-            );
-            break;
-        }
-    }
-
-    let _ = writeln!(serial, "Commands with no response:");
-    for b in &missing_cmds {
-        let _ = write!(serial, " ");
-        let _ = ascii::write_bytes_hex_prefixed(serial, &[*b]);
-        let _ = writeln!(serial);
-    }
-    let _ = writeln!(serial);
-}
-
-/// Runs an I2C initialization exploration sequence using a provided `Explorer`.
+/// Runs the I2C explorer with a given initial sequence and logs the results.
 ///
-/// This function scans the I2C bus for devices and attempts to apply
-/// a safe driver initialization sequence. It logs progress and errors
-/// to a serial interface implementing `core::fmt::Write`.
+/// This function first performs an I2C scan with the provided `init_sequence` to identify
+/// responsive commands. Then, it uses the `explorer` to find valid command sequences
+/// for discovered devices, applying a `prefix` to each command.
 ///
 /// # Type Parameters
 ///
@@ -324,26 +304,35 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 ///
 /// # Parameters
 ///
-/// - `explorer`: A reference to an `Explorer` that defines the exploration sequence.
-/// - `i2c`: A mutable reference to the I2C bus to communicate with devices.
-/// - `serial`: A mutable reference to a serial logger for debug output.
-/// - `init_sequence`: A slice of bytes representing the initial I2C command sequence.
-///   This sequence will be scanned and sent to each device before running the explorer commands.
-/// - `prefix`: A byte to prepend to each command during execution.
-/// - `log_level`: A `LogLevel` controlling the verbosity of logging.
-///
-/// # Returns
-///
-/// Returns `Ok(())` if the explorer successfully applied the driver-safe init sequence,
-/// or `Err(ExplorerError)` if the exploration failed. Errors are also logged to `serial`.
+/// - `explorer`: An instance of `Explorer` containing the command nodes and their dependencies.
+/// - `i2c`: The I2C bus instance.
+/// - `serial`: The serial writer for logging.
+/// - `init_sequence`: The initial sequence of bytes to test for device responsiveness.
+/// - `prefix`: A byte to prepend to every command sent during exploration.
+/// - `log_level`: The desired logging level.
 ///
 /// # Example
 ///
 /// ```ignore
-/// # use dvcdbg::prelude::*;
-/// # use dvcdbg::explorer::ExplorerError;
-/// # use dvcdbg::scanner::LogLevel;
-/// # fn main() -> Result<(), ExplorerError> {
+/// use dvcdbg::prelude::*;
+/// use arduino_hal::I2c;
+/// use arduino_hal::hal::port::Port;
+/// use arduino_hal::pac::TWI;
+/// use heapless::Vec;
+/// use core::fmt::Write;
+///
+/// # struct MyI2c; // Dummy I2c implementation
+/// # impl dvcdbg::compat::I2cCompat for MyI2c {
+/// #     type Error = dvcdbg::error::ErrorKind;
+/// #     fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> { Ok(()) }
+/// #     fn read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), Self::Error> { Ok(()) }
+/// #     fn write_read(&mut self, addr: u8, bytes: &[u8], buffer: &mut [u8]) -> Result<(), Self::Error> { Ok(()) }
+/// # }
+/// # struct MySerial; // Dummy Serial implementation
+/// # impl core::fmt::Write for MySerial {
+/// #     fn write_str(&mut self, s: &str) -> core::fmt::Result { Ok(()) }
+/// # }
+///
 /// let mut i2c = /* your I2C instance */;
 /// let mut serial = /* your serial instance */;
 /// let init_sequence = [0u8; 16]; // Example initial sequence
@@ -356,10 +345,10 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 ///     &mut i2c,
 ///     &mut serial,
 ///     &init_sequence,
-///     0x3C, // Example prefix
+///     0x00, // Example prefix
 ///     LogLevel::Verbose,
-/// )?;
-/// # Ok(())
+/// ).unwrap();
+/// # Ok::<(), dvcdbg::explorer::ExplorerError>(())
 /// # }
 /// ```
 pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
@@ -372,11 +361,13 @@ pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
 ) -> Result<(), crate::explorer::ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
-    S: core::fmt::Write,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+    S: core::fmt::Write,
 {
-    let _ = writeln!(serial, "[log] Scanning I2C bus...");
-    let successful_seq = crate::scanner::scan_init_sequence(i2c, serial, init_sequence, log_level);
+    if let LogLevel::Verbose = log_level {
+        let _ = writeln!(serial, "[log] Scanning I2C bus...");
+    }
+    let successful_seq = scan_init_sequence(i2c, serial, init_sequence, log_level);
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
     let _ = writeln!(serial, "[log] Start driver safe init");
 

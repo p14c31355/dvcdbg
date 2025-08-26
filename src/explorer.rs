@@ -12,7 +12,7 @@
 //! ## Key Refinements
 //! 1. **Separation of Concerns**: The core algorithm (`PermutationIter`) is separate from
 //!    the I2C execution logic (`explore`).
-//! 2. **Iterator-based API**: The `permutating()` method returns an iterator,
+//! 2. **Iterator-based API**: The `permutations()` method returns an iterator,
 //!    making the code more testable and composable.
 //! 3. **Generic Capacity**: `CMD_CAPACITY` is now a generic parameter `N`,
 //!    allowing for code reuse across devices with different memory constraints.
@@ -147,14 +147,12 @@ impl Logger for NullLogger {
     fn log_info_fmt<F>(&mut self, _fmt: F)
     where
         F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
-    {
-    }
+    {}
 
     fn log_error_fmt<F>(&mut self, _fmt: F)
     where
         F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
-    {
-    }
+    {}
 }
 
 /// The core explorer, now a generic dependency graph manager.
@@ -195,14 +193,10 @@ impl<'a, const N: usize> Explorer<'a, N> {
         }
 
         let mut initial_in_degree = Vec::<usize, N>::new();
-        initial_in_degree
-            .resize(self.sequence.len(), 0)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
+        initial_in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::BufferOverflow)?;
 
         let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
-        adj_list_rev
-            .resize(self.sequence.len(), Vec::new())
-            .map_err(|_| ExplorerError::BufferOverflow)?;
+        adj_list_rev.resize(self.sequence.len(), Vec::new()).map_err(|_| ExplorerError::BufferOverflow)?;
 
         for (i, node) in self.sequence.iter().enumerate() {
             // The in-degree of a node is the number of dependencies it has.
@@ -212,14 +206,12 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
                 // Add 'i' to the list of nodes that depend on 'dep_idx'
-                adj_list_rev[dep_idx]
-                    .push(i)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
+                adj_list_rev[dep_idx].push(i).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
         // Cycle detection using a modified Kahn's algorithm
-        let mut temp_in_degree = initial_in_degree.clone();
+        let mut temp_in_degree = initial_in_degree.clone().map_err(|_| ExplorerError::BufferOverflow)?;
         let mut q = Vec::<usize, N>::new();
         for i in 0..self.sequence.len() {
             if temp_in_degree[i] == 0 {
@@ -378,7 +370,7 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
                 // Successfully extended, continue building the permutation
                 continue;
             } else {
-                // Could not extend, backtrack and try a different path
+                // Could not extend, backtrack
                 if !self.backtrack() {
                     self.is_done = true;
                     return None; // No more permutations
@@ -413,9 +405,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             if self.in_degree[idx] == 0 {
                 // Make choice: Add this node to the current permutation
                 // Note: unwrap() is used here assuming N is sufficiently large based on initial checks.
-                self.current_permutation
-                    .push(self.sequence[idx].bytes)
-                    .unwrap();
+                self.current_permutation.push(self.sequence[idx].bytes).unwrap();
                 self.used[idx] = true; // Mark as used
 
                 // Decrement in-degrees for all nodes that depend on this one
