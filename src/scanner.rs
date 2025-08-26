@@ -5,6 +5,8 @@
 //! optionally testing with control bytes or initialization command sequences.
 
 use heapless::Vec;
+use crate::compat::ascii;
+use core::fmt::Write;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -39,6 +41,7 @@ macro_rules! define_scanner {
         use heapless::Vec;
         use $crate::error::{ErrorKind, I2cError};
         use $crate::compat::HalErrorExt;
+        use core::fmt::Write;
         /// Scan the I2C bus for connected devices (addresses `0x03` to `0x77`).
         ///
         /// This function probes each possible I2C device address by attempting to
@@ -72,7 +75,9 @@ macro_rules! define_scanner {
                 if !found_addrs.is_empty() {
                     let _ = writeln!(serial, "[ok] Found devices at:");
                     for addr in &found_addrs {
-                        let _ = writeln!(serial, " 0x{:02X}", addr);
+                        let _ = write!(serial, " ");
+                        let _ = $crate::compat::ascii::write_u8_hex_prefixed(serial, *addr);
+                        let _ = writeln!(serial, "");
                     }
                     let _ = writeln!(serial);
                 }
@@ -116,14 +121,18 @@ macro_rules! define_scanner {
         {
             let _ = writeln!(serial, "[scan] Scanning I2C bus with control bytes:");
             for b in control_bytes {
-                let _ = writeln!(serial, " 0x{:02X}", b);
+                let _ = write!(serial, " ");
+                let _ = $crate::compat::ascii::write_u8_hex_prefixed(serial, *b);
+                let _ = writeln!(serial, "");
             }
             let _ = writeln!(serial);
             if let Ok(found_addrs) = internal_scan(i2c, serial, control_bytes, log_level) {
                 if !found_addrs.is_empty() {
                     let _ = writeln!(serial, "[ok] Found devices at:");
                     for addr in &found_addrs {
-                        let _ = writeln!(serial, " 0x{:02X}", addr);
+                        let _ = write!(serial, " ");
+                        let _ = $crate::compat::ascii::write_u8_hex_prefixed(serial, *addr);
+                        let _ = writeln!(serial, "");
                     }
                     let _ = writeln!(serial);
                 }
@@ -173,7 +182,9 @@ macro_rules! define_scanner {
         {
             let _ = writeln!(serial, "[scan] Scanning I2C bus with init sequence:");
             for b in init_sequence.iter() {
-                let _ = writeln!(serial, " 0x{b:02X}");
+                let _ = write!(serial, " ");
+                let _ = $crate::compat::ascii::write_u8_hex_prefixed(serial, *b);
+                let _ = writeln!(serial, "");
             }
             let _ = writeln!(serial);
 
@@ -184,10 +195,13 @@ macro_rules! define_scanner {
                     Ok(found_addrs) => {
                         if !found_addrs.is_empty() {
                             for addr in found_addrs {
-                                let _ = writeln!(serial,
-                                    "[ok] Found device at 0x{:02X} responding to 0x{:02X}",
-                                    addr, cmd
+                                let _ = write!(serial,
+                                    "[ok] Found device at ",
                                 );
+                                let _ = $crate::compat::ascii::write_u8_hex_prefixed(serial, addr);
+                                let _ = write!(serial, " responding to ");
+                                let _ = $crate::compat::ascii::write_u8_hex_prefixed(serial, cmd);
+                                let _ = writeln!(serial, "");
                             }
                             if detected_cmds.push(cmd).is_err() {
                                 let _ = writeln!(serial,
@@ -197,7 +211,9 @@ macro_rules! define_scanner {
                         }
                     }
                     Err(e) => {
-                        let _ = writeln!(serial, "[error] scan failed for 0x{:02X}: {:?}", cmd, e);
+                        let _ = write!(serial, "[error] scan failed for ");
+                        let _ = $crate::compat::ascii::write_u8_hex_prefixed(serial, cmd);
+                        let _ = writeln!(serial, ": {:?}", e);
                     }
                 }
             }
@@ -230,7 +246,9 @@ macro_rules! define_scanner {
                             continue;
                         }
                         if let $crate::scanner::LogLevel::Verbose = log_level {
-                            let _ = writeln!(serial, "[error] write failed at 0x{:02X}: {}", addr, e_kind);
+                            let _ = write!(serial, "[error] write failed at ");
+                            let _ = $crate::compat::ascii::write_u8_hex_prefixed(serial, addr);
+                            let _ = writeln!(serial, ": {}", e_kind);
                         }
 if last_error.is_none() { last_error = Some(e_kind); }
                     }
@@ -253,13 +271,17 @@ if last_error.is_none() { last_error = Some(e_kind); }
 fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detected: &Vec<u8, 64>) {
     let _ = writeln!(serial, "Expected sequence:");
     for b in expected {
-        let _ = writeln!(serial, " 0x{b:02X}");
+        let _ = write!(serial, " ");
+        let _ = ascii::write_u8_hex_prefixed(serial, *b);
+        let _ = writeln!(serial, "");
     }
     let _ = writeln!(serial);
 
     let _ = writeln!(serial, "Commands with response:");
     for b in detected {
-        let _ = writeln!(serial, " 0x{b:02X}");
+        let _ = write!(serial, " ");
+        let _ = ascii::write_u8_hex_prefixed(serial, *b);
+        let _ = writeln!(serial, "");
     }
     let _ = writeln!(serial);
 
@@ -282,7 +304,9 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 
     let _ = writeln!(serial, "Commands with no response:");
     for b in &missing_cmds {
-        let _ = writeln!(serial, " 0x{b:02X}");
+        let _ = write!(serial, " ");
+        let _ = ascii::write_u8_hex_prefixed(serial, *b);
+        let _ = writeln!(serial, "");
     }
     let _ = writeln!(serial);
 }
@@ -442,7 +466,9 @@ where
     let mut executor = PrefixExecutor::new(prefix, successful_seq);
 
     for addr in explorer.explore(i2c, &mut executor, &mut serial_logger)?.found_addrs.iter() {
-        let _ = writeln!(serial, "[driver] Found device at 0x{:02X}", addr);
+        let _ = write!(serial, "[driver] Found device at ");
+        let _ = ascii::write_u8_hex_prefixed(serial, *addr);
+        let _ = writeln!(serial, "");
     }
     
     Ok(())

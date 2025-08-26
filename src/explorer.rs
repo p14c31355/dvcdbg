@@ -67,6 +67,7 @@
 //! }
 //! ```
 
+use crate::compat::ascii;
 use core::fmt::Write;
 use heapless::{String, Vec};
 
@@ -259,11 +260,10 @@ impl<'a> Explorer<'a> {
 
                 if all_ok {
                     logger.log_info_fmt(|buf| {
-                        writeln!(
-                            buf,
-                            "[explorer] Success: Sequence works for addr 0x{:02X}",
-                            addr
-                        )
+                        write!(buf, "[explorer] Success: Sequence works for addr ")?;
+                        ascii::write_u8_hex_prefixed(buf, addr)?;
+                        writeln!(buf, "")?;
+                        Ok(())
                     });
                     solved_addrs[addr as usize] = true;
                     found_addresses.push(addr).map_err(|_| ExplorerError::BufferOverflow)?;
