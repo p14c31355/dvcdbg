@@ -128,11 +128,10 @@ pub trait Logger {
     fn log_info_fmt<F>(&mut self, fmt: F)
     where
         F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>;
-    
+
     fn log_error_fmt<F>(&mut self, fmt: F)
     where
         F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>;
-
 }
 
 // Dummy logger for platforms without console output
@@ -151,7 +150,6 @@ impl Logger for NullLogger {
     where
         F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
     {
-
     }
 }
 
@@ -174,7 +172,8 @@ pub struct PermutationIter<'a, const N: usize> {
 }
 
 /// The return type for the stage function.
-type StageResult<'a, const N: usize> = Result<(Vec<&'a [u8], N>, Vec<usize, N>, [bool; N]), ExplorerError>;
+type StageResult<'a, const N: usize> =
+    Result<(Vec<&'a [u8], N>, Vec<usize, N>, [bool; N]), ExplorerError>;
 
 pub struct ExploreResult {
     pub found_addrs: Vec<u8, I2C_ADDRESS_COUNT>,
@@ -185,26 +184,32 @@ impl<'a, const N: usize> Explorer<'a, N> {
     /// Performs an initial topological sort to stage commands without unresolved dependencies.
     fn stage(&self) -> StageResult<'a, N> {
         let mut in_degree = Vec::<usize, N>::new();
-        in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::TooManyCommands)?;
+        in_degree
+            .resize(self.sequence.len(), 0)
+            .map_err(|_| ExplorerError::TooManyCommands)?;
 
         // Calculate in-degrees for all nodes.
         // Build adjacency list for reverse dependencies (nodes that depend on current node)
-// adj_list_rev[k] will contain a list of indices 'j' where self.sequence[j] depends on self.sequence[k]
-let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
-adj_list_rev.resize(self.sequence.len(), Vec::new()).map_err(|_| ExplorerError::BufferOverflow)?;
+        // adj_list_rev[k] will contain a list of indices 'j' where self.sequence[j] depends on self.sequence[k]
+        let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
+        adj_list_rev
+            .resize(self.sequence.len(), Vec::new())
+            .map_err(|_| ExplorerError::BufferOverflow)?;
 
-// Populate in-degrees and reverse adjacency list
-for (i, node) in self.sequence.iter().enumerate() {
-    in_degree[i] = node.deps.len();
-    for &dep_idx in node.deps.iter() {
-        // Basic validation for dependency index
-        if dep_idx >= self.sequence.len() {
-            return Err(ExplorerError::BufferOverflow); // Or a more specific error like InvalidDependencyIndex
+        // Populate in-degrees and reverse adjacency list
+        for (i, node) in self.sequence.iter().enumerate() {
+            in_degree[i] = node.deps.len();
+            for &dep_idx in node.deps.iter() {
+                // Basic validation for dependency index
+                if dep_idx >= self.sequence.len() {
+                    return Err(ExplorerError::BufferOverflow); // Or a more specific error like InvalidDependencyIndex
+                }
+                adj_list_rev[dep_idx]
+                    .push(i)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
+            }
         }
-        adj_list_rev[dep_idx].push(i).map_err(|_| ExplorerError::BufferOverflow)?;
-    }
-}
-        
+
         let mut queue = Vec::<usize, N>::new();
         for (i, &degree) in in_degree.iter().enumerate() {
             if degree == 0 {
@@ -216,16 +221,18 @@ for (i, node) in self.sequence.iter().enumerate() {
         let mut staged_indices = [false; N];
         let mut staged_count = 0;
         let mut queue_idx = 0;
-        
+
         while queue_idx < queue.len() {
             let idx = queue[queue_idx];
             queue_idx += 1;
-            
-            staged.push(self.sequence[idx].bytes).map_err(|_| ExplorerError::BufferOverflow)?;
+
+            staged
+                .push(self.sequence[idx].bytes)
+                .map_err(|_| ExplorerError::BufferOverflow)?;
             staged_indices[idx] = true;
             staged_count += 1;
 
-             // For each node v that depends on u (which is 'idx' in this loop)
+            // For each node v that depends on u (which is 'idx' in this loop)
             for &v in adj_list_rev[idx].iter() {
                 in_degree[v] -= 1;
                 if in_degree[v] == 0 {
@@ -237,14 +244,16 @@ for (i, node) in self.sequence.iter().enumerate() {
         if staged_count != self.sequence.len() {
             return Err(ExplorerError::DependencyCycle);
         }
-        
+
         let mut unresolved_indices = Vec::new();
         for (i, &is_staged) in staged_indices.iter().enumerate() {
             if !is_staged {
-                unresolved_indices.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+                unresolved_indices
+                    .push(i)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
-        
+
         Ok((staged, unresolved_indices, staged_indices))
     }
 
@@ -253,7 +262,8 @@ for (i, node) in self.sequence.iter().enumerate() {
         let (staged, unresolved_indices, staged_indices) = self.stage()?;
 
         let mut used = Vec::new();
-        used.resize(unresolved_indices.len(), false).map_err(|_| ExplorerError::BufferOverflow)?;
+        used.resize(unresolved_indices.len(), false)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
 
         Ok(PermutationIter {
             sequence: self.sequence,
@@ -267,7 +277,7 @@ for (i, node) in self.sequence.iter().enumerate() {
             is_done: false,
         })
     }
-    
+
     /// Explores valid sequences, attempting to execute them on an I2C bus.
     pub fn explore<I2C, E, L>(
         &self,
@@ -280,7 +290,8 @@ for (i, node) in self.sequence.iter().enumerate() {
         E: CmdExecutor<I2C>,
         L: Logger,
     {
-        let mut active_addrs: Vec<u8, I2C_ADDRESS_COUNT> = (I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END).collect();
+        let mut active_addrs: Vec<u8, I2C_ADDRESS_COUNT> =
+            (I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END).collect();
         let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
         let mut permutation_count = 0;
 
@@ -289,7 +300,7 @@ for (i, node) in self.sequence.iter().enumerate() {
 
         for sequence in iter {
             permutation_count += 1;
-            
+
             let mut next_active_addrs: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
 
             for &addr in active_addrs.iter() {
@@ -307,7 +318,9 @@ for (i, node) in self.sequence.iter().enumerate() {
                     }
                 }
                 if all_ok {
-                    next_active_addrs.push(addr).map_err(|_| ExplorerError::BufferOverflow)?;
+                    next_active_addrs
+                        .push(addr)
+                        .map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
             active_addrs = next_active_addrs;
@@ -315,8 +328,10 @@ for (i, node) in self.sequence.iter().enumerate() {
                 break;
             }
         }
-        
-        found_addresses.extend_from_slice(&active_addrs).map_err(|_| ExplorerError::BufferOverflow)?;
+
+        found_addresses
+            .extend_from_slice(&active_addrs)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
 
         logger.log_info_fmt(|buf| {
             writeln!(
@@ -326,7 +341,6 @@ for (i, node) in self.sequence.iter().enumerate() {
                 permutation_count
             )
         });
-
 
         if found_addresses.is_empty() {
             Err(ExplorerError::NoValidAddressesFound)
@@ -352,8 +366,10 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
             if self.current_permutation.len() + self.staged.len() == self.sequence.len() {
                 // Construct the full sequence by concatenating staged and current
                 let mut full_sequence = self.staged.clone();
-                full_sequence.extend_from_slice(&self.current_permutation).unwrap_or_else(|_| unreachable!());
-                
+                full_sequence
+                    .extend_from_slice(&self.current_permutation)
+                    .unwrap_or_else(|_| unreachable!());
+
                 // Backtrack to find the next permutation
                 self.backtrack();
                 return Some(full_sequence);
@@ -403,7 +419,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         if let Some(last_added_pos) = self.path_stack.pop() {
             let node_idx = self.unresolved_indices[last_added_pos];
             self.used_indices[node_idx] = false;
-            
+
             self.used[last_added_pos] = false;
             self.current_permutation.pop();
             self.loop_start_indices.pop();

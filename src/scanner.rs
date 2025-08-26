@@ -4,8 +4,8 @@
 //! This module provides functions to scan the I2C bus for connected devices,
 //! optionally testing with control bytes or initialization command sequences.
 
-use heapless::Vec;
 use crate::compat::{HalErrorExt, ascii};
+use heapless::Vec;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -405,10 +405,12 @@ where
         fn log_error(&mut self, msg: &str) {
             let _ = self.writer.write_str(msg);
         }
-        
+
         fn log_info_fmt<F>(&mut self, fmt: F)
         where
-            F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error>,
+            F: FnOnce(
+                &mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
+            ) -> Result<(), core::fmt::Error>,
         {
             self.buffer.clear();
             if fmt(&mut self.buffer).is_ok() {
@@ -418,7 +420,9 @@ where
 
         fn log_error_fmt<F>(&mut self, fmt: F)
         where
-            F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error>,
+            F: FnOnce(
+                &mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
+            ) -> Result<(), core::fmt::Error>,
         {
             self.buffer.clear();
             if fmt(&mut self.buffer).is_ok() {
@@ -451,41 +455,53 @@ where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     {
-        fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), crate::explorer::ExecutorError> {
+        fn exec(
+            &mut self,
+            i2c: &mut I2C,
+            addr: u8,
+            cmd: &[u8],
+        ) -> Result<(), crate::explorer::ExecutorError> {
             let addr_idx = addr as usize;
 
             // Check if the address has already been initialized (O(1) check)
             if !self.initialized_addrs[addr_idx] {
-            // First, send the init_sequence with the prefix, one command at a time.
-            for &c in self.init_sequence.iter() {
-                let command = [self.prefix, c];
-                i2c.write(addr, &command).map_err(|e| {
-                    crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr)))
-                })?;
+                // First, send the init_sequence with the prefix, one command at a time.
+                for &c in self.init_sequence.iter() {
+                    let command = [self.prefix, c];
+                    i2c.write(addr, &command).map_err(|e| {
+                        crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr)))
+                    })?;
+                }
+                // Mark this address as initialized
+                self.initialized_addrs[addr_idx] = true;
             }
-            // Mark this address as initialized
-            self.initialized_addrs[addr_idx] = true;
-        }
 
             // Then, send the regular command. Reuse the buffer.
             self.buffer.clear();
-            self.buffer.push(self.prefix).map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
-            self.buffer.extend_from_slice(cmd).map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
+            self.buffer
+                .push(self.prefix)
+                .map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
+            self.buffer
+                .extend_from_slice(cmd)
+                .map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
 
-            i2c.write(addr, &self.buffer).map_err(|e| {
-                crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr)))
-            })
+            i2c.write(addr, &self.buffer)
+                .map_err(|e| crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr))))
         }
     }
 
     let mut serial_logger = SerialLogger::new(serial);
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, successful_seq);
 
-    for addr in explorer.explore(i2c, &mut executor, &mut serial_logger)?.found_addrs.iter() {
+    for addr in explorer
+        .explore(i2c, &mut executor, &mut serial_logger)?
+        .found_addrs
+        .iter()
+    {
         let _ = write!(serial, "[driver] Found device at ");
         let _ = ascii::write_bytes_hex_prefixed(serial, &[*addr]);
         let _ = writeln!(serial);
     }
-    
+
     Ok(())
 }
