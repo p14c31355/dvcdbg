@@ -66,7 +66,7 @@ fn test_full_stack() {
 
     assert_log!(true, &mut serial, "this won't log");
 
-    quick_diag!(&mut serial, &mut i2c,);
+    quick_diag!(&mut serial, &mut i2c);
 
     write_bin!(&mut serial, &[0x00, 0xFF]);
     write_hex!(&mut serial, &[0xAA, 0xBB]);
