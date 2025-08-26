@@ -72,8 +72,7 @@ use crate::compat::ascii;
 use core::fmt::Write;
 use heapless::{String, Vec};
 
-const I2C_SCAN_ADDR_END: u8 = 127;
-const I2C_SCAN_ADDR_START: u8 = 1;
+use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 const I2C_ADDRESS_COUNT: usize = 128;
 pub const LOG_BUFFER_CAPACITY: usize = 512;
 
