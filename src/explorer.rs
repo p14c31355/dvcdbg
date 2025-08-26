@@ -290,8 +290,14 @@ impl<'a, const N: usize> Explorer<'a, N> {
         E: CmdExecutor<I2C>,
         L: Logger,
     {
-        let mut active_addrs: Vec<u8, I2C_ADDRESS_COUNT> =
-            (I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END).collect();
+        // Handle the case where no commands are provided.
+        // An empty sequence means there's nothing to explore,
+        // so no valid addresses can be found through this exploration process.
+        if self.sequence.is_empty() {
+            logger.log_info("[explorer] No commands provided for exploration. Returning no valid addresses.\r\n");
+            return Err(ExplorerError::NoValidAddressesFound);
+        }
+        let mut active_addrs: Vec<u8, I2C_ADDRESS_COUNT> = (I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END).collect();
         let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
         let mut permutation_count = 0;
 
@@ -300,7 +306,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
         for sequence in iter {
             permutation_count += 1;
-
+            
             let mut next_active_addrs: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
 
             for &addr in active_addrs.iter() {
@@ -318,9 +324,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     }
                 }
                 if all_ok {
-                    next_active_addrs
-                        .push(addr)
-                        .map_err(|_| ExplorerError::BufferOverflow)?;
+                    next_active_addrs.push(addr).map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
             active_addrs = next_active_addrs;
@@ -328,10 +332,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 break;
             }
         }
-
-        found_addresses
-            .extend_from_slice(&active_addrs)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
+        
+        found_addresses.extend_from_slice(&active_addrs).map_err(|_| ExplorerError::BufferOverflow)?;
 
         logger.log_info_fmt(|buf| {
             writeln!(
@@ -341,6 +343,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 permutation_count
             )
         });
+
 
         if found_addresses.is_empty() {
             Err(ExplorerError::NoValidAddressesFound)
