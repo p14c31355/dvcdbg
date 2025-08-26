@@ -171,10 +171,10 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut in_degree = Vec::<usize, N>::new();
         in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::BufferOverflow)?;
 
-        for node in self.sequence.iter() {
-            for &dep in node.deps {
-                in_degree[dep] += 1;
-            }
+        // Calculate in-degrees for all nodes.
+        // in_degree[i] will store the number of dependencies for self.sequence[i].
+        for (i, node) in self.sequence.iter().enumerate() {
+            in_degree[i] = node.deps.len();
         }
         
         let mut queue = Vec::<usize, N>::new();
