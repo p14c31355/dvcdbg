@@ -1,73 +1,94 @@
 // explorer.rs
-//! # I2C Command Sequence Explorer (Refactored)
+//! # I2C Command Sequence Explorer
 //!
-//! This module provides an algorithm to discover valid sequences of I2C commands
-//! for devices with dependency constraints, with a focus on embedded systems.
+//! This module provides an algorithm and supporting utilities for discovering
+//! valid sequences of I2C commands when device dependencies are unknown or
+//! partially specified. It is designed for embedded bring-up scenarios, where
+//! experimenting with permutations of initialization commands can reveal the
+//! correct sequence for a new or undocumented device.
 //!
 //! ## Overview
-//! - The `Explorer` is now a dependency graph manager that generates valid command permutations.
-//! - `PermutationIter` is a stack-safe, non-recursive iterator for these permutations.
-//! - The `CmdExecutor` and `Logger` traits allow for customization of I2C operations and logging.
+//! - [`Explorer`] manages a dependency graph of commands and produces only
+//!   valid permutations that satisfy the declared constraints.
+//! - [`PermutationIter`] generates these permutations using an iterative,
+//!   stack-safe backtracking algorithm (no recursion).
+//! - [`CmdExecutor`] abstracts the execution of a command on the I2C bus.
+//! - [`Logger`] provides pluggable logging backends (serial console, null logger, etc.).
 //!
-//! ## Key Refinements
-//! 1. **Separation of Concerns**: The core algorithm (`PermutationIter`) is separate from
-//!    the I2C execution logic (`explore`).
-//! 2. **Iterator-based API**: The `permutations()` method returns an iterator,
-//!    making the code more testable and composable.
-//! 3. **Generic Capacity**: `CMD_CAPACITY` is now a generic parameter `N`,
-//!    allowing for code reuse across devices with different memory constraints.
-//! 4. **Abstracted Logging**: A `Logger` trait is introduced for flexible logging,
-//!    reducing RAM/ROM usage on tiny microcontrollers.
-//! 5. **Robust Error Handling**: The `ExplorerError` enum is expanded to include
-//!    dependency cycles and other runtime issues.
+//! ## Key Features
+//! 1. **Separation of Concerns**: The permutation engine (`PermutationIter`) is
+//!    isolated from bus execution logic (`explore`).
+//! 2. **Iterator-based API**: The [`Explorer::permutations`] method yields an
+//!    iterator, making the algorithm testable and composable.
+//! 3. **Generic Capacity**: The const generic `N` defines the maximum command
+//!    capacity at compile time, enabling efficient use on resource-constrained
+//!    microcontrollers.
+//! 4. **Flexible Logging**: The [`Logger`] trait supports both formatted and
+//!    lightweight logging without allocating large buffers.
+//! 5. **Robust Error Handling**: [`ExplorerError`] reports dependency cycles,
+//!    buffer exhaustion, and runtime execution issues explicitly.
 //!
-//! ## Usage
+//! ## Typical Use Case
+//! - Bring-up of a new I2C peripheral when the required initialization sequence
+//!   is undocumented or incomplete.
+//! - Automated discovery of valid command orderings under dependency constraints.
+//! - Filtering of device addresses that respond consistently to a tested sequence.
+//!
+//! ## Example
 //! ```ignore
-//! use crate::{Explorer, CmdNode, I2cCompat, Logger, CmdExecutor};
+//! use dvcdvg::prelude::*;
 //! use heapless::Vec;
 //!
-//! // Example implementations for a specific platform
+//! // Example executor for a specific I2C implementation.
 //! struct MyExecutor;
-//! impl<I2C: I2cCompat> CmdExecutor<I2C> for MyExecutor {
-//!     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), crate::explorer::ExecutorError> {
-//!         // This example executor only supports single-byte commands for simplicity,
-//!         // and assumes a device protocol that requires a 0x00 control byte.
+//! impl<I2C: crate::compat::I2cCompat> CmdExecutor<I2C> for MyExecutor {
+//!     fn exec(
+//!         &mut self,
+//!         i2c: &mut I2C,
+//!         addr: u8,
+//!         cmd: &[u8]
+//!     ) -> Result<(), crate::explorer::ExecutorError> {
+//!         // Simplified example: prepend 0x00 control byte.
 //!         if cmd.len() != 1 {
 //!             return Err(crate::explorer::ExecutorError::ExecFailed);
 //!         }
 //!         let buf = [0x00, cmd[0]];
-//!         i2c.write(addr, &buf).map_err(|e| crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr))))
+//!         i2c.write(addr, &buf)
+//!             .map_err(|e| crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr))))
 //!     }
 //! }
+//!
+//! // Dummy logger that ignores messages.
 //! struct NullLogger;
 //! impl Logger for NullLogger {
 //!     fn log_info(&mut self, _msg: &str) {}
 //!     fn log_warning(&mut self, _msg: &str) {}
 //!     fn log_error(&mut self, _msg: &str) {}
-//!     fn log_info_fmt<F>(&mut self, _fmt: F) where F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error>, {}
-//!     fn log_error_fmt<F>(&mut self, _fmt: F) where F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error>, {}
+//!     fn log_info_fmt<F>(&mut self, _fmt: F)
+//!     where F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error> {}
+//!     fn log_error_fmt<F>(&mut self, _fmt: F)
+//!     where F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error> {}
 //! }
 //!
-//! // Define commands with dependencies
+//! // Define candidate commands with dependencies.
 //! const CAPACITY: usize = 32;
 //! let cmds = &[
 //!     CmdNode { bytes: &[0x01], deps: &[] },
-//!     CmdNode { bytes: &[0x02], deps: &[0] }, // Depends on the first command at index 0
+//!     CmdNode { bytes: &[0x02], deps: &[0] }, // depends on first command
 //!     CmdNode { bytes: &[0x03], deps: &[0] },
 //! ];
 //!
-//! // The generic parameter 32 matches the capacity of the Vecs
 //! let explorer = Explorer::<CAPACITY> { sequence: cmds };
 //! let mut executor = MyExecutor;
 //! let mut logger = NullLogger;
-//! let mut i2c = // ...
+//! let mut i2c = /* platform-specific I2C impl */;
 //!
 //! let result = explorer.explore(&mut i2c, &mut executor, &mut logger);
 //! if let Err(e) = result {
-//!     // The logger here would be a more verbose one, e.g., one that prints to a serial console
 //!     logger.log_error(&format!("Exploration failed: {:?}", e));
 //! }
 //! ```
+
 use crate::compat::ascii;
 use core::fmt::Write;
 use heapless::{String, Vec};
