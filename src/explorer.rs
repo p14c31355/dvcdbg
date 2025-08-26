@@ -93,6 +93,7 @@ pub enum ExplorerError {
 /// Errors that can occur during command execution.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ExecutorError {
+    /// The command failed to execute due to an I2C error.
     I2cError(crate::error::ErrorKind),
     /// The command failed to execute (e.g., NACK, I/O error).
     ExecFailed,
@@ -146,9 +147,9 @@ impl Logger for NullLogger {
     {
     }
 
-    fn log_error_fmt<F>(&mut self, fmt: F)
+    fn log_error_fmt<F>(&mut self, _fmt: F)
     where
-        F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>;
+        F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
     {
 
     }
@@ -269,12 +270,11 @@ impl<'a, const N: usize> Explorer<'a, N> {
         L: Logger,
     {
         let mut active_addrs: Vec<u8, I2C_ADDRESS_COUNT> = (I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END).collect();
-        let mut solved_addrs = [false; I2C_ADDRESS_COUNT];
         let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
         let mut permutation_count = 0;
 
         let iter = self.permutations()?;
-        logger.log_info("[explorer] Starting permutation exploration...");
+        logger.log_info("[explorer] Starting permutation exploration...\r\n");
 
         for sequence in iter {
             permutation_count += 1;
@@ -282,34 +282,35 @@ impl<'a, const N: usize> Explorer<'a, N> {
             let mut next_active_addrs: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
 
             for &addr in active_addrs.iter() {
-            let mut all_ok = true;
-            for &cmd in sequence.iter() {
-                if let Err(e) = executor.exec(i2c, addr, cmd) {
-                    all_ok = false;
-                    logger.log_error_fmt(|buf| {
-                        write!(buf, "[explorer] Execution failed for addr ")?;
-                        ascii::write_bytes_hex_prefixed(buf, &[addr])?;
-                        write!(buf, ": {:?}\r\n", e)?;
-                        Ok(())
-                    });
-                    
-                    if !solved_addrs[addr as usize] {
-                        solved_addrs[addr as usize] = true;
-                        found_addresses.push(addr).map_err(|_| ExplorerError::BufferOverflow)?;
+                let mut all_ok = true;
+                for &cmd in sequence.iter() {
+                    if let Err(e) = executor.exec(i2c, addr, cmd) {
+                        all_ok = false;
+                        logger.log_error_fmt(|buf| {
+                            write!(buf, "[explorer] Execution failed for addr ")?;
+                            ascii::write_bytes_hex_prefixed(buf, &[addr])?;
+                            write!(buf, ": {:?}\r\n", e)?;
+                            Ok(())
+                        });
+                        break;
                     }
+                }
+                if all_ok {
                     next_active_addrs.push(addr).map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
             active_addrs = next_active_addrs;
             if active_addrs.is_empty() {
                 break;
-                }
             }
+        }
         
+        found_addresses.extend_from_slice(&active_addrs).map_err(|_| ExplorerError::BufferOverflow)?;
+
         logger.log_info_fmt(|buf| {
             writeln!(
                 buf,
-                "[explorer] Exploration complete. {} addresses solved across {} permutations.",
+                "[explorer] Exploration complete. {} addresses found across {} permutations.",
                 found_addresses.len(),
                 permutation_count
             )
