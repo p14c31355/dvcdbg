@@ -195,10 +195,14 @@ impl<'a, const N: usize> Explorer<'a, N> {
         }
 
         let mut initial_in_degree = Vec::<usize, N>::new();
- initial_in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::BufferOverflow)?;
+        initial_in_degree
+            .resize(self.sequence.len(), 0)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
 
         let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
-        adj_list_rev.resize(self.sequence.len(), Vec::new()).map_err(|_| ExplorerError::BufferOverflow)?;
+        adj_list_rev
+            .resize(self.sequence.len(), Vec::new())
+            .map_err(|_| ExplorerError::BufferOverflow)?;
 
         for (i, node) in self.sequence.iter().enumerate() {
             // The in-degree of a node is the number of dependencies it has.
@@ -208,7 +212,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
                 // Add 'i' to the list of nodes that depend on 'dep_idx'
-                adj_list_rev[dep_idx].push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+                adj_list_rev[dep_idx]
+                    .push(i)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
@@ -407,7 +413,9 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             if self.in_degree[idx] == 0 {
                 // Make choice: Add this node to the current permutation
                 // Note: unwrap() is used here assuming N is sufficiently large based on initial checks.
-                self.current_permutation.push(self.sequence[idx].bytes).unwrap();
+                self.current_permutation
+                    .push(self.sequence[idx].bytes)
+                    .unwrap();
                 self.used[idx] = true; // Mark as used
 
                 // Decrement in-degrees for all nodes that depend on this one
