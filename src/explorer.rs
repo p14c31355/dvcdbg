@@ -202,7 +202,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
             for &dep_idx in node.deps.iter() {
                 // Basic validation for dependency index
                 if dep_idx >= self.sequence.len() {
-                    return Err(ExplorerError::BufferOverflow); // Or a more specific error like InvalidDependencyIndex
+                    return Err(ExplorerError::InvalidDependencyIndex); // Or a more specific error like InvalidDependencyIndex
                 }
                 adj_list_rev[dep_idx]
                     .push(i)
