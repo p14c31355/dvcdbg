@@ -134,19 +134,19 @@ impl Logger for NullLogger {
 }
 
 /// The core explorer, now a generic dependency graph manager.
-pub struct Explorer<'a> {
+pub struct Explorer<'a, const N: usize> {
     pub sequence: &'a [CmdNode<'a>],
 }
 
 /// An iterator that generates valid I2C command permutations.
-pub struct PermutationIter<'a> {
+pub struct PermutationIter<'a, const N: usize> {
     sequence: &'a [CmdNode<'a>],
-    staged: Vec<&'a [u8], 128>,
-    unresolved_indices: Vec<usize, 128>,
-    current_permutation: Vec<&'a [u8], 128>,
-    used: Vec<bool, 128>,
-    used_indices: [bool; 128], // Bitmask for O(1) checks
-    path_stack: Vec<usize, 128>,
+    staged: Vec<&'a [u8], N>,
+    unresolved_indices: Vec<usize, N>,
+    current_permutation: Vec<&'a [u8], N>,
+    used: Vec<bool, N>,
+    used_indices: [bool; N], // Bitmask for O(1) checks
+    path_stack: Vec<usize, N>,
     is_done: bool,
 }
 
@@ -155,19 +155,19 @@ pub struct ExploreResult {
     pub permutations_tested: usize,
 }
 
-impl<'a> Explorer<'a> {
+impl<'a, const N: usize> Explorer<'a, N> {
     /// Performs an initial topological sort to stage commands without unresolved dependencies.
     fn stage(
         &self,
     ) -> Result<
         (
-            Vec<&'a [u8], 128>,
-            Vec<usize, 128>,
-            [bool; 128],
+            Vec<&'a [u8], N>,
+            Vec<usize, N>,
+            [bool; N],
         ),
         ExplorerError,
     > {
-        let mut in_degree = Vec::<usize, 128>::new();
+        let mut in_degree = Vec::<usize, N>::new();
         in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::BufferOverflow)?;
 
         for node in self.sequence.iter() {
@@ -176,15 +176,15 @@ impl<'a> Explorer<'a> {
             }
         }
         
-        let mut queue = Vec::<usize, 128>::new();
+        let mut queue = Vec::<usize, N>::new();
         for (i, &degree) in in_degree.iter().enumerate() {
             if degree == 0 {
                 queue.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
-        let mut staged: Vec<&'a [u8], 128> = Vec::new();
-        let mut staged_indices = [false; 128];
+        let mut staged: Vec<&'a [u8], N> = Vec::new();
+        let mut staged_indices = [false; N];
         let mut staged_count = 0;
         let mut queue_idx = 0;
         
@@ -221,7 +221,7 @@ impl<'a> Explorer<'a> {
     }
 
     /// Returns a stack-safe iterator for all valid command permutations.
-    pub fn permutations(&self) -> Result<PermutationIter<'a>, ExplorerError> {
+    pub fn permutations(&self) -> Result<PermutationIter<'a, N>, ExplorerError> {
         let (staged, unresolved_indices, staged_indices) = self.stage()?;
 
         let mut used = Vec::new();
@@ -311,8 +311,8 @@ impl<'a> Explorer<'a> {
     }
 }
 
-impl<'a> Iterator for PermutationIter<'a> {
-    type Item = Vec<&'a [u8], 128>;
+impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
+    type Item = Vec<&'a [u8], N>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_done {
@@ -345,7 +345,7 @@ impl<'a> Iterator for PermutationIter<'a> {
     }
 }
 
-impl<'a> PermutationIter<'a> {
+impl<'a, const N: usize> PermutationIter<'a, N> {
     fn try_extend(&mut self) -> bool {
         let last_pos = self.path_stack.last().map(|&p| p + 1).unwrap_or(0);
         for pos in last_pos..self.unresolved_indices.len() {

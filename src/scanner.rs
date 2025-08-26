@@ -361,7 +361,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 /// # }
 /// ```
 pub fn run_explorer<I2C, S, const N: usize>(
-    explorer: &crate::explorer::Explorer<'_>,
+    explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
     init_sequence: &[u8],
