@@ -341,7 +341,6 @@ pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
     explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
-    ctrl_byte: u8,
     init_sequence: &[u8],
     prefix: u8,
     log_level: LogLevel,
@@ -354,7 +353,7 @@ where
     if let LogLevel::Verbose = log_level {
         let _ = writeln!(serial, "[log] Scanning I2C bus...");
     }
-    let successful_seq = crate::scanner::scan_init_sequence(i2c, serial, ctrl_byte, init_sequence, log_level);
+    let successful_seq = crate::scanner::scan_init_sequence(i2c, serial, prefix, init_sequence, log_level);
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
     let _ = writeln!(serial, "[log] Start driver safe init");
 
