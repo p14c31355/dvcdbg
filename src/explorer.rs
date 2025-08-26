@@ -156,19 +156,29 @@ pub struct ExploreResult {
 
 impl<'a, const N: usize> Explorer<'a, N> {
     /// Performs an initial topological sort to stage commands without unresolved dependencies.
-    fn stage(&self) -> Result<(Vec<&'a [u8], N>, Vec<usize, N>), ExplorerError> {
+    fn stage(
+        &self,
+    ) -> Result<
+        (
+            Vec<&'a [u8], N>,
+            Vec<usize, N>,
+            Vec<usize, N>,
+        ),
+        ExplorerError,
+    > {
         if self.sequence.len() > N {
             return Err(ExplorerError::TooManyCommands);
         }
+
         let mut staged: Vec<&'a [u8], N> = Vec::new();
-        let mut remaining: Vec<usize, N> = (0..self.sequence.len()).collect();
         let mut staged_indices = Vec::<usize, N>::new();
+        let mut remaining_indices: Vec<usize, N> = (0..self.sequence.len()).collect();
 
         loop {
             let before = staged.len();
             let mut i = 0;
-            while i < remaining.len() {
-                let node_idx = remaining[i];
+            while i < remaining_indices.len() {
+                let node_idx = remaining_indices[i];
                 let node = &self.sequence[node_idx];
                 let deps_satisfied = node
                     .deps
@@ -178,25 +188,25 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 if deps_satisfied {
                     staged.push(node.bytes).map_err(|_| ExplorerError::TooManyCommands)?;
                     staged_indices.push(node_idx).map_err(|_| ExplorerError::TooManyCommands)?;
-                    remaining.swap_remove(i);
+                    remaining_indices.swap_remove(i);
                 } else {
                     i += 1;
                 }
             }
 
             if staged.len() == before {
-                if !remaining.is_empty() {
+                if !remaining_indices.is_empty() {
                     return Err(ExplorerError::DependencyCycle);
                 }
                 break;
             }
         }
-        Ok((staged, remaining))
+        Ok((staged, remaining_indices, staged_indices))
     }
 
     /// Returns a stack-safe iterator for all valid command permutations.
     pub fn permutations(&self) -> Result<PermutationIter<'a, N>, ExplorerError> {
-        let (staged, unresolved_indices) = self.stage()?;
+        let (staged, unresolved_indices, staged_indices) = self.stage()?;
 
         let mut staged_and_current_indices = Vec::new();
         for i in staged_indices {
