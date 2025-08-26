@@ -318,6 +318,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 /// - `I2C`: The I2C interface type that implements `crate::compat::I2cCompat`.
 /// - `S`: The serial interface type used for logging, implementing `core::fmt::Write`.
 /// - `N`: A const generic for the maximum number of commands.
+/// - `BUF_CAP`: A const generic for the command buffer capacity.
 ///
 /// # Parameters
 ///
@@ -344,10 +345,11 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 /// let mut i2c = /* your I2C instance */;
 /// let mut serial = /* your serial instance */;
 /// let init_sequence = [0u8; 16]; // Example initial sequence
-/// const CAPACITY: usize = 32;
-/// let explorer = Explorer { sequence: &[] }; // Dummy explorer
+/// const EXPLORER_CAP: usize = 32;
+/// const BUF_CAP: usize = 128;
+/// let explorer = Explorer::<EXPLORER_CAP> { sequence: &[] }; // Dummy explorer
 ///
-/// run_explorer(
+/// run_explorer::<_, _, EXPLORER_CAP, BUF_CAP>(
 ///     &explorer,
 ///     &mut i2c,
 ///     &mut serial,
@@ -358,7 +360,7 @@ fn log_differences<W: core::fmt::Write>(serial: &mut W, expected: &[u8], detecte
 /// # Ok(())
 /// # }
 /// ```
-pub fn run_explorer<I2C, S, const N: usize>(
+pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
     explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -461,7 +463,7 @@ where
     }
 
     let mut serial_logger = SerialLogger::new(serial);
-    let mut executor = PrefixExecutor::new(prefix, successful_seq);
+    let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, successful_seq);
 
     for addr in explorer.explore(i2c, &mut executor, &mut serial_logger)?.found_addrs.iter() {
         let _ = write!(serial, "[driver] Found device at ");
