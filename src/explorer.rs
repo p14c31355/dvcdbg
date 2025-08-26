@@ -211,7 +211,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         }
 
         // Cycle detection using a modified Kahn's algorithm
-        let mut temp_in_degree = initial_in_degree.clone().map_err(|_| ExplorerError::BufferOverflow)?;
+        let mut temp_in_degree = initial_in_degree.clone();
         let mut q = Vec::<usize, N>::new();
         for i in 0..self.sequence.len() {
             if temp_in_degree[i] == 0 {

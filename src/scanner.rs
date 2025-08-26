@@ -4,8 +4,7 @@
 //! This module provides functions to scan the I2C bus for connected devices,
 //! optionally testing with control bytes or initialization command sequences.
 
-use crate::compat::{HalErrorExt, ascii};
-use heapless::Vec;
+use crate::compat::{ascii, HalErrorExt};
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -32,11 +31,7 @@ pub enum LogLevel {
 /// - `$error_trait`: The trait that defines the I2C error type (e.g., `embedded_hal::i2c::Error`).
 /// - `$write_trait`: The trait that defines the serial writer (e.g., `core::fmt::Write`).
 macro_rules! define_scanner {
-    ($i2c_trait:ident, $error_trait:ident, $write_trait:ident) => {
-        use $i2c_trait;
-        use $error_trait;
-        use $write_trait;
-
+    ($i2c_trait:path, $error_trait:path, $write_trait:path) => {
         /// Internal function to perform an I2C scan.
         ///
         /// Attempts to write a single byte to each address in the I2C range.
@@ -80,7 +75,7 @@ macro_rules! define_scanner {
                         }
                         Err(e) => {
                             let e_kind = e.to_compat(Some(addr));
-                            if e_kind == crate::error::ErrorKind::NACK {
+                            if e_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
                                 continue;
                             }
                             if let LogLevel::Verbose = log_level {
@@ -93,7 +88,7 @@ macro_rules! define_scanner {
                     }
                 }
                 if success {
-                    found_addrs.push(addr).map_err(|_| crate::error::ErrorKind::BufferOverflow)?;
+                    found_addrs.push(addr).map_err(|_| crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow))?;
                     if let LogLevel::Verbose = log_level {
                         let _ = writeln!(serial, " Found");
                     }
@@ -367,7 +362,7 @@ where
     if let LogLevel::Verbose = log_level {
         let _ = writeln!(serial, "[log] Scanning I2C bus...");
     }
-    let successful_seq = scan_init_sequence(i2c, serial, init_sequence, log_level);
+    let successful_seq = crate::scanner::scan_init_sequence(i2c, serial, init_sequence, log_level);
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
     let _ = writeln!(serial, "[log] Start driver safe init");
 
@@ -496,3 +491,5 @@ where
 
     Ok(())
 }
+
+define_scanner!(crate::compat::I2cCompat, crate::compat::HalErrorExt, core::fmt::Write);
