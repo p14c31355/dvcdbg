@@ -518,16 +518,12 @@ pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize
 ) -> Result<(), crate::explorer::ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
-    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt + core::fmt::Debug,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
     let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
-
     serial_logger.log_info_fmt(|buf| {
-        write!(
-            buf,
-            "[explorer] Attempting to get one topological sort...\r\n"
-        )?;
+        write!(buf, "[explorer] Attempting to get one topological sort...\r\n")?;
         Ok(())
     });
 
@@ -544,55 +540,18 @@ where
 
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, heapless::Vec::new());
 
-    let mut all_ok = true;
     for &cmd_bytes in single_sequence.iter() {
-        if let Err(e) = executor.exec(i2c, target_addr, cmd_bytes, &mut serial_logger) {
-            all_ok = false;
-            serial_logger.log_error_fmt(|buf| {
-                buf.write_fmt(format_args!(
-                    "[explorer] Execution failed for addr 0x{target_addr:02X}: "
-                ))?;
-                match e {
-                    // e is ExecutorError
-                    crate::explorer::ExecutorError::I2cError(kind) => {
-                        buf.write_fmt(format_args!("I2C Error: {kind:?}"))?; // kind is ErrorKind
-                    }
-                    crate::explorer::ExecutorError::ExecFailed => {
-                        buf.write_fmt(format_args!("Execution Failed"))?;
-                    }
-                    crate::explorer::ExecutorError::BufferOverflow => {
-                        buf.write_fmt(format_args!("Buffer Overflow"))?;
-                    }
-                }
-                buf.write_fmt(format_args!("\r\n"))?;
-                Ok(())
-            });
-            break;
-        }
+        executor.exec(i2c, target_addr, cmd_bytes, &mut serial_logger)?;
     }
 
-    if all_ok {
-        serial_logger.log_info_fmt(|buf| {
-            write!(
-                buf,
-                "[explorer] Single sequence execution complete for 0x{:02X}.\r\n",
-                target_addr
-            )?;
-            Ok(())
-        });
+    serial_logger.log_info_fmt(|buf| {
+        write!(buf, "[explorer] Single sequence execution complete for 0x{:02X}.\r\n", target_addr)?;
         Ok(())
-    } else {
-        serial_logger.log_error_fmt(|buf| {
-            write!(
-                buf,
-                "[explorer] Single sequence execution failed for 0x{:02X}.\r\n",
-                target_addr
-            )?;
-            Ok(())
-        });
-        Err(crate::explorer::ExplorerError::ExecutionFailed)
-    }
+    });
+
+    Ok(())
 }
+
 
 define_scanner!(
     crate::compat::I2cCompat,

@@ -125,6 +125,16 @@ pub enum ExecutorError {
     BufferOverflow,
 }
 
+impl From<ExecutorError> for ExplorerError {
+    fn from(error: ExecutorError) -> Self {
+        match error {
+            ExecutorError::I2cError(_) => ExplorerError::ExecutionFailed,
+            ExecutorError::ExecFailed => ExplorerError::ExecutionFailed,
+            ExecutorError::BufferOverflow => ExplorerError::BufferOverflow,
+        }
+    }
+}
+
 /// Represents a single I2C command in the dependency graph.
 ///
 /// The dependency is now on the index of the dependent command in the sequence.
