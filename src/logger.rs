@@ -8,6 +8,12 @@ pub enum LogLevel {
     Quiet,
 }
 
+impl<'a, S: core::fmt::Write> core::fmt::Write for SerialLogger<'a, S> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.writer.write_str(s)
+    }
+}
+
 /// Trait for logging progress and results.
 pub trait Logger {
     fn log_info(&mut self, msg: &str);
