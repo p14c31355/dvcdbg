@@ -147,7 +147,7 @@ pub trait CmdExecutor<I2C> {
         logger: &mut S,
     ) -> Result<(), ExecutorError>;
 }
-//
+
 /// The core explorer, now a generic dependency graph manager.
 pub struct Explorer<'a, const N: usize> {
     pub sequence: &'a [CmdNode<'a>],

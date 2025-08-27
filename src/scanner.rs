@@ -37,13 +37,16 @@ where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
-    fn exec<S: core::fmt::Write>(
-        &mut self,
-        i2c: &mut I2C,
-        addr: u8,
-        cmd: &[u8],
-        logger: &mut S,
-    ) -> Result<(), crate::explorer::ExecutorError> {
+    fn exec<S>(
+    &mut self,
+    i2c: &mut I2C,
+    addr: u8,
+    cmd: &[u8],
+    logger: &mut S,
+) -> Result<(), crate::explorer::ExecutorError>
+where
+    S: core::fmt::Write + crate::logger::Logger,
+{
         fn short_delay() {
             for _ in 0..8_000 {
                 core::hint::spin_loop();
@@ -548,7 +551,7 @@ where
 
     let mut all_ok = true;
     for &cmd_bytes in single_sequence.iter() {
-        if let Err(e) = executor.exec(i2c, target_addr, cmd_bytes) {
+        if let Err(e) = executor.exec(i2c, target_addr, cmd_bytes, &mut serial_logger) {
             all_ok = false;
             serial_logger.log_error_fmt(|buf| {
                 write!(
