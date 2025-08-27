@@ -5,6 +5,8 @@
 //! optionally testing with control bytes or initialization command sequences.
 
 use crate::compat::{HalErrorExt, ascii};
+use crate::explorer::{CmdExecutor, ExplorerError, Logger};
+use core::fmt::Write;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -375,87 +377,6 @@ where
     Ok(())
 }
 
-// Wrapper for serial interface to implement the Logger trait
-        pub struct SerialLogger<'a, S: core::fmt::Write> {
-        writer: &'a mut S,
-        buffer: heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
-        log_level: LogLevel,
-    }
-
-    impl<'a, S: core::fmt::Write> SerialLogger<'a, S> {
-        fn new(writer: &'a mut S, log_level: LogLevel) -> Self {
-            Self {
-                writer,
-                buffer: heapless::String::new(),
-                log_level,
-            }
-        }
-    }
-
-    impl<'a, S: core::fmt::Write> crate::explorer::Logger for SerialLogger<'a, S> {
-        fn log_info(&mut self, msg: &str) {
-            if self.log_level == LogLevel::Verbose {
-                let _ = self.writer.write_str(msg);
-            }
-        }
-        fn log_warning(&mut self, msg: &str) {
-            if self.log_level != LogLevel::Quiet {
-                let _ = self.writer.write_str(msg);
-            }
-        }
-        fn log_error(&mut self, msg: &str) {
-            if self.log_level != LogLevel::Quiet {
-                let _ = self.writer.write_str(msg);
-            }
-        }
-
-        fn log_info_fmt<F>(&mut self, fmt: F)
-        where
-            F: FnOnce(
-                &mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
-            ) -> Result<(), core::fmt::Error>,
-        {
-            if self.log_level == LogLevel::Verbose {
-                self.buffer.clear();
-                if fmt(&mut self.buffer).is_ok() {
-                    let _ = self.writer.write_str(self.buffer.as_str());
-                }
-            }
-        }
-
-        fn log_error_fmt<F>(&mut self, fmt: F)
-        where
-            F: FnOnce(
-                &mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
-            ) -> Result<(), core::fmt::Error>,
-        {
-            if self.log_level != LogLevel::Quiet {
-                self.buffer.clear();
-                if fmt(&mut self.buffer).is_ok() {
-                    let _ = self.writer.write_str(self.buffer.as_str());
-                }
-            }
-        }
-    }
-
-    // Executor that prepends a prefix and applies an initial sequence once per address.
-    pub struct PrefixExecutor<const BUF_CAP: usize> {
-        prefix: u8,
-        init_sequence: heapless::Vec<u8, 64>,
-        initialized_addrs: [bool; 128], // Use a bitmask for O(1) checks
-        buffer: heapless::Vec<u8, BUF_CAP>,
-    }
-
-    impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
-        fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
-            Self {
-                prefix,
-                init_sequence,
-                initialized_addrs: [false; 128],
-                buffer: heapless::Vec::new(),
-            }
-        }
-    }
 
     impl<I2C, const BUF_CAP: usize> crate::explorer::CmdExecutor<I2C> for PrefixExecutor<BUF_CAP>
     where
@@ -533,7 +454,7 @@ pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize
     target_addr: u8,
     prefix: u8,
     log_level: LogLevel,
-) -> Result<(), crate::explorer::ExplorerError>
+) -> Result<(), ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -553,7 +474,7 @@ where
         Ok(())
     });
 
-    let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, heapless::Vec::new()); // No init_sequence needed here if it's part of explorer_cmds
+    let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, heapless::Vec::new());
 
     let mut all_ok = true;
     for &cmd_bytes in single_sequence.iter() {
@@ -571,16 +492,16 @@ where
 
     if all_ok {
         serial_logger.log_info_fmt(|buf| {
-            write!(buf, "[explorer] Single sequence execution complete for 0x{:02X}.\r\n", target_addr)?;
+            write!(buf, "[explorer] Single sequence execution complete for 0x{:02X}.\\r\\n", target_addr)?;
             Ok(())
         });
         Ok(())
     } else {
         serial_logger.log_error_fmt(|buf| {
-            write!(buf, "[explorer] Single sequence execution failed for 0x{:02X}.\r\n", target_addr)?;
+            write!(buf, "[explorer] Single sequence execution failed for 0x{:02X}.\\r\\n", target_addr)?;
             Ok(())
         });
-        Err(crate::explorer::ExplorerError::ExecutionFailed)
+        Err(ExplorerError::ExecutionFailed)
     }
 }
 
