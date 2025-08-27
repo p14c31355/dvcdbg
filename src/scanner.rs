@@ -550,6 +550,10 @@ where
         Ok(())
     });
 
+    for node_idx in 0..explorer.sequence.len() {
+        writeln!(serial_logger, "Checking node {}", node_idx).ok();
+    }
+
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, heapless::Vec::new());
 
     for &cmd_bytes in single_sequence.iter() {
