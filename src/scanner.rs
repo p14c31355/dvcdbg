@@ -43,22 +43,44 @@ where
         addr: u8,
         cmd: &[u8],
     ) -> Result<(), crate::explorer::ExecutorError> {
-        let addr_idx = addr as usize;
-
-        // Check if the address has already been initialized (O(1) check)
-        if !self.initialized_addrs[addr_idx] {
-            // First, send the init_sequence with the prefix, one command at a time.
-            for &c in self.init_sequence.iter() {
-                let command = [self.prefix, c];
-                i2c.write(addr, &command).map_err(|e| {
-                    crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr)))
-                })?;
-            }
-            // Mark this address as initialized
-            self.initialized_addrs[addr_idx] = true;
+        fn short_delay() {
+            // 非依存の簡易スピン。プラットフォームに合わせて調整して下さい。
+            for _ in 0..8_000 { core::hint::spin_loop(); }
         }
 
-        // Then, send the regular command. Reuse the buffer.
+        let addr_idx = addr as usize;
+
+        if !self.initialized_addrs[addr_idx] {
+            for &c in self.init_sequence.iter() {
+                let command = [self.prefix, c];
+
+                // リトライループ（3回）
+                let mut ok = false;
+                for attempt in 0..3 {
+                    match i2c.write(addr, &command) {
+                        Ok(_) => { ok = true; break; }
+                        Err(e) => {
+                            // すぐログ／デバッグ出す（Logger があれば使う）
+                            // ここは呼び出し側の Logger に依存するため、最低限は無視して進める
+                            let _ = e.to_compat(Some(addr)); // 使ってログ出す等
+                            short_delay();
+                        }
+                    }
+                }
+                if !ok {
+                    return Err(crate::explorer::ExecutorError::I2cError(
+                        crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
+                    ));
+                }
+                // 少し待つ（コマンド間）
+                short_delay();
+            }
+            self.initialized_addrs[addr_idx] = true;
+            // Vpp/ChargePump 等の直後は少し長めに待つこと（デバイス依存）
+            short_delay();
+        }
+
+        // send regular command in one transaction
         self.buffer.clear();
         self.buffer
             .push(self.prefix)
@@ -67,10 +89,26 @@ where
             .extend_from_slice(cmd)
             .map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
 
-        i2c.write(addr, &self.buffer)
-            .map_err(|e| crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr))))
+        // write + retry
+        for _ in 0..3 {
+            match i2c.write(addr, &self.buffer) {
+                Ok(_) => {
+                    short_delay();
+                    return Ok(());
+                }
+                Err(e) => {
+                    let _ = e.to_compat(Some(addr)); // convert & maybe log
+                    short_delay();
+                }
+            }
+        }
+
+        Err(crate::explorer::ExecutorError::I2cError(
+            crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
+        ))
     }
 }
+
 
 /// Macro to define common I2C scanner functions.
 ///

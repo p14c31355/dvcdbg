@@ -36,7 +36,7 @@
 //!
 //! ## Example
 //! ```ignore
-//! use dvcdvg::prelude::*;
+//! use dvcdbg::prelude::*;
 //! use heapless::Vec;
 //!
 //! // Example executor for a specific I2C implementation.
@@ -280,7 +280,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut solved_addrs = [false; I2C_ADDRESS_COUNT];
         let mut permutation_count = 0;
 
-        let iter = self.permutations()?;
+        let iter = self.permutating()?;
         logger.log_info("[explorer] Starting permutation exploration...\r\n");
 
         for sequence in iter {
@@ -479,7 +479,8 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 }
 
                 self.path_stack.push(idx).unwrap(); // Push the original index of the command
-                self.loop_start_indices.push(0).unwrap(); // Reset loop start for the next level (start from 0 for the next command)
+                // Store the next starting point for this level (for backtracking to this level)
+                self.loop_start_indices.push(idx + 1).unwrap(); 
                 return true; // Successfully extended
             }
         }
@@ -508,13 +509,12 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 self.in_degree[dependent_idx] += 1;
             }
 
-            self.loop_start_indices.pop(); // Pop the loop start for the level we just finished
+            // Pop the loop start for the level we just finished. The next search start for the parent
+            // was already set when this level was pushed.
+            self.loop_start_indices.pop(); 
 
-            // If there's a parent level, update its loop_start_indices to try the next sibling
-            if let Some(parent_loop_start_idx) = self.loop_start_indices.last_mut() {
-                *parent_loop_start_idx = last_added_idx + 1; // Start search from next sibling
-            } else {
-                // If path_stack is empty after pop, we've backtracked past the root
+            // If path_stack is empty after pop, we've backtracked past the root
+            if self.path_stack.is_empty() {
                 self.is_done = true;
                 return false;
             }
