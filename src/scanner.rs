@@ -331,7 +331,7 @@ macro_rules! define_scanner {
                                     &[addr],
                                 );
                                 let _ = write!(serial, " responding to ");
-                                let _ =
+                                let _ = 
                                     $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[cmd]);
                                 let _ = writeln!(serial, "");
                             }
@@ -490,7 +490,7 @@ where
             Err(e) => {
                 let _ = writeln!(
                     serial,
-                    "[error] Initial sequence scan failed: {e:?}. Aborting explorer."
+                    "[error] Initial sequence scan failed: {:?}. Aborting explorer.", e
                 );
                 return Err(ExplorerError::ExecutionFailed);
             }
@@ -584,11 +584,19 @@ where
         if let Err(e) = executor.exec(i2c, target_addr, cmd_bytes) {
             all_ok = false;
             serial_logger.log_error_fmt(|buf| {
-                writeln!(
-                    buf,
-                    "[explorer] Execution failed for addr 0x{:02X}: {:?}",
-                    target_addr, e
-                )?;
+                write!(buf, "[explorer] Execution failed for addr 0x{:02X}: ", target_addr)?;
+                match e { // e is ExecutorError
+                    crate::explorer::ExecutorError::I2cError(kind) => {
+                        write!(buf, "I2C Error: {:?}", kind)?; // kind is ErrorKind
+                    },
+                    crate::explorer::ExecutorError::ExecFailed => {
+                        write!(buf, "Execution Failed")?;
+                    },
+                    crate::explorer::ExecutorError::BufferOverflow => {
+                        write!(buf, "Buffer Overflow")?;
+                    },
+                }
+                writeln!(buf, "\r\n")?;
                 Ok(())
             });
             break;
