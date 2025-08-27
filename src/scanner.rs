@@ -528,7 +528,7 @@ where
 {
     let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
     serial_logger.log_info_fmt(|buf| {
-        write!(buf, "[explorer] Attempting to get one topological sort...\r\n")?;
+        write!(buf, "[explorer] Attempting to get one topological sort...\n")?;
         Ok(())
     });
 
@@ -537,7 +537,7 @@ where
     serial_logger.log_info_fmt(|buf| {
         write!(
             buf,
-            "[explorer] Obtained one topological sort. Executing on 0x{:02X}...\r\n",
+            "[explorer] Obtained one topological sort. Executing on 0x{:02X}...\n",
             target_addr
         )?;
         Ok(())

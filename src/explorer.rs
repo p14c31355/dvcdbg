@@ -291,7 +291,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         // An empty sequence means there's nothing to explore,
         // so no valid addresses can be found through this exploration process.
         if self.sequence.is_empty() {
-            logger.log_info("[explorer] No commands provided for exploration. Returning no valid addresses.\r\n");
+            logger.log_info("[explorer] No commands provided for exploration. Returning no valid addresses.");
             return Err(ExplorerError::NoValidAddressesFound);
         }
         let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
@@ -299,7 +299,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut permutation_count = 0;
 
         let iter = self.permutations()?;
-        logger.log_info("[explorer] Starting permutation exploration...\r\n");
+        logger.log_info("[explorer] Starting permutation exploration...");
 
         for sequence in iter {
             permutation_count += 1;

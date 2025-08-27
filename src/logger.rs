@@ -49,19 +49,19 @@ impl<'a, S: core::fmt::Write> SerialLogger<'a, S> {
 impl<'a, S: core::fmt::Write> Logger for SerialLogger<'a, S> {
     fn log_info(&mut self, msg: &str) {
         if self.log_level != LogLevel::Quiet {
-            let _ = writeln!(self.writer, "[Info] {msg}\r");
+            let _ = write!(self.writer, "[Info] {msg}\r\n");
         }
     }
 
     fn log_warning(&mut self, msg: &str) {
         if self.log_level != LogLevel::Quiet {
-            let _ = writeln!(self.writer, "[Warn] {msg}\r");
+            let _ = write!(self.writer, "[Warn] {msg}\r\n");
         }
     }
 
     fn log_error(&mut self, msg: &str) {
         if self.log_level != LogLevel::Quiet {
-            let _ = writeln!(self.writer, "[Error] {msg}\r");
+            let _ = write!(self.writer, "[Error] {msg}\r\n");
         }
     }
 
