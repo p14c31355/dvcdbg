@@ -357,8 +357,26 @@ where
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
     let _ = writeln!(serial, "[log] Start driver safe init");
 
-    // Wrapper for serial interface to implement the Logger trait
-        struct SerialLogger<'a, S: core::fmt::Write> {
+    
+
+    let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, successful_seq);
+    let mut serial_logger = SerialLogger::new(serial, log_level);
+
+    for addr in explorer
+        .explore(i2c, &mut executor, &mut serial_logger)?
+        .found_addrs
+        .iter()
+    {
+        let _ = write!(serial, "[driver] Found device at ");
+        let _ = ascii::write_bytes_hex_prefixed(serial, &[*addr]);
+        let _ = writeln!(serial);
+    }
+
+    Ok(())
+}
+
+// Wrapper for serial interface to implement the Logger trait
+        pub struct SerialLogger<'a, S: core::fmt::Write> {
         writer: &'a mut S,
         buffer: heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
         log_level: LogLevel,
@@ -421,7 +439,7 @@ where
     }
 
     // Executor that prepends a prefix and applies an initial sequence once per address.
-    struct PrefixExecutor<const BUF_CAP: usize> {
+    pub struct PrefixExecutor<const BUF_CAP: usize> {
         prefix: u8,
         init_sequence: heapless::Vec<u8, 64>,
         initialized_addrs: [bool; 128], // Use a bitmask for O(1) checks
@@ -478,22 +496,6 @@ where
                 .map_err(|e| crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr))))
         }
     }
-
-    let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, successful_seq);
-    let mut serial_logger = SerialLogger::new(serial, log_level);
-
-    for addr in explorer
-        .explore(i2c, &mut executor, &mut serial_logger)?
-        .found_addrs
-        .iter()
-    {
-        let _ = write!(serial, "[driver] Found device at ");
-        let _ = ascii::write_bytes_hex_prefixed(serial, &[*addr]);
-        let _ = writeln!(serial);
-    }
-
-    Ok(())
-}
 
 // In src/scanner.rs, add this new function:
 
