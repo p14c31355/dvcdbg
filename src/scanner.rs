@@ -495,6 +495,93 @@ where
     Ok(())
 }
 
+// In src/scanner.rs, add this new function:
+
+/// Runs the I2C explorer to find and execute a single valid command sequence.
+///
+/// This function first obtains one topological sort of the commands from the explorer.
+/// Then, it attempts to execute this single sequence on a specified I2C address.
+/// This is useful for device initialization where only one valid sequence is needed,
+/// avoiding the high computational cost of exploring all permutations.
+///
+/// # Type Parameters
+///
+/// - `I2C`: The I2C interface type that implements `crate::compat::I2cCompat`.
+/// - `S`: The serial interface type used for logging, implementing `core::fmt::Write`.
+/// - `N`: A const generic for the maximum number of commands.
+/// - `BUF_CAP`: A const generic for the command buffer capacity.
+///
+/// # Parameters
+///
+/// - `explorer`: An instance of `Explorer` containing the command nodes and their dependencies.
+/// - `i2c`: The I2C bus instance.
+/// - `serial`: The serial writer for logging.
+/// - `target_addr`: The specific I2C address to execute the sequence on.
+/// - `prefix`: A byte to prepend to every command sent during execution.
+/// - `log_level`: The desired logging level.
+///
+/// # Returns
+///
+/// Returns `Ok(())` if the sequence was successfully executed,
+/// or `Err(ExplorerError)` if an error occurred (e.g., cycle detected, execution failed).
+pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
+    explorer: &crate::explorer::Explorer<'_, N>,
+    i2c: &mut I2C,
+    serial: &mut S,
+    target_addr: u8,
+    prefix: u8,
+    log_level: LogLevel,
+) -> Result<(), crate::explorer::ExplorerError>
+where
+    I2C: crate::compat::I2cCompat,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+    S: core::fmt::Write,
+{
+    let mut serial_logger = SerialLogger::new(serial, log_level);
+
+    serial_logger.log_info_fmt(|buf| {
+        write!(buf, "[explorer] Attempting to get one topological sort...\r\n")?;
+        Ok(())
+    });
+
+    let single_sequence = explorer.get_one_topological_sort()?;
+
+    serial_logger.log_info_fmt(|buf| {
+        write!(buf, "[explorer] Obtained one topological sort. Executing on 0x{:02X}...\r\n", target_addr)?;
+        Ok(())
+    });
+
+    let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, heapless::Vec::new()); // No init_sequence needed here if it's part of explorer_cmds
+
+    let mut all_ok = true;
+    for &cmd_bytes in single_sequence.iter() {
+        if let Err(e) = executor.exec(i2c, target_addr, cmd_bytes) {
+            all_ok = false;
+            serial_logger.log_error_fmt(|buf| {
+                write!(buf, "[explorer] Execution failed for addr ")?;
+                ascii::write_bytes_hex_prefixed(buf, &[target_addr])?;
+                write!(buf, ": {:?}\r\n", e)?;
+                Ok(())
+            });
+            break;
+        }
+    }
+
+    if all_ok {
+        serial_logger.log_info_fmt(|buf| {
+            write!(buf, "[explorer] Single sequence execution complete for 0x{:02X}.\r\n", target_addr)?;
+            Ok(())
+        });
+        Ok(())
+    } else {
+        serial_logger.log_error_fmt(|buf| {
+            write!(buf, "[explorer] Single sequence execution failed for 0x{:02X}.\r\n", target_addr)?;
+            Ok(())
+        });
+        Err(crate::explorer::ExplorerError::ExecutionFailed)
+    }
+}
+
 define_scanner!(
     crate::compat::I2cCompat,
     crate::compat::HalErrorExt,

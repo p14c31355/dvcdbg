@@ -374,6 +374,66 @@ impl<'a, const N: usize> Explorer<'a, N> {
             })
         }
     }
+
+    /// Generates a single valid topological sort of the command sequence.
+    /// This is useful when only one valid ordering is needed, and avoids
+    /// the computational cost of generating all permutations.
+    ///
+    /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
+    /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
+    pub fn get_one_topological_sort(&self) -> Result<Vec<&'a [u8], N>, ExplorerError> {
+        if self.sequence.len() > N {
+            return Err(ExplorerError::TooManyCommands);
+        }
+
+        let mut in_degree = Vec::<usize, N>::new();
+        in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::BufferOverflow)?;
+
+        let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
+        adj_list_rev.resize(self.sequence.len(), Vec::new()).map_err(|_| ExplorerError::BufferOverflow)?;
+
+        for (i, node) in self.sequence.iter().enumerate() {
+            in_degree[i] = node.deps.len();
+            for &dep_idx in node.deps.iter() {
+                if dep_idx >= self.sequence.len() {
+                    return Err(ExplorerError::InvalidDependencyIndex);
+                }
+                adj_list_rev[dep_idx].push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+        }
+
+        let mut q = Vec::<usize, N>::new();
+        for i in 0..self.sequence.len() {
+            if in_degree[i] == 0 {
+                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+        }
+
+        let mut result_sequence = Vec::<&'a [u8], N>::new();
+        let mut head = 0; // Pointer for queue
+
+        while head < q.len() {
+            let u = q[head];
+            head += 1;
+
+            result_sequence.push(self.sequence[u].bytes).map_err(|_| ExplorerError::BufferOverflow)?;
+
+            for &v in adj_list_rev[u].iter() {
+                in_degree[v] -= 1;
+                if in_degree[v] == 0 {
+                    q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
+                }
+            }
+        }
+
+        if result_sequence.len() != self.sequence.len() {
+            // If the resulting sequence doesn't contain all nodes, it implies a cycle
+            // or some nodes were unreachable (which for a valid dependency graph means a cycle).
+            return Err(ExplorerError::DependencyCycle);
+        }
+
+        Ok(result_sequence)
+    }
 }
 
 impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
