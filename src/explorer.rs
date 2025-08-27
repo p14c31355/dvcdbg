@@ -367,11 +367,11 @@ impl<'a, const N: usize> Explorer<'a, N> {
     ///
     /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
     /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
-    pub fn get_one_topological_sort<'a, const N: usize>(
-        sequence: &[CmdNode<'a>; N],
+    pub fn get_one_topological_sort(
+        &self,
         serial: &mut impl core::fmt::Write,
     ) -> Result<[&'a [u8]; N], ExplorerError> {
-        let len = sequence.len();
+        let len = self.sequence.len();
 
         // Initialize in-degree array
         let mut in_degree: [usize; N] = [0; N];
@@ -385,7 +385,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut result_len = 0;
 
         // Topological sort core
-        for (i, node) in sequence.iter().enumerate() {
+        for (i, node) in self.sequence.iter().enumerate() {
             in_degree[i] = node.deps.len();
             for &dep_idx in node.deps.iter() {
                 if dep_idx >= len {
@@ -405,6 +405,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut q: [usize; N] = [0; N];
         let mut head = 0;
         let mut tail = 0;
+        // writeln!(serial, "[debug] initial queue (head=0, tail={}): {:?}", tail, &q[..tail]).ok();
         for i in 0..len {
             if in_degree[i] == 0 {
                 q[tail] = i;
@@ -417,7 +418,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
             let u = q[head];
             head += 1;
 
-            result_sequence[result_len] = sequence[u].bytes;
+            // writeln!(serial, "[debug] head={}, tail={}, result_len={}", head, tail, result_len).ok();
+
+            result_sequence[result_len] = self.sequence[u].bytes;
             result_len += 1;
 
             for i in 0..adj_list_len[u] {
