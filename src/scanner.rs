@@ -5,86 +5,13 @@
 //! optionally testing with control bytes or initialization command sequences.
 
 use crate::compat::{HalErrorExt, ascii};
-use crate::explorer::{CmdExecutor, ExplorerError, Logger};
+use crate::explorer::{CmdExecutor, ExplorerError};
 use core::fmt::Write;
-use heapless::String;
+
+use crate::logger::Logger;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
-
-/// Defines the logging level for scanner functions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LogLevel {
-    /// Log verbose information, including scan progress and detailed errors.
-    Verbose,
-    /// Log only warnings and errors.
-    Normal,
-    /// Suppress all logging output.
-    Quiet,
-}
-
-/// Wrapper for serial interface to implement the Logger trait
-pub struct SerialLogger<'a, S: core::fmt::Write> {
-    writer: &'a mut S,
-    buffer: heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
-    log_level: LogLevel,
-}
-
-impl<'a, S: core::fmt::Write> SerialLogger<'a, S> {
-    pub fn new(writer: &'a mut S, log_level: LogLevel) -> Self {
-        Self {
-            writer,
-            buffer: heapless::String::new(),
-            log_level,
-        }
-    }
-}
-
-impl<'a, S: core::fmt::Write> crate::explorer::Logger for SerialLogger<'a, S> {
-    fn log_info(&mut self, msg: &str) {
-        if self.log_level != LogLevel::Quiet {
-            let _ = writeln!(self.writer, "[log] {msg}\r\n");
-        }
-    }
-
-    fn log_warning(&mut self, msg: &str) {
-        if self.log_level != LogLevel::Quiet {
-            let _ = writeln!(self.writer, "[warn] {msg}\r\n");
-        }
-    }
-
-    fn log_error(&mut self, msg: &str) {
-        if self.log_level != LogLevel::Quiet {
-            let _ = writeln!(self.writer, "[error] {msg}\r\n");
-        }
-    }
-
-    fn log_info_fmt<F>(&mut self, fmt: F)
-    where
-        F: FnOnce(
-            &mut String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
-        ) -> Result<(), core::fmt::Error>,
-    {
-        if self.log_level != LogLevel::Quiet {
-            self.buffer.clear();
-            if fmt(&mut self.buffer).is_ok() {
-                let _ = self.writer.write_str(self.buffer.as_str());
-            }
-        }
-    }
-
-    fn log_error_fmt<F>(&mut self, fmt: F)
-    where
-        F: FnOnce(
-            &mut String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
-        ) -> Result<(), core::fmt::Error>,
-    {
-        self.buffer.clear();
-        if fmt(&mut self.buffer).is_ok() {
-            let _ = self.writer.write_str(self.buffer.as_str());
-        }
-    }
-}
 
 /// A command executor that prepends a prefix to each command.
 pub struct PrefixExecutor<const BUF_CAP: usize> {
@@ -175,17 +102,17 @@ macro_rules! define_scanner {
             i2c: &mut I2C,
             serial: &mut S,
             data: &[u8],
-            log_level: LogLevel,
-        ) -> Result<heapless::Vec<u8, 128>, crate::error::ErrorKind>
+            log_level: $crate::logger::LogLevel,
+        ) -> Result<heapless::Vec<u8, 128>, $crate::error::ErrorKind>
         where
             I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: crate::compat::HalErrorExt,
+            <I2C as $i2c_trait>::Error: $crate::compat::HalErrorExt,
             S: $write_trait,
         {
             let mut found_addrs = heapless::Vec::<u8, 128>::new();
             let mut last_error: Option<crate::error::ErrorKind> = None;
             for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                if let LogLevel::Verbose = log_level {
+                if let $crate::logger::LogLevel::Verbose = log_level {
                     let _ = write!(serial, "[log] Scanning 0x");
                     let _ = ascii::write_bytes_hex_fmt(serial, &[addr]);
                     let _ = write!(serial, "...");
@@ -193,21 +120,21 @@ macro_rules! define_scanner {
                 match i2c.write(addr, data) {
                     Ok(_) => {
                         found_addrs.push(addr).map_err(|_| {
-                            crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+                            $crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
                         })?;
-                        if let LogLevel::Verbose = log_level {
+                        if let $crate::logger::LogLevel::Verbose = log_level {
                             let _ = writeln!(serial, " Found");
                         }
                     }
                     Err(e) => {
                         let e_kind = e.to_compat(Some(addr));
-                        if e_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
-                            if let LogLevel::Verbose = log_level {
+                        if e_kind == $crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
+                            if let $crate::logger::LogLevel::Verbose = log_level {
                                 let _ = writeln!(serial, " No response (NACK)");
                             }
                             continue;
                         }
-                        if let LogLevel::Verbose = log_level {
+                        if let $crate::logger::LogLevel::Verbose = log_level {
                             let _ = write!(serial, "[error] write failed at ");
                             let _ = ascii::write_bytes_hex_fmt(serial, &[addr]);
                             let _ = writeln!(serial, ": {}", e_kind);
@@ -237,21 +164,21 @@ macro_rules! define_scanner {
             i2c: &mut I2C,
             serial: &mut S,
             ctrl_byte: &[u8],
-            log_level: LogLevel,
-        ) -> Result<heapless::Vec<u8, 128>, crate::error::ErrorKind>
+            log_level: $crate::logger::LogLevel,
+        ) -> Result<heapless::Vec<u8, 128>, $crate::error::ErrorKind>
         where
             I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: crate::compat::HalErrorExt,
+            <I2C as $i2c_trait>::Error: $crate::compat::HalErrorExt,
             S: $write_trait,
         {
-            if let LogLevel::Verbose = log_level {
+            if let $crate::logger::LogLevel::Verbose = log_level {
                 let _ = writeln!(serial, "[log] Scanning I2C bus...");
             }
             let result = internal_scan(i2c, serial, ctrl_byte, log_level);
             if let Ok(found_addrs) = &result {
                 if !found_addrs.is_empty() {
                     match log_level {
-                        LogLevel::Verbose => {
+                        $crate::logger::LogLevel::Verbose => {
                             let _ = writeln!(serial, "[ok] Found devices at:");
                             for addr in found_addrs {
                                 let _ = write!(serial, " ");
@@ -263,18 +190,18 @@ macro_rules! define_scanner {
                             }
                             let _ = writeln!(serial);
                         }
-                        LogLevel::Normal => {
+                        $crate::logger::LogLevel::Normal => {
                             let _ = writeln!(serial, "[ok] Found devices at:");
                             for addr in found_addrs {
                                 let _ = writeln!(serial, " 0x{:02X}", addr);
                             }
                             let _ = writeln!(serial);
                         }
-                        LogLevel::Quiet => {}
+                        $crate::logger::LogLevel::Quiet => {}
                     }
                 }
             }
-            if let LogLevel::Verbose = log_level {
+            if let $crate::logger::LogLevel::Verbose = log_level {
                 let _ = writeln!(serial, "[info] I2C scan complete.");
             }
             result
@@ -301,14 +228,14 @@ macro_rules! define_scanner {
             serial: &mut S,
             ctrl_byte: u8,
             init_sequence: &[u8],
-            log_level: LogLevel,
-        ) -> Result<heapless::Vec<u8, 64>, crate::error::ErrorKind>
+            log_level: $crate::logger::LogLevel,
+        ) -> Result<heapless::Vec<u8, 64>, $crate::error::ErrorKind>
         where
             I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: crate::compat::HalErrorExt,
+            <I2C as $i2c_trait>::Error: $crate::compat::HalErrorExt,
             S: $write_trait,
         {
-            if let LogLevel::Verbose = log_level {
+            if let $crate::logger::LogLevel::Verbose = log_level {
                 let _ = writeln!(serial, "[scan] Scanning I2C bus with init sequence:");
                 for b in init_sequence.iter() {
                     let _ = write!(serial, " ");
@@ -319,7 +246,7 @@ macro_rules! define_scanner {
             }
 
             let mut detected_cmds = heapless::Vec::<u8, 64>::new();
-            let mut last_error: Option<crate::error::ErrorKind> = None;
+            let mut last_error: Option<$crate::error::ErrorKind> = None;
             for &cmd in init_sequence.iter() {
                 match internal_scan(i2c, serial, &[ctrl_byte, cmd], log_level) {
                     Ok(found_addrs) => {
@@ -351,7 +278,7 @@ macro_rules! define_scanner {
                     }
                 }
             }
-            if let LogLevel::Verbose = log_level {
+            if let $crate::logger::LogLevel::Verbose = log_level {
                 let _ = writeln!(serial, "[info] I2C scan with init sequence complete.");
             }
             log_differences(serial, init_sequence, &detected_cmds);
@@ -477,7 +404,7 @@ pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
     serial: &mut S,
     init_sequence: &[u8],
     prefix: u8,
-    log_level: LogLevel,
+    log_level: crate::logger::LogLevel,
 ) -> Result<(), crate::explorer::ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
@@ -499,7 +426,7 @@ where
     let _ = writeln!(serial, "[log] Start driver safe init");
 
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, successful_seq);
-    let mut serial_logger = SerialLogger::new(serial, log_level);
+    let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
 
     for addr in explorer
         .explore(i2c, &mut executor, &mut serial_logger)?
@@ -549,14 +476,14 @@ pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize
     serial: &mut S,
     target_addr: u8,
     prefix: u8,
-    log_level: LogLevel,
+    log_level: crate::logger::LogLevel,
 ) -> Result<(), ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut serial_logger = SerialLogger::new(serial, log_level);
+    let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
 
     serial_logger.log_info_fmt(|buf| {
         write!(

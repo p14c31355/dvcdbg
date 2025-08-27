@@ -91,7 +91,7 @@
 
 use crate::compat::ascii;
 use core::fmt::Write;
-use heapless::{String, Vec};
+use heapless::Vec;
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 const I2C_ADDRESS_COUNT: usize = 128;
@@ -140,41 +140,6 @@ pub struct CmdNode<'a> {
 pub trait CmdExecutor<I2C> {
     /// Executes a given command byte sequence.
     fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ExecutorError>;
-}
-
-/// A trait for logging progress and results.
-pub trait Logger {
-    fn log_info(&mut self, msg: &str);
-    fn log_warning(&mut self, msg: &str);
-    fn log_error(&mut self, msg: &str);
-
-    /// Logs formatted information efficiently, by writing directly to an internal buffer.
-    fn log_info_fmt<F>(&mut self, fmt: F)
-    where
-        F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>;
-
-    fn log_error_fmt<F>(&mut self, fmt: F)
-    where
-        F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>;
-}
-
-// Dummy logger for platforms without console output
-pub struct NullLogger;
-impl Logger for NullLogger {
-    fn log_info(&mut self, _msg: &str) {}
-    fn log_warning(&mut self, _msg: &str) {}
-    fn log_error(&mut self, _msg: &str) {}
-    fn log_info_fmt<F>(&mut self, _fmt: F)
-    where
-        F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
-    {
-    }
-
-    fn log_error_fmt<F>(&mut self, _fmt: F)
-    where
-        F: FnOnce(&mut String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
-    {
-    }
 }
 
 /// The core explorer, now a generic dependency graph manager.
@@ -302,7 +267,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
     where
         I2C: crate::compat::I2cCompat,
         E: CmdExecutor<I2C>,
-        L: Logger,
+        L: crate::logger::Logger,
     {
         // Handle the case where no commands are provided.
         // An empty sequence means there's nothing to explore,

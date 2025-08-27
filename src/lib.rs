@@ -5,6 +5,7 @@
 //! Lightweight diagnostic utilities for embedded Rust.
 //! Compatible with `no_std` and multiple HAL backends.
 
+pub mod logger;
 pub mod scanner;
 
 #[macro_use]
