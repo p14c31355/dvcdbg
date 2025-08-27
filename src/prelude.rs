@@ -10,7 +10,7 @@ pub use crate::{
 pub use crate::compat::adapt::FmtWriteAdapter;
 pub use crate::compat::ascii::{write_byte_hex, write_bytes_hex, write_bytes_hex_prefixed};
 pub use crate::compat::{HalErrorExt, I2cCompat, SerialCompat, SerialEio, UartLike};
-pub use crate::explorer::{CmdExecutor, CmdNode, Explorer};
+pub use crate::explorer::{CmdNode, CmdExecutor, Explorer, NullLogger, ExecutorError};
 pub use crate::scanner::{
     LogLevel, run_explorer, scan_i2c, scan_init_sequence,
 };
