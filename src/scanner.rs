@@ -291,13 +291,13 @@ macro_rules! define_scanner {
         /// # Returns
         ///
         /// A `heapless::Vec<u8, 64>` containing the bytes from `init_sequence` that elicited a response.
-        pub fn scan_init_sequence<I2C, S>(
+                pub fn scan_init_sequence<I2C, S>(
             i2c: &mut I2C,
             serial: &mut S,
             ctrl_byte: u8,
             init_sequence: &[u8],
             log_level: LogLevel,
-        ) -> heapless::Vec<u8, 64>
+        ) -> Result<heapless::Vec<u8, 64>, crate::error::ErrorKind>
         where
             I2C: $i2c_trait,
             <I2C as $i2c_trait>::Error: crate::compat::HalErrorExt,
@@ -314,12 +314,13 @@ macro_rules! define_scanner {
             }
 
             let mut detected_cmds = heapless::Vec::<u8, 64>::new();
+            let mut last_error: Option<crate::error::ErrorKind> = None;
             for &cmd in init_sequence.iter() {
-                match internal_scan(i2c, serial, &[ctrl_byte,cmd], log_level) {
+                match internal_scan(i2c, serial, &[ctrl_byte, cmd], log_level) {
                     Ok(found_addrs) => {
                         if !found_addrs.is_empty() {
                             for addr in found_addrs {
-                                let _ = write!(serial, "[ok] Found device at ",);
+                                let _ = write!(serial, "[ok] Found device at ");
                                 let _ = $crate::compat::ascii::write_bytes_hex_prefixed(
                                     serial,
                                     &[addr],
@@ -339,6 +340,9 @@ macro_rules! define_scanner {
                         let _ = write!(serial, "[error] scan failed for ");
                         let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[cmd]);
                         let _ = writeln!(serial, ": {:?}", e);
+                        if last_error.is_none() {
+                            last_error = Some(e);
+                        }
                     }
                 }
             }
@@ -346,7 +350,11 @@ macro_rules! define_scanner {
                 let _ = writeln!(serial, "[info] I2C scan with init sequence complete.");
             }
             log_differences(serial, init_sequence, &detected_cmds);
-            detected_cmds
+            if let Some(e) = last_error {
+                Err(e)
+            } else {
+                Ok(detected_cmds)
+            }
         }
 
         fn log_differences<W: core::fmt::Write>(
@@ -471,10 +479,13 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    if let LogLevel::Verbose = log_level {
-        let _ = writeln!(serial, "[log] Scanning I2C bus...");
-    }
-    let successful_seq = crate::scanner::scan_init_sequence(i2c, serial, prefix, init_sequence, log_level);
+    let successful_seq = match crate::scanner::scan_init_sequence(i2c, serial, prefix, init_sequence, log_level) {
+        Ok(seq) => seq,
+        Err(e) => {
+            let _ = writeln!(serial, "[error] Initial sequence scan failed: {e:?}. Aborting explorer.");
+            return Err(ExplorerError::ExecutionFailed);
+        }
+    };
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
     let _ = writeln!(serial, "[log] Start driver safe init");
 
