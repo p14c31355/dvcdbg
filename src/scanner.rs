@@ -52,49 +52,45 @@ where
 
         let addr_idx = addr as usize;
 
-        if !self.initialized_addrs[addr_idx] {
-            if !self.init_sequence.is_empty() {
-                logger.log_info_fmt(|buf| {
-                    let _ = write!(buf, "[Info] I2C initializing for 0x{:02X}...\r\n", addr);
-                    Ok(())
-                });
-                for &c in self.init_sequence.iter() {
-                    let command = [self.prefix, c];
-                    let mut ok = false;
+        if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
+            let _ = logger.log_info_fmt(|buf| {
+                write!(buf, "[Info] I2C initializing for 0x{:02X}...\r\n", addr)
+            });
 
-                    for _attempt in 0..3 {
-                        match i2c.write(addr, &command) {
-                            Ok(_) => {
-                                ok = true;
-                                break;
-                            }
-                            Err(e) => {
-                                let compat_err = e.to_compat(Some(addr));
-                                logger.log_error_fmt(|buf| {
-                                    write!(buf, "[I2C retry error] {:?}\r\n", compat_err).map_err(|_| core::fmt::Error::default())
-                                });
-                                short_delay();
-                            }
+            for &c in self.init_sequence.iter() {
+                let command = [self.prefix, c];
+                let mut ok = false;
+
+                for _attempt in 0..3 {
+                    match i2c.write(addr, &command) {
+                        Ok(_) => {
+                            ok = true;
+                            break;
+                        }
+                        Err(e) => {
+                            let compat_err = e.to_compat(Some(addr));
+                            let _ = logger.log_error_fmt(|buf| {
+                                write!(buf, "[I2C retry error] {:?}\r\n", compat_err)
+                            });
+                            short_delay();
                         }
                     }
-
-                    if !ok {
-                        return Err(crate::explorer::ExecutorError::I2cError(
-                            crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
-                        ));
-                    }
-                    short_delay();
                 }
 
-                self.initialized_addrs[addr_idx] = true;
-                logger.log_info_fmt(|buf| {
-                    let _ = write!(buf, "[Info] I2C initialized for 0x{:02X}\r\n", addr);
-                    Ok(())
-                });
+                if !ok {
+                    return Err(crate::explorer::ExecutorError::I2cError(
+                        crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
+                    ));
+                }
+                short_delay();
             }
+
+            self.initialized_addrs[addr_idx] = true;
+            let _ = logger.log_info_fmt(|buf| {
+                write!(buf, "[Info] I2C initialized for 0x{:02X}\r\n", addr)
+            });
         }
 
-        // send regular command in one transaction
         self.buffer.clear();
         self.buffer
             .push(self.prefix)
@@ -103,7 +99,6 @@ where
             .extend_from_slice(cmd)
             .map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
 
-        // write + retry
         for _ in 0..3 {
             match i2c.write(addr, &self.buffer) {
                 Ok(_) => {
@@ -112,8 +107,8 @@ where
                 }
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
-                    logger.log_error_fmt(|buf| {
-                        write!(buf, "[I2C retry error] {:?}\r\n", compat_err).map_err(|_| core::fmt::Error::default())
+                    let _ = logger.log_error_fmt(|buf| {
+                        write!(buf, "[I2C retry error] {:?}\r\n", compat_err)
                     });
                     short_delay();
                 }
