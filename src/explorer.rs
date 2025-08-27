@@ -379,7 +379,10 @@ impl<'a, const N: usize> Explorer<'a, N> {
         // Initialize reversed adjacency list
         let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
         for _ in 0..self.sequence.len() {
-            adj_list_rev.push(Vec::new()).map_err(|_| ExplorerError::BufferOverflow)?;
+            let v: Vec<usize, N> = Vec::new();
+            adj_list_rev
+                .push(v)
+                .map_err(|_| ExplorerError::BufferOverflow)?;
         }
 
         // Build in-degree and reversed adjacency list
