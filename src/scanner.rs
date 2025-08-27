@@ -537,10 +537,12 @@ where
     });
 
     let single_sequence = explorer.get_one_topological_sort(&mut serial_logger)?;
-    
+    serial_logger.log_info_fmt(|buf| write!(buf, "Before sort:\r\n"));
     for (idx, node) in explorer.sequence.iter().enumerate() {
-        writeln!(serial_logger, "Node {} deps: {:?}", idx, node.deps).ok();
-    }
+    serial_logger.log_info_fmt(|buf| {
+        write!(buf, "Node {} deps: {:?}\r\n", idx, node.deps)
+    });
+}
 
     
     let sequence_len = explorer.sequence.len();

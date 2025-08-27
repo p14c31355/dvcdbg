@@ -367,39 +367,29 @@ impl<'a, const N: usize> Explorer<'a, N> {
     ///
     /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
     /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
-    pub fn get_one_topological_sort<L>(&self, logger: &mut L) -> Result<[&'a [u8]; N], ExplorerError>
-    where
-        L: crate::logger::Logger + core::fmt::Write,
-    {
-        if self.sequence.len() > N {
-            return Err(ExplorerError::TooManyCommands);
-        }
-
-        let len = self.sequence.len();
+    pub fn get_one_topological_sort<'a, const N: usize>(
+        sequence: &[CmdNode<'a>; N],
+        serial: &mut impl core::fmt::Write,
+    ) -> Result<[&'a [u8]; N], ExplorerError> {
+        let len = sequence.len();
 
         // Initialize in-degree array
         let mut in_degree: [usize; N] = [0; N];
 
-        // Build in-degree and reversed adjacency list
+        // reversed adjacency list & length
         let mut adj_list_rev: [[usize; N]; N] = [[0; N]; N];
         let mut adj_list_len: [usize; N] = [0; N];
 
         // Define result sequence
-        let mut result_sequence: [&'a [u8]; N] = [&[]; N];
+        let mut result_sequence: [&[u8]; N] = [&[]; N];
         let mut result_len = 0;
 
         // Topological sort core
-        for (i, node) in self.sequence.iter().enumerate() {
+        for (i, node) in sequence.iter().enumerate() {
             in_degree[i] = node.deps.len();
             for &dep_idx in node.deps.iter() {
                 if dep_idx >= len {
-                    let _ = logger.log_error_fmt(|buf| {
-                        write!(
-                            buf,
-                            "[error] Node {} has invalid dep index {} (len = {})\r\n",
-                            i, dep_idx, len
-                        )
-                    });
+                    writeln!(serial, "[error] Node {} has invalid dep index {} (len={})", i, dep_idx, len).ok();
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
                 let pos = adj_list_len[dep_idx];
@@ -427,7 +417,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
             let u = q[head];
             head += 1;
 
-            result_sequence[result_len] = self.sequence[u].bytes;
+            result_sequence[result_len] = sequence[u].bytes;
             result_len += 1;
 
             for i in 0..adj_list_len[u] {
@@ -441,12 +431,12 @@ impl<'a, const N: usize> Explorer<'a, N> {
         }
 
         if result_len != len {
+            writeln!(serial, "[error] Dependency cycle detected").ok();
             return Err(ExplorerError::DependencyCycle);
         }
 
         Ok(result_sequence)
     }
-
 }
 
 impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
