@@ -4,7 +4,11 @@
 //! This module provides functions to scan the I2C bus for connected devices,
 //! optionally testing with control bytes or initialization command sequences.
 
-use crate::{compat::{HalErrorExt, ascii}, logger::Logger, prelude::CmdExecutor};
+use crate::{
+    compat::{HalErrorExt, ascii},
+    logger::Logger,
+    prelude::CmdExecutor,
+};
 use core::fmt::Write;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
@@ -61,7 +65,7 @@ where
                 let command = [self.prefix, c];
                 let mut ok = false;
 
-                for _attempt in 0..3 {
+                for _attempt in 0..10 {
                     match i2c.write(addr, &command) {
                         Ok(_) => {
                             ok = true;
@@ -86,9 +90,8 @@ where
             }
 
             self.initialized_addrs[addr_idx] = true;
-            let _ = logger.log_info_fmt(|buf| {
-                write!(buf, "[Info] I2C initialized for 0x{:02X}\r\n", addr)
-            });
+            let _ = logger
+                .log_info_fmt(|buf| write!(buf, "[Info] I2C initialized for 0x{:02X}\r\n", addr));
         }
 
         self.buffer.clear();
@@ -99,7 +102,7 @@ where
             .extend_from_slice(cmd)
             .map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
 
-        for _ in 0..3 {
+        for _ in 0..10 {
             match i2c.write(addr, &self.buffer) {
                 Ok(_) => {
                     short_delay();
@@ -107,9 +110,8 @@ where
                 }
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
-                    let _ = logger.log_error_fmt(|buf| {
-                        write!(buf, "[I2C retry error] {:?}\r\n", compat_err)
-                    });
+                    let _ = logger
+                        .log_error_fmt(|buf| write!(buf, "[I2C retry error] {:?}\r\n", compat_err));
                     short_delay();
                 }
             }
@@ -194,7 +196,9 @@ macro_rules! define_scanner {
                     }
                 }
             }
-            if let Some(e) = last_error {
+            if !found_addrs.is_empty() {
+                Ok(found_addrs)
+            } else if let Some(e) = last_error {
                 Err(e)
             } else {
                 Ok(found_addrs)
@@ -528,7 +532,10 @@ where
 {
     let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
     serial_logger.log_info_fmt(|buf| {
-        write!(buf, "[explorer] Attempting to get one topological sort...\n")?;
+        write!(
+            buf,
+            "[explorer] Attempting to get one topological sort...\n"
+        )?;
         Ok(())
     });
 
@@ -550,13 +557,16 @@ where
     }
 
     serial_logger.log_info_fmt(|buf| {
-        write!(buf, "[explorer] Single sequence execution complete for 0x{:02X}.\r\n", target_addr)?;
+        write!(
+            buf,
+            "[explorer] Single sequence execution complete for 0x{:02X}.\r\n",
+            target_addr
+        )?;
         Ok(())
     });
 
     Ok(())
 }
-
 
 define_scanner!(
     crate::compat::I2cCompat,

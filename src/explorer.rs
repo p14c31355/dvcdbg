@@ -291,7 +291,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
         // An empty sequence means there's nothing to explore,
         // so no valid addresses can be found through this exploration process.
         if self.sequence.is_empty() {
-            logger.log_info("[explorer] No commands provided for exploration. Returning no valid addresses.");
+            logger.log_info(
+                "[explorer] No commands provided for exploration. Returning no valid addresses.",
+            );
             return Err(ExplorerError::NoValidAddressesFound);
         }
         let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
