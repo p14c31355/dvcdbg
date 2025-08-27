@@ -13,4 +13,4 @@ pub use crate::compat::{HalErrorExt, I2cCompat, SerialCompat, SerialEio, UartLik
 pub use crate::explorer::{CmdNode, CmdExecutor, Explorer, NullLogger, ExecutorError};
 // In src/prelude.rs
 
-pub use crate::scanner::{run_explorer, run_single_sequence_explorer, scan_i2c, scan_init_sequence};
+pub use crate::scanner::{LogLevel, run_explorer, run_single_sequence_explorer, scan_i2c, scan_init_sequence};
