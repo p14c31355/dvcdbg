@@ -387,10 +387,14 @@ impl<'a, const N: usize> Explorer<'a, N> {
         }
 
         let mut in_degree = Vec::<usize, N>::new();
-        in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::BufferOverflow)?;
+        in_degree
+            .resize(self.sequence.len(), 0)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
 
         let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
-        adj_list_rev.resize(self.sequence.len(), Vec::new()).map_err(|_| ExplorerError::BufferOverflow)?;
+        adj_list_rev
+            .resize(self.sequence.len(), Vec::new())
+            .map_err(|_| ExplorerError::BufferOverflow)?;
 
         for (i, node) in self.sequence.iter().enumerate() {
             in_degree[i] = node.deps.len();
@@ -398,7 +402,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 if dep_idx >= self.sequence.len() {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_list_rev[dep_idx].push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+                adj_list_rev[dep_idx]
+                    .push(i)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
@@ -416,7 +422,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
             let u = q[head];
             head += 1;
 
-            result_sequence.push(self.sequence[u].bytes).map_err(|_| ExplorerError::BufferOverflow)?;
+            result_sequence
+                .push(self.sequence[u].bytes)
+                .map_err(|_| ExplorerError::BufferOverflow)?;
 
             for &v in adj_list_rev[u].iter() {
                 in_degree[v] -= 1;

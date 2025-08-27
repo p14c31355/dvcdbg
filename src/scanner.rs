@@ -61,7 +61,9 @@ impl<'a, S: core::fmt::Write> crate::explorer::Logger for SerialLogger<'a, S> {
 
     fn log_info_fmt<F>(&mut self, fmt: F)
     where
-        F: FnOnce(&mut String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error>,
+        F: FnOnce(
+            &mut String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
+        ) -> Result<(), core::fmt::Error>,
     {
         if self.log_level != LogLevel::Quiet {
             self.buffer.clear();
@@ -73,7 +75,9 @@ impl<'a, S: core::fmt::Write> crate::explorer::Logger for SerialLogger<'a, S> {
 
     fn log_error_fmt<F>(&mut self, fmt: F)
     where
-        F: FnOnce(&mut String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error>,
+        F: FnOnce(
+            &mut String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
+        ) -> Result<(), core::fmt::Error>,
     {
         self.buffer.clear();
         if fmt(&mut self.buffer).is_ok() {
@@ -197,8 +201,7 @@ macro_rules! define_scanner {
                     }
                     Err(e) => {
                         let e_kind = e.to_compat(Some(addr));
-                        if e_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)
-                        {
+                        if e_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
                             if let LogLevel::Verbose = log_level {
                                 let _ = writeln!(serial, " No response (NACK)");
                             }
@@ -252,7 +255,10 @@ macro_rules! define_scanner {
                             let _ = writeln!(serial, "[ok] Found devices at:");
                             for addr in found_addrs {
                                 let _ = write!(serial, " ");
-                                let _ = $crate::compat::ascii::write_bytes_hex_prefixed(serial, &[*addr]);
+                                let _ = $crate::compat::ascii::write_bytes_hex_prefixed(
+                                    serial,
+                                    &[*addr],
+                                );
                                 let _ = writeln!(serial, "");
                             }
                             let _ = writeln!(serial);
@@ -264,8 +270,7 @@ macro_rules! define_scanner {
                             }
                             let _ = writeln!(serial);
                         }
-                        LogLevel::Quiet => {
-                        }
+                        LogLevel::Quiet => {}
                     }
                 }
             }
@@ -479,17 +484,19 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let successful_seq = match crate::scanner::scan_init_sequence(i2c, serial, prefix, init_sequence, log_level) {
-        Ok(seq) => seq,
-        Err(e) => {
-            let _ = writeln!(serial, "[error] Initial sequence scan failed: {e:?}. Aborting explorer.");
-            return Err(ExplorerError::ExecutionFailed);
-        }
-    };
+    let successful_seq =
+        match crate::scanner::scan_init_sequence(i2c, serial, prefix, init_sequence, log_level) {
+            Ok(seq) => seq,
+            Err(e) => {
+                let _ = writeln!(
+                    serial,
+                    "[error] Initial sequence scan failed: {e:?}. Aborting explorer."
+                );
+                return Err(ExplorerError::ExecutionFailed);
+            }
+        };
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
     let _ = writeln!(serial, "[log] Start driver safe init");
-
-    
 
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, successful_seq);
     let mut serial_logger = SerialLogger::new(serial, log_level);
@@ -552,14 +559,21 @@ where
     let mut serial_logger = SerialLogger::new(serial, log_level);
 
     serial_logger.log_info_fmt(|buf| {
-        write!(buf, "[explorer] Attempting to get one topological sort...\r\n")?;
+        write!(
+            buf,
+            "[explorer] Attempting to get one topological sort...\r\n"
+        )?;
         Ok(())
     });
 
     let single_sequence = explorer.get_one_topological_sort()?;
 
     serial_logger.log_info_fmt(|buf| {
-        write!(buf, "[explorer] Obtained one topological sort. Executing on 0x{:02X}...\r\n", target_addr)?;
+        write!(
+            buf,
+            "[explorer] Obtained one topological sort. Executing on 0x{:02X}...\r\n",
+            target_addr
+        )?;
         Ok(())
     });
 
@@ -570,9 +584,11 @@ where
         if let Err(e) = executor.exec(i2c, target_addr, cmd_bytes) {
             all_ok = false;
             serial_logger.log_error_fmt(|buf| {
-                write!(buf, "[explorer] Execution failed for addr ")?;
-                ascii::write_bytes_hex_prefixed(buf, &[target_addr])?;
-                write!(buf, ": {:?}\r\n", e)?;
+                writeln!(
+                    buf,
+                    "[explorer] Execution failed for addr 0x{:02X}: {:?}",
+                    target_addr, e
+                )?;
                 Ok(())
             });
             break;
@@ -581,13 +597,21 @@ where
 
     if all_ok {
         serial_logger.log_info_fmt(|buf| {
-            write!(buf, "[explorer] Single sequence execution complete for 0x{:02X}.\r\n", target_addr)?;
+            write!(
+                buf,
+                "[explorer] Single sequence execution complete for 0x{:02X}.\r\n",
+                target_addr
+            )?;
             Ok(())
         });
         Ok(())
     } else {
         serial_logger.log_error_fmt(|buf| {
-            write!(buf, "[explorer] Single sequence execution failed for 0x{:02X}.\r\n", target_addr)?;
+            write!(
+                buf,
+                "[explorer] Single sequence execution failed for 0x{:02X}.\r\n",
+                target_addr
+            )?;
             Ok(())
         });
         Err(ExplorerError::ExecutionFailed)

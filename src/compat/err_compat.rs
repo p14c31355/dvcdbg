@@ -30,7 +30,7 @@ where
         // Map 0.2 HAL error to unified ErrorKind
         // NOTE: 0.2 uses Debug output to detect NACKs
         let mut buf: String<128> = String::new();
-        let _ = write!(buf, "{:?}", self);
+        let _ = write!(buf, "{:?}\r\n", self);
         if buf.contains("NACK") || buf.contains("NoAcknowledge") {
             ErrorKind::I2c(I2cError::Nack)
         } else {
