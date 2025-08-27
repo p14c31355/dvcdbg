@@ -570,13 +570,13 @@ where
 
     if all_ok {
         serial_logger.log_info_fmt(|buf| {
-            write!(buf, "[explorer] Single sequence execution complete for 0x{:02X}.\\r\\n", target_addr)?;
+            write!(buf, "[explorer] Single sequence execution complete for 0x{:02X}.\r\n", target_addr)?;
             Ok(())
         });
         Ok(())
     } else {
         serial_logger.log_error_fmt(|buf| {
-            write!(buf, "[explorer] Single sequence execution failed for 0x{:02X}.\\r\\n", target_addr)?;
+            write!(buf, "[explorer] Single sequence execution failed for 0x{:02X}.\r\n", target_addr)?;
             Ok(())
         });
         Err(ExplorerError::ExecutionFailed)
