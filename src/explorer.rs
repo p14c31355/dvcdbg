@@ -367,73 +367,76 @@ impl<'a, const N: usize> Explorer<'a, N> {
     ///
     /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
     /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
-    pub fn get_one_topological_sort(&self) -> Result<Vec<&'a [u8], N>, ExplorerError> {
+    pub fn get_one_topological_sort(&self) -> Result<[&'a [u8]; N], ExplorerError> {
         if self.sequence.len() > N {
             return Err(ExplorerError::TooManyCommands);
         }
 
-        // Initialize in-degree array
-        let mut in_degree = Vec::<usize, N>::new();
-        in_degree
-            .resize(self.sequence.len(), 0)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
+        let len = self.sequence.len();
 
-        // Initialize reversed adjacency list
-        let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
-        for _ in 0..self.sequence.len() {
-            adj_list_rev
-                .push(Vec::new())
-                .map_err(|_| ExplorerError::BufferOverflow)?;
-        }
+        // Initialize in-degree array
+        let mut in_degree: [usize; N] = [0; N];
 
         // Build in-degree and reversed adjacency list
+        let mut adj_list_rev: [[usize; N]; N] = [[0; N]; N];
+        let mut adj_list_len: [usize; N] = [0; N];
+
+        // Define result sequence
+        let mut result_sequence: [&'a [u8]; N] = [&[]; N];
+        let mut result_len = 0;
+
+        // Topological sort core
         for (i, node) in self.sequence.iter().enumerate() {
             in_degree[i] = node.deps.len();
             for &dep_idx in node.deps.iter() {
-                if dep_idx >= self.sequence.len() {
+                if dep_idx >= len {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_list_rev[dep_idx]
-                    .push(i)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
+                let pos = adj_list_len[dep_idx];
+                if pos >= N {
+                    return Err(ExplorerError::BufferOverflow);
+                }
+                adj_list_rev[dep_idx][pos] = i;
+                adj_list_len[dep_idx] += 1;
             }
         }
 
         // Initialize queue with nodes having zero in-degree
-        let mut q = Vec::<usize, N>::new();
-        for i in 0..self.sequence.len() {
+        let mut q: [usize; N] = [0; N];
+        let mut head = 0;
+        let mut tail = 0;
+        for i in 0..len {
             if in_degree[i] == 0 {
-                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+                q[tail] = i;
+                tail += 1;
             }
         }
 
-        // Perform topological sort
-        let mut result_sequence = Vec::<&'a [u8], N>::new();
-        let mut head = 0;
-
-        while head < q.len() {
+        // sort
+        while head < tail {
             let u = q[head];
             head += 1;
 
-            result_sequence
-                .push(self.sequence[u].bytes)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
+            result_sequence[result_len] = self.sequence[u].bytes;
+            result_len += 1;
 
-            for &v in adj_list_rev[u].iter() {
+            for i in 0..adj_list_len[u] {
+                let v = adj_list_rev[u][i];
                 in_degree[v] -= 1;
                 if in_degree[v] == 0 {
-                    q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
+                    q[tail] = v;
+                    tail += 1;
                 }
             }
         }
 
-        // Check for cycles
-        if result_sequence.len() != self.sequence.len() {
+        if result_len != len {
             return Err(ExplorerError::DependencyCycle);
         }
 
         Ok(result_sequence)
     }
+
 }
 
 impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {

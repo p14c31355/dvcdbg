@@ -532,19 +532,17 @@ where
 {
     let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
     serial_logger.log_info_fmt(|buf| {
-        write!(
-            buf,
-            "[explorer] Attempting to get one topological sort...\n"
-        )?;
+        write!(buf, "[explorer] Attempting to get one topological sort...\r\n")?;
         Ok(())
     });
 
     let single_sequence = explorer.get_one_topological_sort()?;
+    let sequence_len = explorer.sequence.len();
 
     serial_logger.log_info_fmt(|buf| {
         write!(
             buf,
-            "[explorer] Obtained one topological sort. Executing on 0x{:02X}...\n",
+            "[explorer] Obtained one topological sort. Executing on 0x{:02X}...\r\n",
             target_addr
         )?;
         Ok(())
@@ -556,8 +554,8 @@ where
 
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, heapless::Vec::new());
 
-    for &cmd_bytes in single_sequence.iter() {
-        executor.exec(i2c, target_addr, cmd_bytes, &mut serial_logger)?;
+    for i in 0..sequence_len {
+        executor.exec(i2c, target_addr, single_sequence[i], &mut serial_logger)?;
     }
 
     serial_logger.log_info_fmt(|buf| {
@@ -571,6 +569,7 @@ where
 
     Ok(())
 }
+
 
 define_scanner!(
     crate::compat::I2cCompat,
