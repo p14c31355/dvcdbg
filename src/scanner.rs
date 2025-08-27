@@ -4,11 +4,8 @@
 //! This module provides functions to scan the I2C bus for connected devices,
 //! optionally testing with control bytes or initialization command sequences.
 
-use crate::compat::{HalErrorExt, ascii};
-use crate::explorer::{CmdExecutor, ExplorerError};
+use crate::{compat::{HalErrorExt, ascii}, logger::Logger};
 use core::fmt::Write;
-
-use crate::logger::Logger;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -37,16 +34,14 @@ where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
-    fn exec<S>(
-    &mut self,
-    i2c: &mut I2C,
-    addr: u8,
-    cmd: &[u8],
-    logger: &mut S,
-) -> Result<(), crate::explorer::ExecutorError>
-where
-    S: core::fmt::Write + crate::logger::Logger,
-{
+    fn exec<S: core::fmt::Write>(
+        &mut self,
+        i2c: &mut I2C,
+        addr: u8,
+        cmd: &[u8],
+        logger: &mut S,
+    ) -> Result<(), crate::explorer::ExecutorError> {
+        let mut serial_logger = crate::logger::SerialLogger::new(logger, crate::logger::LogLevel::Verbose);
         fn short_delay() {
             for _ in 0..8_000 {
                 core::hint::spin_loop();
@@ -67,9 +62,9 @@ where
                             break;
                         }
                         Err(e) => {
-                            // S is core::fmt::Write, not Logger, so we use log_error_fmt
+                            // S is core::fmt::Write + Logger
                             let compat_err = e.to_compat(Some(addr));
-                            logger.log_error_fmt(|buf| {
+                            serial_logger.log_error_fmt(|buf| {
                                 write!(buf, "[I2C retry error] {:?}\r\n", compat_err)
                             });
 
@@ -106,9 +101,9 @@ where
                     return Ok(());
                 }
                 Err(e) => {
-                    // S is core::fmt::Write, not Logger, so we use log_error_fmt
+                    // S is core::fmt::Write + Logger
                     let compat_err = e.to_compat(Some(addr));
-                    logger
+                    serial_logger
                         .log_error_fmt(|buf| write!(buf, "[I2C retry error] {:?}\r\n", compat_err));
                     short_delay();
                 }
@@ -462,7 +457,7 @@ where
                     serial,
                     "[error] Initial sequence scan failed: {e:?}. Aborting explorer."
                 );
-                return Err(ExplorerError::ExecutionFailed);
+                return Err(crate::explorer::ExplorerError::ExecutionFailed);
             }
         };
     let _ = writeln!(serial, "[scan] initial sequence scan completed");
@@ -520,7 +515,7 @@ pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize
     target_addr: u8,
     prefix: u8,
     log_level: crate::logger::LogLevel,
-) -> Result<(), ExplorerError>
+) -> Result<(), crate::explorer::ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -596,7 +591,7 @@ where
             )?;
             Ok(())
         });
-        Err(ExplorerError::ExecutionFailed)
+        Err(crate::explorer::ExplorerError::ExecutionFailed)
     }
 }
 
