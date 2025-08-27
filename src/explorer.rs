@@ -95,7 +95,7 @@ use heapless::Vec;
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 const I2C_ADDRESS_COUNT: usize = 128;
-pub const LOG_BUFFER_CAPACITY: usize = 512;
+pub const LOG_BUFFER_CAPACITY: usize = 1024;
 
 /// Errors that can occur during exploration of command sequences.
 #[derive(Debug, PartialEq, Eq)]
