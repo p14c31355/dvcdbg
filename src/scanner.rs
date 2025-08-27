@@ -34,54 +34,64 @@ where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
-    fn exec<S: core::fmt::Write>(
+    fn exec<S>(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
         cmd: &[u8],
         logger: &mut S,
-    ) -> Result<(), crate::explorer::ExecutorError> {
-        let mut serial_logger = crate::logger::SerialLogger::new(logger, crate::logger::LogLevel::Verbose);
+    ) -> Result<(), crate::explorer::ExecutorError>
+    where
+        S: core::fmt::Write + crate::logger::Logger,
+    {
         fn short_delay() {
             for _ in 0..8_000 {
                 core::hint::spin_loop();
-            } // !
+            }
         }
 
         let addr_idx = addr as usize;
 
         if !self.initialized_addrs[addr_idx] {
-            for &c in self.init_sequence.iter() {
-                let command = [self.prefix, c];
+            if !self.init_sequence.is_empty() {
+                logger.log_info_fmt(|buf| {
+                    let _ = write!(buf, "[Info] I2C initializing for 0x{:02X}...\r\n", addr);
+                    Ok(())
+                });
+                for &c in self.init_sequence.iter() {
+                    let command = [self.prefix, c];
+                    let mut ok = false;
 
-                let mut ok = false;
-                for _attempt in 0..3 {
-                    match i2c.write(addr, &command) {
-                        Ok(_) => {
-                            ok = true;
-                            break;
-                        }
-                        Err(e) => {
-                            // S is core::fmt::Write + Logger
-                            let compat_err = e.to_compat(Some(addr));
-                            serial_logger.log_error_fmt(|buf| {
-                                buf.write_fmt(format_args!("[I2C retry error] {:?}\r\n", compat_err))
-                            });
-
-                            short_delay();
+                    for _attempt in 0..3 {
+                        match i2c.write(addr, &command) {
+                            Ok(_) => {
+                                ok = true;
+                                break;
+                            }
+                            Err(e) => {
+                                let compat_err = e.to_compat(Some(addr));
+                                logger.log_error_fmt(|buf| {
+                                    write!(buf, "[I2C retry error] {:?}\r\n", compat_err).map_err(|_| core::fmt::Error::default())
+                                });
+                                short_delay();
+                            }
                         }
                     }
+
+                    if !ok {
+                        return Err(crate::explorer::ExecutorError::I2cError(
+                            crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
+                        ));
+                    }
+                    short_delay();
                 }
-                if !ok {
-                    return Err(crate::explorer::ExecutorError::I2cError(
-                        crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
-                    ));
-                }
-                short_delay();
+
+                self.initialized_addrs[addr_idx] = true;
+                logger.log_info_fmt(|buf| {
+                    let _ = write!(buf, "[Info] I2C initialized for 0x{:02X}\r\n", addr);
+                    Ok(())
+                });
             }
-            self.initialized_addrs[addr_idx] = true;
-            // Vpp/ChargePump
-            short_delay();
         }
 
         // send regular command in one transaction
@@ -101,10 +111,10 @@ where
                     return Ok(());
                 }
                 Err(e) => {
-                    // S is core::fmt::Write + Logger
                     let compat_err = e.to_compat(Some(addr));
-                    serial_logger
-                        .log_error_fmt(|buf| buf.write_fmt(format_args!("[I2C retry error] {:?}\r\n", compat_err)));
+                    logger.log_error_fmt(|buf| {
+                        write!(buf, "[I2C retry error] {:?}\r\n", compat_err).map_err(|_| core::fmt::Error::default())
+                    });
                     short_delay();
                 }
             }

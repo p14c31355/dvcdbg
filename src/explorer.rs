@@ -149,13 +149,15 @@ pub struct CmdNode<'a> {
 /// A trait for executing a command on an I2C bus.
 pub trait CmdExecutor<I2C> {
     /// Executes a given command byte sequence.
-    fn exec<S: core::fmt::Write>(
+    fn exec<S>(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
         cmd: &[u8],
         logger: &mut S,
-    ) -> Result<(), ExecutorError>;
+    ) -> Result<(), ExecutorError>
+    where
+        S: core::fmt::Write + crate::logger::Logger;
 }
 
 /// The core explorer, now a generic dependency graph manager.
