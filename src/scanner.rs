@@ -291,7 +291,7 @@ macro_rules! define_scanner {
         /// # Returns
         ///
         /// A `heapless::Vec<u8, 64>` containing the bytes from `init_sequence` that elicited a response.
-                pub fn scan_init_sequence<I2C, S>(
+        pub fn scan_init_sequence<I2C, S>(
             i2c: &mut I2C,
             serial: &mut S,
             ctrl_byte: u8,
