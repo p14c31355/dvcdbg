@@ -536,7 +536,13 @@ where
         Ok(())
     });
 
-    let single_sequence = explorer.get_one_topological_sort()?;
+    let single_sequence = explorer.get_one_topological_sort(&mut serial_logger)?;
+    
+    for (idx, node) in explorer.sequence.iter().enumerate() {
+        writeln!(serial_logger, "Node {} deps: {:?}", idx, node.deps).ok();
+    }
+
+    
     let sequence_len = explorer.sequence.len();
 
     serial_logger.log_info_fmt(|buf| {
@@ -549,13 +555,33 @@ where
     });
 
     for node_idx in 0..explorer.sequence.len() {
-        writeln!(serial_logger, "Checking node {}", node_idx).ok();
+        let _ = writeln!(serial_logger, "Checking node {}", node_idx);
     }
 
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, heapless::Vec::new());
 
     for i in 0..sequence_len {
-        executor.exec(i2c, target_addr, single_sequence[i], &mut serial_logger)?;
+        serial_logger.log_info_fmt(|buf| {
+        write!(buf, "[explorer] Sending node {} bytes: {:02X?} ... ", i, single_sequence[i])?;
+        Ok(())
+    });
+        match executor.exec(i2c, target_addr, single_sequence[i], &mut serial_logger) {
+            Ok(_) => {
+                let _ = serial_logger.log_info_fmt(|buf| {
+                    write!(buf, "OK\r\n")?;
+                    Ok(())
+                });
+            },
+            Err(e) => {
+                let _ = serial_logger.log_error_fmt(|buf| {
+                    write!(buf, "FAILED: {:?}\r\n", e)?; // `e` is now in scope
+                    Ok(())
+                });
+                return Err(e.into()); // Convert ExecutorError to ExplorerError and return
+            },
+        };
+    
+    
     }
 
     serial_logger.log_info_fmt(|buf| {

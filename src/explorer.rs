@@ -138,7 +138,7 @@ impl From<ExecutorError> for ExplorerError {
 /// Represents a single I2C command in the dependency graph.
 ///
 /// The dependency is now on the index of the dependent command in the sequence.
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct CmdNode<'a> {
     /// The I2C command bytes to be sent.
     pub bytes: &'a [u8],
@@ -367,7 +367,10 @@ impl<'a, const N: usize> Explorer<'a, N> {
     ///
     /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
     /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
-    pub fn get_one_topological_sort(&self) -> Result<[&'a [u8]; N], ExplorerError> {
+    pub fn get_one_topological_sort<L>(&self, logger: &mut L) -> Result<[&'a [u8]; N], ExplorerError>
+    where
+        L: crate::logger::Logger + core::fmt::Write,
+    {
         if self.sequence.len() > N {
             return Err(ExplorerError::TooManyCommands);
         }
@@ -390,6 +393,13 @@ impl<'a, const N: usize> Explorer<'a, N> {
             in_degree[i] = node.deps.len();
             for &dep_idx in node.deps.iter() {
                 if dep_idx >= len {
+                    let _ = logger.log_error_fmt(|buf| {
+                        write!(
+                            buf,
+                            "[error] Node {} has invalid dep index {} (len = {})\r\n",
+                            i, dep_idx, len
+                        )
+                    });
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
                 let pos = adj_list_len[dep_idx];
