@@ -41,10 +41,7 @@ pub fn write_bytes_hex_line<W: Write>(w: &mut W, bytes: &[u8]) -> Result<(), W::
     Ok(())
 }
 
-pub fn write_bytes_hex_fmt<W: core::fmt::Write>(
-    w: &mut W,
-    bytes: &[u8],
-) -> core::fmt::Result {
+pub fn write_bytes_hex_fmt<W: core::fmt::Write>(w: &mut W, bytes: &[u8]) -> core::fmt::Result {
     for (i, &b) in bytes.iter().enumerate() {
         write!(w, "{b:02X}")?;
         if i != bytes.len() - 1 {
@@ -53,4 +50,3 @@ pub fn write_bytes_hex_fmt<W: core::fmt::Write>(
     }
     Ok(())
 }
-

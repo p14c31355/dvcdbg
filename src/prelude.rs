@@ -17,4 +17,4 @@ pub use crate::scanner::{
     run_explorer, run_single_sequence_explorer, scan_i2c, scan_init_sequence,
 };
 
-pub use crate::logger::{Logger, SerialLogger, LogLevel};
+pub use crate::logger::{LogLevel, Logger, SerialLogger};

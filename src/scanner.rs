@@ -37,15 +37,17 @@ where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
-    fn exec(
+    fn exec<S: core::fmt::Write>(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
         cmd: &[u8],
+        logger: &mut S,
     ) -> Result<(), crate::explorer::ExecutorError> {
-
         fn short_delay() {
-            for _ in 0..8_000 { core::hint::spin_loop(); } // !
+            for _ in 0..8_000 {
+                core::hint::spin_loop();
+            } // !
         }
 
         let addr_idx = addr as usize;
@@ -57,9 +59,17 @@ where
                 let mut ok = false;
                 for _attempt in 0..3 {
                     match i2c.write(addr, &command) {
-                        Ok(_) => { ok = true; break; }
+                        Ok(_) => {
+                            ok = true;
+                            break;
+                        }
                         Err(e) => {
-                            let _ = e.to_compat(Some(addr));
+                            // S is core::fmt::Write, not Logger, so we use log_error_fmt
+                            let compat_err = e.to_compat(Some(addr));
+                            logger.log_error_fmt(|buf| {
+                                write!(buf, "[I2C retry error] {:?}\r\n", compat_err)
+                            });
+
                             short_delay();
                         }
                     }
@@ -93,7 +103,10 @@ where
                     return Ok(());
                 }
                 Err(e) => {
-                    let _ = e.to_compat(Some(addr)); // convert & maybe log
+                    // S is core::fmt::Write, not Logger, so we use log_error_fmt
+                    let compat_err = e.to_compat(Some(addr));
+                    logger
+                        .log_error_fmt(|buf| write!(buf, "[I2C retry error] {:?}\r\n", compat_err));
                     short_delay();
                 }
             }
@@ -104,7 +117,6 @@ where
         ))
     }
 }
-
 
 /// Macro to define common I2C scanner functions.
 ///
@@ -216,10 +228,8 @@ macro_rules! define_scanner {
                             let _ = writeln!(serial, "[ok] Found devices at:");
                             for addr in found_addrs {
                                 let _ = write!(serial, " ");
-                                let _ = $crate::compat::ascii::write_bytes_hex_fmt(
-                                    serial,
-                                    &[*addr],
-                                );
+                                let _ =
+                                    $crate::compat::ascii::write_bytes_hex_fmt(serial, &[*addr]);
                                 let _ = writeln!(serial, "");
                             }
                             let _ = writeln!(serial);
@@ -287,13 +297,9 @@ macro_rules! define_scanner {
                         if !found_addrs.is_empty() {
                             for addr in found_addrs {
                                 let _ = write!(serial, "[ok] Found device at ");
-                                let _ = $crate::compat::ascii::write_bytes_hex_fmt(
-                                    serial,
-                                    &[addr],
-                                );
+                                let _ = $crate::compat::ascii::write_bytes_hex_fmt(serial, &[addr]);
                                 let _ = write!(serial, " responding to ");
-                                let _ = 
-                                    $crate::compat::ascii::write_bytes_hex_fmt(serial, &[cmd]);
+                                let _ = $crate::compat::ascii::write_bytes_hex_fmt(serial, &[cmd]);
                                 let _ = writeln!(serial, "");
                             }
                             if detected_cmds.push(cmd).is_err() {
@@ -545,17 +551,21 @@ where
         if let Err(e) = executor.exec(i2c, target_addr, cmd_bytes) {
             all_ok = false;
             serial_logger.log_error_fmt(|buf| {
-                write!(buf, "[explorer] Execution failed for addr 0x{target_addr:02X}: ")?;
-                match e { // e is ExecutorError
+                write!(
+                    buf,
+                    "[explorer] Execution failed for addr 0x{target_addr:02X}: "
+                )?;
+                match e {
+                    // e is ExecutorError
                     crate::explorer::ExecutorError::I2cError(kind) => {
                         write!(buf, "I2C Error: {kind:?}")?; // kind is ErrorKind
-                    },
+                    }
                     crate::explorer::ExecutorError::ExecFailed => {
                         write!(buf, "Execution Failed")?;
-                    },
+                    }
                     crate::explorer::ExecutorError::BufferOverflow => {
                         write!(buf, "Buffer Overflow")?;
-                    },
+                    }
                 }
                 writeln!(buf, "\r\n")?;
                 Ok(())

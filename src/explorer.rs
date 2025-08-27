@@ -139,9 +139,15 @@ pub struct CmdNode<'a> {
 /// A trait for executing a command on an I2C bus.
 pub trait CmdExecutor<I2C> {
     /// Executes a given command byte sequence.
-    fn exec(&mut self, i2c: &mut I2C, addr: u8, cmd: &[u8]) -> Result<(), ExecutorError>;
+    fn exec<S: core::fmt::Write>(
+        &mut self,
+        i2c: &mut I2C,
+        addr: u8,
+        cmd: &[u8],
+        logger: &mut S,
+    ) -> Result<(), ExecutorError>;
 }
-
+//
 /// The core explorer, now a generic dependency graph manager.
 pub struct Explorer<'a, const N: usize> {
     pub sequence: &'a [CmdNode<'a>],
@@ -267,7 +273,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
     where
         I2C: crate::compat::I2cCompat,
         E: CmdExecutor<I2C>,
-        L: crate::logger::Logger,
+        L: crate::logger::Logger + core::fmt::Write,
     {
         // Handle the case where no commands are provided.
         // An empty sequence means there's nothing to explore,
@@ -294,7 +300,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
                 let mut all_ok = true;
                 for &cmd in sequence.iter() {
-                    if let Err(e) = executor.exec(i2c, addr_val, cmd) {
+                    if let Err(e) = executor.exec(i2c, addr_val, cmd, logger) {
+                        // Pass logger to executor.exec
                         all_ok = false;
                         logger.log_error_fmt(|buf| {
                             write!(buf, "[explorer] Execution failed for addr ")?;
@@ -480,7 +487,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
 
                 self.path_stack.push(idx).unwrap(); // Push the original index of the command
                 // Store the next starting point for this level (for backtracking to this level)
-                self.loop_start_indices.push(idx + 1).unwrap(); 
+                self.loop_start_indices.push(idx + 1).unwrap();
                 return true; // Successfully extended
             }
         }
@@ -511,7 +518,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
 
             // Pop the loop start for the level we just finished. The next search start for the parent
             // was already set when this level was pushed.
-            self.loop_start_indices.pop(); 
+            self.loop_start_indices.pop();
 
             // If path_stack is empty after pop, we've backtracked past the root
             if self.path_stack.is_empty() {
