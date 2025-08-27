@@ -446,7 +446,7 @@ macro_rules! define_scanner {
 /// # }
 /// ```
 pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
-    explorer: &crate::explorer::Explorer<'_, N>,
+    explorer: &crate::explorer::Explorer<'_, N, BUF_CAP>,
     i2c: &mut I2C,
     serial: &mut S,
     init_sequence: &[u8],
@@ -518,7 +518,7 @@ where
 /// Returns `Ok(())` if the sequence was successfully executed,
 /// or `Err(ExplorerError)` if an error occurred (e.g., cycle detected, execution failed).
 pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
-    explorer: &crate::explorer::Explorer<'_, N>,
+    explorer: &crate::explorer::Explorer<'_, N, BUF_CAP>,
     i2c: &mut I2C,
     serial: &mut S,
     target_addr: u8,
@@ -536,7 +536,7 @@ where
         Ok(())
     });
 
-    let single_sequence = explorer.get_one_topological_sort(&mut serial_logger)?;
+    let single_sequence = explorer.get_one_topological_sort_buf(&mut serial_logger)?;
     serial_logger.log_info_fmt(|buf| write!(buf, "Before sort:\r\n"));
     for (idx, node) in explorer.sequence.iter().enumerate() {
     serial_logger.log_info_fmt(|buf| {
@@ -564,10 +564,10 @@ where
 
     for i in 0..sequence_len {
         serial_logger.log_info_fmt(|buf| {
-        write!(buf, "[explorer] Sending node {} bytes: {:02X?} ... ", i, single_sequence[i])?;
+        write!(buf, "[explorer] Sending node {} bytes: {:02X?} ... ", i, single_sequence.0[i])?;
         Ok(())
     });
-        match executor.exec(i2c, target_addr, single_sequence[i], &mut serial_logger) {
+        match executor.exec(i2c, target_addr, &single_sequence.0[i], &mut serial_logger) {
             Ok(_) => {
                 let _ = serial_logger.log_info_fmt(|buf| {
                     write!(buf, "OK\r\n")?;

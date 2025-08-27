@@ -136,15 +136,17 @@ impl From<ExecutorError> for ExplorerError {
 }
 
 /// Represents a single I2C command in the dependency graph.
+/// 
+/// - `bytes` - The I2C command bytes to be sent.
+/// - `deps` - The indices of the commands that must precede this command.
 ///
 /// The dependency is now on the index of the dependent command in the sequence.
 #[derive(Copy, Clone)]
 pub struct CmdNode {
-    /// The I2C command bytes to be sent.
     pub bytes: &'static [u8],
-    /// The indices of the commands that must precede this command.
     pub deps: &'static [usize],
 }
+
 
 /// A trait for executing a command on an I2C bus.
 pub trait CmdExecutor<I2C> {
@@ -161,7 +163,7 @@ pub trait CmdExecutor<I2C> {
 }
 
 /// The core explorer, now a generic dependency graph manager.
-pub struct Explorer<'a, const N: usize> {
+pub struct Explorer<'a, const N: usize, const MAX_CMD_LEN: usize> {
     pub sequence: &'a [CmdNode],
 }
 
@@ -186,7 +188,20 @@ pub struct ExploreResult {
     pub permutations_tested: usize,
 }
 
-impl<'a, const N: usize> Explorer<'a, N> {
+impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> {
+
+    pub const fn max_cmd_len(&self) -> usize {
+        let mut max_len = 0;
+        let mut i = 0;
+        while i < N {
+            let len = self.sequence[i].bytes.len();
+            if len > max_len {
+                max_len = len;
+            }
+            i += 1;
+        }
+        max_len + 1 // prefix add
+    }
     /// Returns a stack-safe iterator for all valid command permutations (topological sorts).
     ///
     /// This function first performs cycle detection using a modified Kahn's algorithm.
@@ -367,88 +382,101 @@ impl<'a, const N: usize> Explorer<'a, N> {
     ///
     /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
     /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
-    pub fn get_one_topological_sort(
-    &self,
-    serial: &mut impl core::fmt::Write,
-) -> Result<[&'a [u8]; N], ExplorerError> {
-    for (i, node) in self.sequence.iter().enumerate() {
-    writeln!(serial, "[dbg] Node {}: bytes={:02X?}, deps={:?}", i, node.bytes, node.deps).ok();
-}
+ pub fn get_one_topological_sort_buf(
+        &self,
+        serial: &mut impl core::fmt::Write,
+    ) -> Result<([[u8; MAX_CMD_LEN]; N], [usize; N]), ExplorerError> {
+        let len = self.sequence.len();
 
-    let len = self.sequence.len();
+        // in-degree と隣接リスト初期化
+        let mut in_degree: [usize; N] = [0; N];
+        let mut adj_list_rev: [[usize; N]; N] = [[0; N]; N];
+        let mut adj_list_len: [usize; N] = [0; N];
 
-    // ---- in-degree と隣接リスト初期化 ----
-    let mut in_degree: [usize; N] = [0; N];
-    let mut adj_list_rev: [[usize; N]; N] = [[0; N]; N];
-    let mut adj_list_len: [usize; N] = [0; N];
+        // 結果配列（固定長バッファ）と有効長配列
+        let mut result_sequence: [[u8; MAX_CMD_LEN]; N] = [[0; MAX_CMD_LEN]; N];
+        let mut result_len_per_node: [usize; N] = [0; N];
+        let mut result_len = 0;
 
-    // ---- 結果配列 ----
-    let mut result_sequence: [&[u8]; N] = [&[]; N];
-    let mut result_len = 0;
+        // in-degree 計算 & 隣接リスト構築
+        for (i, node) in self.sequence.iter().enumerate() {
+            in_degree[i] = node.deps.len();
+            writeln!(
+                serial,
+                "[dbg] Node {} deps={:?}, in_degree={}",
+                i, node.deps, in_degree[i]
+            )
+            .ok();
 
-    // ---- in-degree 計算 & 隣接リスト構築 ----
-    for (i, node) in self.sequence.iter().enumerate() {
-        in_degree[i] = node.deps.len();
-        writeln!(serial, "[dbg] Node {} deps={:?}, in_degree={}", i, node.deps, in_degree[i]).ok();
-
-        for &dep_idx in node.deps.iter() {
-            if dep_idx >= len {
-                writeln!(serial, "[error] Node {} has invalid dep index {} (len={})", i, dep_idx, len).ok();
-                return Err(ExplorerError::InvalidDependencyIndex);
+            for &dep_idx in node.deps.iter() {
+                if dep_idx >= len {
+                    writeln!(
+                        serial,
+                        "[error] Node {} has invalid dep index {} (len={})",
+                        i, dep_idx, len
+                    )
+                    .ok();
+                    return Err(ExplorerError::InvalidDependencyIndex);
+                }
+                let pos = adj_list_len[dep_idx];
+                adj_list_rev[dep_idx][pos] = i;
+                adj_list_len[dep_idx] += 1;
             }
-
-            let pos = adj_list_len[dep_idx];
-            if pos >= N {
-                return Err(ExplorerError::BufferOverflow);
-            }
-            adj_list_rev[dep_idx][pos] = i;
-            adj_list_len[dep_idx] += 1;
-            writeln!(serial, "[dbg] adj_list_rev[{}][{}] = {}, adj_list_len[{}] = {}", dep_idx, pos, i, dep_idx, adj_list_len[dep_idx]).ok();
         }
-    }
 
-    // ---- zero in-degree ノードをキューに格納 ----
-    let mut q: [usize; N] = [0; N];
-    let mut head = 0;
-    let mut tail = 0;
-    for i in 0..len {
-        if in_degree[i] == 0 {
-            q[tail] = i;
-            tail += 1;
-        }
-    }
-    writeln!(serial, "[dbg] initial queue: head={}, tail={}, q={:?}", head, tail, &q[..tail]).ok();
-
-    // ---- トポロジカルソート ----
-    while head < tail {
-        let u = q[head];
-        head += 1;
-        result_sequence[result_len] = self.sequence[u].bytes;
-        result_len += 1;
-
-        writeln!(serial, "[dbg] pop u={} from queue, head={}, tail={}, result_len={}", u, head, tail, result_len).ok();
-
-        for i in 0..adj_list_len[u] {
-            let v = adj_list_rev[u][i];
-            in_degree[v] -= 1;
-            writeln!(serial, "[dbg] decrement in_degree[{}] = {}", v, in_degree[v]).ok();
-
-            if in_degree[v] == 0 {
-                q[tail] = v;
+        // zero in-degree ノードをキューに格納
+        let mut q: [usize; N] = [0; N];
+        let mut head = 0;
+        let mut tail = 0;
+        for i in 0..len {
+            if in_degree[i] == 0 {
+                q[tail] = i;
                 tail += 1;
-                writeln!(serial, "[dbg] push v={} to queue, tail={}", v, tail).ok();
             }
         }
-    }
 
-    if result_len != len {
-        writeln!(serial, "[error] Dependency cycle detected").ok();
-        return Err(ExplorerError::DependencyCycle);
-    }
+        // トポロジカルソート
+        while head < tail {
+            let u = q[head];
+            head += 1;
 
-    writeln!(serial, "[dbg] topological sort complete, result_len={}", result_len).ok();
-    Ok(result_sequence)
-}
+            // 固定長バッファにコピー
+            let cmd_bytes = self.sequence[u].bytes;
+            let copy_len = cmd_bytes.len().min(MAX_CMD_LEN);
+            result_sequence[result_len][..copy_len].copy_from_slice(&cmd_bytes[..copy_len]);
+            result_len_per_node[result_len] = copy_len;
+            result_len += 1;
+
+            // 隣接ノードの in-degree を減らし、0ならキューに追加
+            for i in 0..adj_list_len[u] {
+                let v = adj_list_rev[u][i];
+                in_degree[v] -= 1;
+                if in_degree[v] == 0 {
+                    q[tail] = v;
+                    tail += 1;
+                }
+            }
+        }
+
+        if result_len != len {
+            writeln!(serial, "[error] Dependency cycle detected").ok();
+            return Err(ExplorerError::DependencyCycle);
+        }
+
+        // デバッグ: 有効長で表示
+        for i in 0..len {
+            writeln!(
+                serial,
+                "[dbg] Node {} bytes={:02X?} (len={})",
+                i,
+                &result_sequence[i][..result_len_per_node[i]],
+                result_len_per_node[i]
+            )
+            .ok();
+        }
+
+        Ok((result_sequence, result_len_per_node))
+    }
 
 
 }
