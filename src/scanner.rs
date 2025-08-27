@@ -43,9 +43,9 @@ where
         addr: u8,
         cmd: &[u8],
     ) -> Result<(), crate::explorer::ExecutorError> {
+
         fn short_delay() {
-            // 非依存の簡易スピン。プラットフォームに合わせて調整して下さい。
-            for _ in 0..8_000 { core::hint::spin_loop(); }
+            for _ in 0..8_000 { core::hint::spin_loop(); } // !
         }
 
         let addr_idx = addr as usize;
@@ -54,15 +54,12 @@ where
             for &c in self.init_sequence.iter() {
                 let command = [self.prefix, c];
 
-                // リトライループ（3回）
                 let mut ok = false;
-                for attempt in 0..3 {
+                for _attempt in 0..3 {
                     match i2c.write(addr, &command) {
                         Ok(_) => { ok = true; break; }
                         Err(e) => {
-                            // すぐログ／デバッグ出す（Logger があれば使う）
-                            // ここは呼び出し側の Logger に依存するため、最低限は無視して進める
-                            let _ = e.to_compat(Some(addr)); // 使ってログ出す等
+                            let _ = e.to_compat(Some(addr));
                             short_delay();
                         }
                     }
@@ -72,11 +69,10 @@ where
                         crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
                     ));
                 }
-                // 少し待つ（コマンド間）
                 short_delay();
             }
             self.initialized_addrs[addr_idx] = true;
-            // Vpp/ChargePump 等の直後は少し長めに待つこと（デバイス依存）
+            // Vpp/ChargePump
             short_delay();
         }
 
@@ -455,7 +451,7 @@ where
             Err(e) => {
                 let _ = writeln!(
                     serial,
-                    "[error] Initial sequence scan failed: {:?}. Aborting explorer.", e
+                    "[error] Initial sequence scan failed: {e:?}. Aborting explorer."
                 );
                 return Err(ExplorerError::ExecutionFailed);
             }
@@ -549,10 +545,10 @@ where
         if let Err(e) = executor.exec(i2c, target_addr, cmd_bytes) {
             all_ok = false;
             serial_logger.log_error_fmt(|buf| {
-                write!(buf, "[explorer] Execution failed for addr 0x{:02X}: ", target_addr)?;
+                write!(buf, "[explorer] Execution failed for addr 0x{target_addr:02X}: ")?;
                 match e { // e is ExecutorError
                     crate::explorer::ExecutorError::I2cError(kind) => {
-                        write!(buf, "I2C Error: {:?}", kind)?; // kind is ErrorKind
+                        write!(buf, "I2C Error: {kind:?}")?; // kind is ErrorKind
                     },
                     crate::explorer::ExecutorError::ExecFailed => {
                         write!(buf, "Execution Failed")?;

@@ -280,7 +280,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut solved_addrs = [false; I2C_ADDRESS_COUNT];
         let mut permutation_count = 0;
 
-        let iter = self.permutating()?;
+        let iter = self.permutations()?;
         logger.log_info("[explorer] Starting permutation exploration...\r\n");
 
         for sequence in iter {

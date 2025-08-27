@@ -46,7 +46,7 @@ pub fn write_bytes_hex_fmt<W: core::fmt::Write>(
     bytes: &[u8],
 ) -> core::fmt::Result {
     for (i, &b) in bytes.iter().enumerate() {
-        write!(w, "{:02X}", b)?;
+        write!(w, "{b:02X}")?;
         if i != bytes.len() - 1 {
             write!(w, " ")?;
         }

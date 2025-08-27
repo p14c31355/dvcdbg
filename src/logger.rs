@@ -1,5 +1,4 @@
-/// Defines the logging level for scanner functions.
-
+//! Defines the logging level for scanner functions.
 use heapless::String;
 use crate::explorer::LOG_BUFFER_CAPACITY;
 
