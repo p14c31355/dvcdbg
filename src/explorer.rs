@@ -370,16 +370,19 @@ impl<'a, const N: usize> Explorer<'a, N> {
             return Err(ExplorerError::TooManyCommands);
         }
 
+        // Initialize in-degree array
         let mut in_degree = Vec::<usize, N>::new();
         in_degree
             .resize(self.sequence.len(), 0)
             .map_err(|_| ExplorerError::BufferOverflow)?;
 
+        // Initialize reversed adjacency list
         let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
-        adj_list_rev
-            .resize(self.sequence.len(), Vec::new())
-            .map_err(|_| ExplorerError::BufferOverflow)?;
+        for _ in 0..self.sequence.len() {
+            adj_list_rev.push(Vec::new()).map_err(|_| ExplorerError::BufferOverflow)?;
+        }
 
+        // Build in-degree and reversed adjacency list
         for (i, node) in self.sequence.iter().enumerate() {
             in_degree[i] = node.deps.len();
             for &dep_idx in node.deps.iter() {
@@ -392,6 +395,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
             }
         }
 
+        // Initialize queue with nodes having zero in-degree
         let mut q = Vec::<usize, N>::new();
         for i in 0..self.sequence.len() {
             if in_degree[i] == 0 {
@@ -399,8 +403,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
             }
         }
 
+        // Perform topological sort
         let mut result_sequence = Vec::<&'a [u8], N>::new();
-        let mut head = 0; // Pointer for queue
+        let mut head = 0;
 
         while head < q.len() {
             let u = q[head];
@@ -418,9 +423,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
             }
         }
 
+        // Check for cycles
         if result_sequence.len() != self.sequence.len() {
-            // If the resulting sequence doesn't contain all nodes, it implies a cycle
-            // or some nodes were unreachable (which for a valid dependency graph means a cycle).
             return Err(ExplorerError::DependencyCycle);
         }
 
