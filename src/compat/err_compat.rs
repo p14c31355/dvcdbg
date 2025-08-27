@@ -29,9 +29,9 @@ where
     fn to_compat(&self, _addr: Option<u8>) -> ErrorKind {
         // This attempts to directly match the Nack error variant.
         // If embedded_hal_0_2::i2c::Error is not a simple enum that can be matched this way,
-        // this will result in a compilation error, indicating the limitation of e-h 0.2.
-        match self {
-            embedded_hal_0_2::ErrorKind::Nack => ErrorKind::I2c(I2cError::Nack),
+        // this will result in a compilation error, indicating the limitation of e-h 0.2. (The original error was that ErrorKind was not found in embedded_hal_0_2, it should be self.kind())
+        match self.kind() {
+            embedded_hal_0_2::i2c::ErrorKind::Nack => ErrorKind::I2c(I2cError::Nack),
             _ => ErrorKind::Unknown, // Fallback for other error kinds
         }
     }
