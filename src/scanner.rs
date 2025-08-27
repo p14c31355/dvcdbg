@@ -7,6 +7,7 @@
 use crate::compat::{HalErrorExt, ascii};
 use crate::explorer::{CmdExecutor, ExplorerError, Logger};
 use core::fmt::Write;
+use heapless::String;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -20,6 +21,124 @@ pub enum LogLevel {
     Normal,
     /// Suppress all logging output.
     Quiet,
+}
+
+/// Wrapper for serial interface to implement the Logger trait
+pub struct SerialLogger<'a, S: core::fmt::Write> {
+    writer: &'a mut S,
+    buffer: heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>,
+    log_level: LogLevel,
+}
+
+impl<'a, S: core::fmt::Write> SerialLogger<'a, S> {
+    pub fn new(writer: &'a mut S, log_level: LogLevel) -> Self {
+        Self {
+            writer,
+            buffer: heapless::String::new(),
+            log_level,
+        }
+    }
+}
+
+impl<'a, S: core::fmt::Write> crate::explorer::Logger for SerialLogger<'a, S> {
+    fn log_info(&mut self, msg: &str) {
+        if self.log_level != LogLevel::Quiet {
+            let _ = writeln!(self.writer, "[log] {}", msg);
+        }
+    }
+
+    fn log_warning(&mut self, msg: &str) {
+        if self.log_level != LogLevel::Quiet {
+            let _ = writeln!(self.writer, "[warn] {}", msg);
+        }
+    }
+
+    fn log_error(&mut self, msg: &str) {
+        if self.log_level != LogLevel::Quiet {
+            let _ = writeln!(self.writer, "[error] {}", msg);
+        }
+    }
+
+    fn log_info_fmt<F>(&mut self, fmt: F)
+    where
+        F: FnOnce(&mut String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error>,
+    {
+        if self.log_level != LogLevel::Quiet {
+            self.buffer.clear();
+            if fmt(&mut self.buffer).is_ok() {
+                let _ = self.writer.write_str(self.buffer.as_str());
+            }
+        }
+    }
+
+    fn log_error_fmt<F>(&mut self, fmt: F)
+    where
+        F: FnOnce(&mut String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error>,
+    {
+        self.buffer.clear();
+        if fmt(&mut self.buffer).is_ok() {
+            let _ = self.writer.write_str(self.buffer.as_str());
+        }
+    }
+}
+
+/// A command executor that prepends a prefix to each command.
+pub struct PrefixExecutor<const BUF_CAP: usize> {
+    prefix: u8,
+    init_sequence: heapless::Vec<u8, 64>,
+    initialized_addrs: [bool; 128],
+    buffer: heapless::Vec<u8, BUF_CAP>,
+}
+
+impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
+    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
+        Self {
+            prefix,
+            init_sequence,
+            initialized_addrs: [false; 128],
+            buffer: heapless::Vec::new(),
+        }
+    }
+}
+
+impl<I2C, const BUF_CAP: usize> crate::explorer::CmdExecutor<I2C> for PrefixExecutor<BUF_CAP>
+where
+    I2C: crate::compat::I2cCompat,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+{
+    fn exec(
+        &mut self,
+        i2c: &mut I2C,
+        addr: u8,
+        cmd: &[u8],
+    ) -> Result<(), crate::explorer::ExecutorError> {
+        let addr_idx = addr as usize;
+
+        // Check if the address has already been initialized (O(1) check)
+        if !self.initialized_addrs[addr_idx] {
+            // First, send the init_sequence with the prefix, one command at a time.
+            for &c in self.init_sequence.iter() {
+                let command = [self.prefix, c];
+                i2c.write(addr, &command).map_err(|e| {
+                    crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr)))
+                })?;
+            }
+            // Mark this address as initialized
+            self.initialized_addrs[addr_idx] = true;
+        }
+
+        // Then, send the regular command. Reuse the buffer.
+        self.buffer.clear();
+        self.buffer
+            .push(self.prefix)
+            .map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
+        self.buffer
+            .extend_from_slice(cmd)
+            .map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
+
+        i2c.write(addr, &self.buffer)
+            .map_err(|e| crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr))))
+    }
 }
 
 /// Macro to define common I2C scanner functions.
@@ -376,47 +495,6 @@ where
 
     Ok(())
 }
-
-
-    impl<I2C, const BUF_CAP: usize> crate::explorer::CmdExecutor<I2C> for PrefixExecutor<BUF_CAP>
-    where
-        I2C: crate::compat::I2cCompat,
-        <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    {
-        fn exec(
-            &mut self,
-            i2c: &mut I2C,
-            addr: u8,
-            cmd: &[u8],
-        ) -> Result<(), crate::explorer::ExecutorError> {
-            let addr_idx = addr as usize;
-
-            // Check if the address has already been initialized (O(1) check)
-            if !self.initialized_addrs[addr_idx] {
-                // First, send the init_sequence with the prefix, one command at a time.
-                for &c in self.init_sequence.iter() {
-                    let command = [self.prefix, c];
-                    i2c.write(addr, &command).map_err(|e| {
-                        crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr)))
-                    })?;
-                }
-                // Mark this address as initialized
-                self.initialized_addrs[addr_idx] = true;
-            }
-
-            // Then, send the regular command. Reuse the buffer.
-            self.buffer.clear();
-            self.buffer
-                .push(self.prefix)
-                .map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
-            self.buffer
-                .extend_from_slice(cmd)
-                .map_err(|_| crate::explorer::ExecutorError::BufferOverflow)?;
-
-            i2c.write(addr, &self.buffer)
-                .map_err(|e| crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr))))
-        }
-    }
 
 // In src/scanner.rs, add this new function:
 
