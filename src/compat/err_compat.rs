@@ -24,17 +24,15 @@ pub trait HalErrorExt {
 #[cfg(all(feature = "ehal_0_2", not(feature = "ehal_1_0")))]
 impl<E> HalErrorExt for E
 where
-    E: Debug,
+    E: Debug, // Keep Debug bound as it might be needed for other error kinds if they are wrapped
 {
     fn to_compat(&self, _addr: Option<u8>) -> ErrorKind {
-        // Map 0.2 HAL error to unified ErrorKind
-        // NOTE: 0.2 uses Debug output to detect NACKs
-        let mut buf: String<128> = String::new();
-        let _ = write!(buf, "{:?}\r\n", self);
-        if buf.contains("NACK") || buf.contains("NoAcknowledge") {
-            ErrorKind::I2c(I2cError::Nack)
-        } else {
-            ErrorKind::Unknown
+        // This attempts to directly match the Nack error variant.
+        // If embedded_hal_0_2::i2c::Error is not a simple enum that can be matched this way,
+        // this will result in a compilation error, indicating the limitation of e-h 0.2.
+        match self {
+            embedded_hal_0_2::ErrorKind::Nack => ErrorKind::I2c(I2cError::Nack),
+            _ => ErrorKind::Unknown, // Fallback for other error kinds
         }
     }
 }
