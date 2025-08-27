@@ -138,12 +138,12 @@ impl From<ExecutorError> for ExplorerError {
 /// Represents a single I2C command in the dependency graph.
 ///
 /// The dependency is now on the index of the dependent command in the sequence.
-#[derive(Clone)]
-pub struct CmdNode<'a> {
+#[derive(Copy, Clone)]
+pub struct CmdNode {
     /// The I2C command bytes to be sent.
-    pub bytes: &'a [u8],
+    pub bytes: &'static [u8],
     /// The indices of the commands that must precede this command.
-    pub deps: &'a [usize],
+    pub deps: &'static [usize],
 }
 
 /// A trait for executing a command on an I2C bus.
@@ -162,7 +162,7 @@ pub trait CmdExecutor<I2C> {
 
 /// The core explorer, now a generic dependency graph manager.
 pub struct Explorer<'a, const N: usize> {
-    pub sequence: &'a [CmdNode<'a>],
+    pub sequence: &'a [CmdNode],
 }
 
 /// An iterator that generates valid I2C command permutations (topological sorts).
@@ -170,7 +170,7 @@ pub struct Explorer<'a, const N: usize> {
 /// This iterator uses an iterative backtracking approach to find all possible
 /// valid sequences of commands, respecting their dependencies.
 pub struct PermutationIter<'a, const N: usize> {
-    sequence: &'a [CmdNode<'a>],
+    sequence: &'a [CmdNode],
     current_permutation: Vec<&'a [u8], N>,
     used: [bool; N], // Tracks which original command indices are currently in `current_permutation`
     in_degree: Vec<usize, N>, // Current in-degrees, updated dynamically during permutation generation
@@ -368,78 +368,89 @@ impl<'a, const N: usize> Explorer<'a, N> {
     /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
     /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
     pub fn get_one_topological_sort(
-        &self,
-        serial: &mut impl core::fmt::Write,
-    ) -> Result<[&'a [u8]; N], ExplorerError> {
-        let len = self.sequence.len();
+    &self,
+    serial: &mut impl core::fmt::Write,
+) -> Result<[&'a [u8]; N], ExplorerError> {
+    for (i, node) in self.sequence.iter().enumerate() {
+    writeln!(serial, "[dbg] Node {}: bytes={:02X?}, deps={:?}", i, node.bytes, node.deps).ok();
+}
 
-        // Initialize in-degree array
-        let mut in_degree: [usize; N] = [0; N];
+    let len = self.sequence.len();
 
-        // reversed adjacency list & length
-        let mut adj_list_rev: [[usize; N]; N] = [[0; N]; N];
-        let mut adj_list_len: [usize; N] = [0; N];
+    // ---- in-degree と隣接リスト初期化 ----
+    let mut in_degree: [usize; N] = [0; N];
+    let mut adj_list_rev: [[usize; N]; N] = [[0; N]; N];
+    let mut adj_list_len: [usize; N] = [0; N];
 
-        // Define result sequence
-        let mut result_sequence: [&[u8]; N] = [&[]; N];
-        let mut result_len = 0;
+    // ---- 結果配列 ----
+    let mut result_sequence: [&[u8]; N] = [&[]; N];
+    let mut result_len = 0;
 
-        // Topological sort core
-        for (i, node) in self.sequence.iter().enumerate() {
-            in_degree[i] = node.deps.len();
-            for &dep_idx in node.deps.iter() {
-                if dep_idx >= len {
-                    writeln!(serial, "[error] Node {} has invalid dep index {} (len={})", i, dep_idx, len).ok();
-                    return Err(ExplorerError::InvalidDependencyIndex);
-                }
-                let pos = adj_list_len[dep_idx];
-                if pos >= N {
-                    return Err(ExplorerError::BufferOverflow);
-                }
-                adj_list_rev[dep_idx][pos] = i;
-                adj_list_len[dep_idx] += 1;
+    // ---- in-degree 計算 & 隣接リスト構築 ----
+    for (i, node) in self.sequence.iter().enumerate() {
+        in_degree[i] = node.deps.len();
+        writeln!(serial, "[dbg] Node {} deps={:?}, in_degree={}", i, node.deps, in_degree[i]).ok();
+
+        for &dep_idx in node.deps.iter() {
+            if dep_idx >= len {
+                writeln!(serial, "[error] Node {} has invalid dep index {} (len={})", i, dep_idx, len).ok();
+                return Err(ExplorerError::InvalidDependencyIndex);
             }
-        }
 
-        // Initialize queue with nodes having zero in-degree
-        let mut q: [usize; N] = [0; N];
-        let mut head = 0;
-        let mut tail = 0;
-        // writeln!(serial, "[debug] initial queue (head=0, tail={}): {:?}", tail, &q[..tail]).ok();
-        for i in 0..len {
-            if in_degree[i] == 0 {
-                q[tail] = i;
-                tail += 1;
+            let pos = adj_list_len[dep_idx];
+            if pos >= N {
+                return Err(ExplorerError::BufferOverflow);
             }
+            adj_list_rev[dep_idx][pos] = i;
+            adj_list_len[dep_idx] += 1;
+            writeln!(serial, "[dbg] adj_list_rev[{}][{}] = {}, adj_list_len[{}] = {}", dep_idx, pos, i, dep_idx, adj_list_len[dep_idx]).ok();
         }
-
-        // sort
-        while head < tail {
-            let u = q[head];
-            head += 1;
-
-            // writeln!(serial, "[debug] head={}, tail={}, result_len={}", head, tail, result_len).ok();
-
-            result_sequence[result_len] = self.sequence[u].bytes;
-            result_len += 1;
-
-            for i in 0..adj_list_len[u] {
-                let v = adj_list_rev[u][i];
-                in_degree[v] -= 1;
-                if in_degree[v] == 0 {
-                    q[tail] = v;
-                    tail += 1;
-                }
-            }
-        }
-
-        if result_len != len {
-            writeln!(serial, "[error] Dependency cycle detected").ok();
-            return Err(ExplorerError::DependencyCycle);
-        }
-
-        Ok(result_sequence)
     }
+
+    // ---- zero in-degree ノードをキューに格納 ----
+    let mut q: [usize; N] = [0; N];
+    let mut head = 0;
+    let mut tail = 0;
+    for i in 0..len {
+        if in_degree[i] == 0 {
+            q[tail] = i;
+            tail += 1;
+        }
+    }
+    writeln!(serial, "[dbg] initial queue: head={}, tail={}, q={:?}", head, tail, &q[..tail]).ok();
+
+    // ---- トポロジカルソート ----
+    while head < tail {
+        let u = q[head];
+        head += 1;
+        result_sequence[result_len] = self.sequence[u].bytes;
+        result_len += 1;
+
+        writeln!(serial, "[dbg] pop u={} from queue, head={}, tail={}, result_len={}", u, head, tail, result_len).ok();
+
+        for i in 0..adj_list_len[u] {
+            let v = adj_list_rev[u][i];
+            in_degree[v] -= 1;
+            writeln!(serial, "[dbg] decrement in_degree[{}] = {}", v, in_degree[v]).ok();
+
+            if in_degree[v] == 0 {
+                q[tail] = v;
+                tail += 1;
+                writeln!(serial, "[dbg] push v={} to queue, tail={}", v, tail).ok();
+            }
+        }
+    }
+
+    if result_len != len {
+        writeln!(serial, "[error] Dependency cycle detected").ok();
+        return Err(ExplorerError::DependencyCycle);
+    }
+
+    writeln!(serial, "[dbg] topological sort complete, result_len={}", result_len).ok();
+    Ok(result_sequence)
+}
+
+
 }
 
 impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
