@@ -204,21 +204,20 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 }
 
                 let mut all_ok = true;
-                for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                    for &cmd_bytes in sequence_bytes.iter() {
-                        if let Err(e) = executor.exec(i2c, addr_val, cmd_bytes, logger) {
-                            all_ok = false;
-                            logger.log_error_fmt(|buf| {
-                                use core::fmt::Write;
-                                let _ = write!(
-                                    buf,
-                                    "[explorer] Execution failed for addr 0x{:02X}: {:?}\r\n",
-                                    addr_val, e
-                                );
-                                Ok(())
-                            });
-                            break;
-                        }
+                for &idx in order.iter() {
+                    let cmd_bytes = self.sequence[idx].bytes;
+                    if let Err(e) = executor.exec(i2c, addr_val, cmd_bytes, logger) {
+                        all_ok = false;
+                        logger.log_error_fmt(|buf| {
+                            use core::fmt::Write;
+                            let _ = write!(
+                                buf,
+                                "[explorer] Execution failed for addr 0x{:02X}: {:?}\r\n",
+                                addr_val, e
+                            );
+                            Ok(())
+                        });
+                        break;
                     }
                 }
 
@@ -229,9 +228,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
                         .map_err(|_| ExplorerError::BufferOverflow)?;
                 }
 
-                if !all_ok {
+                                if !all_ok {
                     failed_sequences_hashes
-                        .insert(current_sequence_hash, ())
+                        .insert(hash, ())
                         .map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
