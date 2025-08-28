@@ -446,7 +446,7 @@ macro_rules! define_scanner {
 /// # }
 /// ```
 pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
-    explorer: &crate::explorer::Explorer<'_, N, BUF_CAP>,
+    explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
     init_sequence: &[u8],
@@ -518,7 +518,7 @@ where
 /// Returns `Ok(())` if the sequence was successfully executed,
 /// or `Err(ExplorerError)` if an error occurred (e.g., cycle detected, execution failed).
 pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
-    explorer: &crate::explorer::Explorer<'_, N, BUF_CAP>,
+    explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
     target_addr: u8,
