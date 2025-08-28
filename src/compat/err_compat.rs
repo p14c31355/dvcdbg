@@ -20,7 +20,7 @@ where
     E: Debug,
 {
     fn to_compat(&self, _addr: Option<u8>) -> ErrorKind {
-        ErrorKind::Unknown
+        ErrorKind::I2c(I2cError::Nack)
     }
 }
 

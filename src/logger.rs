@@ -80,9 +80,11 @@ impl<'a, S: core::fmt::Write, const B: usize> Logger<B> for SerialLogger<'a, S, 
     where
         F: FnOnce(&mut heapless::String<B>) -> Result<(), core::fmt::Error>,
     {
-        self.buffer.clear();
-        if fmt(&mut self.buffer).is_ok() {
-            let _ = self.writer.write_str(self.buffer.as_str());
+        if self.log_level != LogLevel::Quiet {
+            self.buffer.clear();
+            if fmt(&mut self.buffer).is_ok() {
+                let _ = self.writer.write_str(self.buffer.as_str());
+            }
         }
     }
 }
