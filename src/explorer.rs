@@ -90,7 +90,6 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut in_degree: Vec<usize, N> = Vec::new();
         let mut adj_rev: Vec<Vec<usize, N>, N> = Vec::new();
         in_degree
-      
             .resize(self.sequence.len(), 0)
             .map_err(|_| ExplorerError::BufferOverflow)?;
         adj_rev
@@ -138,7 +137,6 @@ impl<'a, const N: usize> Explorer<'a, N> {
     }
 
     pub fn explore<I2C, E, L, const BUF_CAP: usize>(
-
         &self,
         i2c: &mut I2C,
         executor: &mut E,
@@ -241,7 +239,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
             permutations_tested: permutation_count,
         })
     }
-    
+
     /// Generates a single valid topological sort of the command sequence.
     /// This is useful when only one valid ordering is needed, and avoids
     /// the computational cost of generating all permutations.
