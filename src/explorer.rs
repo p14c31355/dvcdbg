@@ -2,7 +2,6 @@
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use heapless::Vec;
-use heapless::index_map::FnvIndexMap;
 const I2C_ADDRESS_COUNT: usize = 128;
 
 /// Errors that can occur during exploration of command sequences.
@@ -159,51 +158,32 @@ impl<'a, const N: usize> Explorer<'a, N> {
         visited_nodes
             .resize(self.sequence.len(), false)
             .map_err(|_| ExplorerError::BufferOverflow)?;
-        let mut hash_table: FnvIndexMap<u64, (), N> = FnvIndexMap::new();
-        let mut permutation_iter = PermutationIter::new(self)?;
-        let mut failed_sequences_hashes: FnvIndexMap<u64, (), N> = FnvIndexMap::new();
+        let mut executed_sequences: Vec<Vec<usize, N>, 128> = Vec::new();
+        let mut failed_sequences: Vec<Vec<usize, N>, 128> = Vec::new();
         loop {
             let order = self.kahn_topo_sort(&visited_nodes)?;
             if order.is_empty() {
                 break;
             }
 
-            let mut hasher = crc32fast::Hasher::new();
-            for &idx in order.iter() {
-                hasher.update(self.sequence[idx].bytes);
-            }
-            let hash = hasher.finalize() as u64;
-            if hash_table.contains_key(&hash) {
+            if executed_sequences.contains(&order) || failed_sequences.contains(&order) {
                 for &idx in order.iter() {
                     visited_nodes[idx] = true;
                 }
                 continue;
             }
-            hash_table
-                .insert(hash, ())
+            executed_sequences
+                .push(order.clone())
                 .map_err(|_| ExplorerError::BufferOverflow)?;
             permutation_count += 1;
 
-            if failed_sequences_hashes.contains_key(&hash) {
-                logger.log_info_fmt(|buf| {
-                    use core::fmt::Write;
-                    let _ = write!(
-                        buf,
-                        "[explorer] Skipping previously failed sequence (hash: 0x{:X})",
-                        hash
-                    );
-                    Ok(())
-                });
-                continue; // Skip this sequence
-            }
-
+            let mut all_ok = true;
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 let addr_idx = addr_val as usize;
                 if solved_addrs[addr_idx] {
                     continue;
                 }
 
-                let mut all_ok = true;
                 for &idx in order.iter() {
                     let cmd_bytes = self.sequence[idx].bytes;
                     if let Err(e) = executor.exec(i2c, addr_val, cmd_bytes, logger) {
@@ -227,12 +207,12 @@ impl<'a, const N: usize> Explorer<'a, N> {
                         .push(addr_val)
                         .map_err(|_| ExplorerError::BufferOverflow)?;
                 }
+            }
 
-                                if !all_ok {
-                    failed_sequences_hashes
-                        .insert(hash, ())
-                        .map_err(|_| ExplorerError::BufferOverflow)?;
-                }
+            if !all_ok {
+                failed_sequences
+                    .push(order.clone())
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
             }
 
             for &idx in order.iter() {

@@ -391,7 +391,7 @@ pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    S: core::fmt::Write,
+    S: core::fmt::Write + crate::logger::Logger<BUF_CAP>,
 {
     let successful_seq =
         match crate::scanner::scan_init_sequence(i2c, serial, prefix, init_sequence, log_level) {
