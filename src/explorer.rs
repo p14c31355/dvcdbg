@@ -190,7 +190,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     let _ = write!(
                         buf,
                         "[explorer] Skipping previously failed sequence (hash: 0x{:X})",
-                        current_sequence_hash
+                        hash
                     );
                     Ok(())
                 });
