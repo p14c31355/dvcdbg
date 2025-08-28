@@ -36,7 +36,7 @@ pub struct CmdNode {
     pub deps: &'static [usize],
 }
 
-pub trait CmdExecutor<I2C> {
+pub trait CmdExecutor<I2C, const BUF_CAP: usize> {
     fn exec<S>(
         &mut self,
         i2c: &mut I2C,
@@ -45,7 +45,7 @@ pub trait CmdExecutor<I2C> {
         logger: &mut S,
     ) -> Result<(), ExecutorError>
     where
-        S: core::fmt::Write + crate::logger::Logger;
+        S: core::fmt::Write + crate::logger::Logger<BUF_CAP>;
 }
 
 pub struct Explorer<'a, const N: usize> {
@@ -102,7 +102,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         Ok(order)
     }
 
-    pub fn explore<I2C, E, L>(
+    pub fn explore<I2C, E, L, const BUF_CAP: usize>(
         &self,
         i2c: &mut I2C,
         executor: &mut E,
@@ -110,8 +110,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
     ) -> Result<ExploreResult, ExplorerError>
     where
         I2C: crate::compat::I2cCompat,
-        E: CmdExecutor<I2C>,
-        L: crate::logger::Logger + core::fmt::Write,
+        E: CmdExecutor<I2C, BUF_CAP>,
+        L: crate::logger::Logger<BUF_CAP> + core::fmt::Write,
     {
         if self.sequence.is_empty() {
             logger.log_info("[explorer] No commands provided.");
@@ -186,7 +186,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
     ///
     /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
     /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
-    pub fn get_one_topological_sort_buf(
+    pub fn get_one_topological_sort_buf<const MAX_CMD_LEN: usize>(
         &self,
         serial: &mut impl core::fmt::Write,
     ) -> Result<([[u8; MAX_CMD_LEN]; N], [usize; N]), ExplorerError> {
