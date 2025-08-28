@@ -1,38 +1,25 @@
 // explorer.rs
 
 use crate::compat::ascii;
-use core::fmt::Write;
-use heapless::Vec;
-
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
+use heapless::Vec;
+use heapless::index_map::FnvIndexMap;
 const I2C_ADDRESS_COUNT: usize = 128;
-pub const LOG_BUFFER_CAPACITY: usize = 1024;
 
-/// Errors that can occur during exploration of command sequences.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ExplorerError {
-    /// The provided sequence contained more commands than supported by the capacity N.
     TooManyCommands,
-    /// The command dependency graph contains a cycle.
     DependencyCycle,
-    /// No valid I2C addresses were found for any command sequence.
     NoValidAddressesFound,
-    /// An I2C command execution failed.
     ExecutionFailed,
-    /// An internal buffer overflowed.
     BufferOverflow,
-    /// A dependency index is out of bounds.
     InvalidDependencyIndex,
 }
 
-/// Errors that can occur during command execution.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ExecutorError {
-    /// The command failed to execute due to an I2C error.
     I2cError(crate::error::ErrorKind),
-    /// The command failed to execute (e.g., NACK, I/O error).
     ExecFailed,
-    /// An internal buffer overflowed during command preparation.
     BufferOverflow,
 }
 
@@ -52,9 +39,7 @@ pub struct CmdNode {
     pub deps: &'static [usize],
 }
 
-/// A trait for executing a command on an I2C bus.
-pub trait CmdExecutor<I2C> {
-    /// Executes a given command byte sequence.
+pub trait CmdExecutor<I2C, const BUF_CAP: usize> {
     fn exec<S>(
         &mut self,
         i2c: &mut I2C,
@@ -63,28 +48,11 @@ pub trait CmdExecutor<I2C> {
         logger: &mut S,
     ) -> Result<(), ExecutorError>
     where
-        S: core::fmt::Write + crate::logger::Logger;
+        S: core::fmt::Write + crate::logger::Logger<BUF_CAP>;
 }
 
-/// The core explorer, now a generic dependency graph manager.
-pub struct Explorer<'a, const N: usize, const MAX_CMD_LEN: usize> {
+pub struct Explorer<'a, const N: usize> {
     pub sequence: &'a [CmdNode],
-}
-
-/// An iterator that generates valid I2C command permutations (topological sorts).
-///
-/// This iterator uses an iterative backtracking approach to find all possible
-/// valid sequences of commands, respecting their dependencies.
-pub struct PermutationIter<'a, const N: usize> {
-    sequence: &'a [CmdNode],
-    current_permutation: Vec<&'a [u8], N>,
-    used: [bool; N], // Tracks which original command indices are currently in `current_permutation`
-    in_degree: Vec<usize, N>, // Current in-degrees, updated dynamically during permutation generation
-    adj_list_rev: Vec<Vec<usize, N>, N>, // Reverse adjacency list: adj_list_rev[i] contains nodes that depend on node 'i'
-    path_stack: Vec<usize, N>, // Stack of original command indices added to `current_permutation`
-    loop_start_indices: Vec<usize, N>, // Tracks search progress at each level of the permutation tree
-    is_done: bool,
-    total_nodes: usize,
 }
 
 pub struct ExploreResult {
@@ -113,71 +81,60 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
 
         let mut initial_in_degree = Vec::<usize, N>::new();
         initial_in_degree
+impl<'a, const N: usize> Explorer<'a, N> {
+    fn kahn_topo_sort(&self, visited: &Vec<bool, N>) -> Result<Vec<usize, N>, ExplorerError> {
+        let mut in_degree: Vec<usize, N> = Vec::new();
+        let mut adj_rev: Vec<Vec<usize, N>, N> = Vec::new();
+        in_degree
+      
             .resize(self.sequence.len(), 0)
             .map_err(|_| ExplorerError::BufferOverflow)?;
-
-        let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
-        adj_list_rev
+        adj_rev
             .resize(self.sequence.len(), Vec::new())
             .map_err(|_| ExplorerError::BufferOverflow)?;
 
         for (i, node) in self.sequence.iter().enumerate() {
-            // The in-degree of a node is the number of dependencies it has.
-            initial_in_degree[i] = node.deps.len();
-            for &dep_idx in node.deps.iter() {
-                if dep_idx >= self.sequence.len() {
+            in_degree[i] = node.deps.len();
+            for &dep in node.deps.iter() {
+                if dep >= self.sequence.len() {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                // Add 'i' to the list of nodes that depend on 'dep_idx'
-                adj_list_rev[dep_idx]
+                adj_rev[dep]
                     .push(i)
                     .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
-        // Cycle detection using a modified Kahn's algorithm
-        let mut temp_in_degree = initial_in_degree.clone();
-        let mut q = Vec::<usize, N>::new();
+        let mut q: Vec<usize, N> = Vec::new();
         for i in 0..self.sequence.len() {
-            if temp_in_degree[i] == 0 {
+            if in_degree[i] == 0 && !visited[i] {
                 q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
-        let mut count = 0;
-        let mut q_idx = 0;
-        while q_idx < q.len() {
-            let u = q[q_idx];
-            q_idx += 1;
-            count += 1;
-
-            for &v in adj_list_rev[u].iter() {
-                temp_in_degree[v] -= 1;
-                if temp_in_degree[v] == 0 {
+        let mut order: Vec<usize, N> = Vec::new();
+        let mut idx = 0;
+        while idx < q.len() {
+            let u = q[idx];
+            idx += 1;
+            order.push(u).map_err(|_| ExplorerError::BufferOverflow)?;
+            for &v in adj_rev[u].iter() {
+                in_degree[v] -= 1;
+                if in_degree[v] == 0 && !visited[v] {
                     q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
         }
 
-        if count != self.sequence.len() {
+        if order.len() != self.sequence.len() - visited.iter().filter(|&&b| b).count() {
             return Err(ExplorerError::DependencyCycle);
         }
 
-        Ok(PermutationIter {
-            sequence: self.sequence,
-            current_permutation: Vec::new(),
-            used: [false; N], // Initialize all to false
-            in_degree: initial_in_degree,
-            adj_list_rev,
-            path_stack: Vec::new(),
-            loop_start_indices: Vec::new(), // Start empty, will be pushed to
-            is_done: false,
-            total_nodes: self.sequence.len(),
-        })
+        Ok(order)
     }
 
-    
-    pub fn explore<I2C, E, L>(
+    pub fn explore<I2C, E, L, const BUF_CAP: usize>(
+
         &self,
         i2c: &mut I2C,
         executor: &mut E,
@@ -185,26 +142,43 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
     ) -> Result<ExploreResult, ExplorerError>
     where
         I2C: crate::compat::I2cCompat,
-        E: CmdExecutor<I2C>,
-        L: crate::logger::Logger + core::fmt::Write,
+        E: CmdExecutor<I2C, BUF_CAP>,
+        L: crate::logger::Logger<BUF_CAP> + core::fmt::Write,
     {
-        // Handle the case where no commands are provided.
-        // An empty sequence means there's nothing to explore,
-        // so no valid addresses can be found through this exploration process.
         if self.sequence.is_empty() {
-            logger.log_info(
-                "[explorer] No commands provided for exploration. Returning no valid addresses.",
-            );
+            logger.log_info("[explorer] No commands provided.");
             return Err(ExplorerError::NoValidAddressesFound);
         }
+
         let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
-        let mut solved_addrs = [false; I2C_ADDRESS_COUNT];
+        let mut solved_addrs: [bool; I2C_ADDRESS_COUNT] = [false; I2C_ADDRESS_COUNT];
         let mut permutation_count = 0;
+        let mut visited_nodes: Vec<bool, N> = Vec::new();
+        visited_nodes
+            .resize(self.sequence.len(), false)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
+        let mut hash_table: FnvIndexMap<u64, (), N> = FnvIndexMap::new();
 
-        let iter = self.permutations()?;
-        logger.log_info("[explorer] Starting permutation exploration...");
+        loop {
+            let order = self.kahn_topo_sort(&visited_nodes)?;
+            if order.is_empty() {
+                break;
+            }
 
-        for sequence in iter {
+            let mut hasher = crc32fast::Hasher::new();
+            for &idx in order.iter() {
+                hasher.update(self.sequence[idx].bytes);
+            }
+            let hash = hasher.finalize() as u64;
+            if hash_table.contains_key(&hash) {
+                for &idx in order.iter() {
+                    visited_nodes[idx] = true;
+                }
+                continue;
+            }
+            hash_table
+                .insert(hash, ())
+                .map_err(|_| ExplorerError::BufferOverflow)?;
             permutation_count += 1;
 
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
@@ -214,14 +188,16 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
                 }
 
                 let mut all_ok = true;
-                for &cmd in sequence.iter() {
-                    if let Err(e) = executor.exec(i2c, addr_val, cmd, logger) {
-                        // Pass logger to executor.exec
+                for &idx in order.iter() {
+                    if let Err(e) = executor.exec(i2c, addr_val, self.sequence[idx].bytes, logger) {
                         all_ok = false;
                         logger.log_error_fmt(|buf| {
-                            write!(buf, "[explorer] Execution failed for addr ")?;
-                            ascii::write_bytes_hex_fmt(buf, &[addr_val])?;
-                            write!(buf, ": {e:?}\r\n")?;
+                            use core::fmt::Write;
+                            let _ = write!(
+                                buf,
+                                "[explorer] Execution failed for addr 0x{:02X}: {:?}\r\n",
+                                addr_val, e
+                            );
                             Ok(())
                         });
                         break;
@@ -229,41 +205,46 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
                 }
 
                 if all_ok {
-                    if found_addresses.push(addr_val).is_ok() {
-                        solved_addrs[addr_idx] = true;
-                    } else {
-                        return Err(ExplorerError::BufferOverflow);
-                    }
+                    solved_addrs[addr_idx] = true;
+                    found_addresses
+                        .push(addr_val)
+                        .map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
 
-            // Optimization: if all possible addresses have been found, we can stop.
-            if found_addresses.len() == (I2C_SCAN_ADDR_END - I2C_SCAN_ADDR_START + 1) as usize {
-                break;
+            for &idx in order.iter() {
+                visited_nodes[idx] = true;
             }
         }
 
         logger.log_info_fmt(|buf| {
-            writeln!(
+            use core::fmt::Write;
+            let _ = writeln!(
                 buf,
                 "[explorer] Exploration complete. {} addresses found across {} permutations.",
                 found_addresses.len(),
                 permutation_count
-            )
+            );
+            Ok(())
         });
 
         if found_addresses.is_empty() {
-            Err(ExplorerError::NoValidAddressesFound)
-        } else {
-            Ok(ExploreResult {
-                found_addrs: found_addresses,
-                permutations_tested: permutation_count,
-            })
+            return Err(ExplorerError::NoValidAddressesFound);
         }
-    }
 
+        Ok(ExploreResult {
+            found_addrs: found_addresses,
+            permutations_tested: permutation_count,
+        })
+    }
     
-    pub fn get_one_topological_sort_buf(
+    /// Generates a single valid topological sort of the command sequence.
+    /// This is useful when only one valid ordering is needed, and avoids
+    /// the computational cost of generating all permutations.
+    ///
+    /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
+    /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
+    pub fn get_one_topological_sort_buf<const MAX_CMD_LEN: usize>(
         &self,
         serial: &mut impl core::fmt::Write,
     ) -> Result<([[u8; MAX_CMD_LEN]; N], [usize; N]), ExplorerError> {

@@ -33,7 +33,8 @@ impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
     }
 }
 
-impl<I2C, const BUF_CAP: usize> crate::explorer::CmdExecutor<I2C> for PrefixExecutor<BUF_CAP>
+impl<I2C, const BUF_CAP: usize> crate::explorer::CmdExecutor<I2C, BUF_CAP>
+    for PrefixExecutor<BUF_CAP>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -46,7 +47,7 @@ where
         logger: &mut S,
     ) -> Result<(), crate::explorer::ExecutorError>
     where
-        S: core::fmt::Write + crate::logger::Logger,
+        S: core::fmt::Write + crate::logger::Logger<BUF_CAP>,
     {
         fn short_delay() {
             for _ in 0..8_000 {
@@ -384,7 +385,7 @@ macro_rules! define_scanner {
 }
 
 pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
-    explorer: &crate::explorer::Explorer<'_, N, BUF_CAP>,
+    explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
     init_sequence: &[u8],
@@ -414,7 +415,7 @@ where
     let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
 
     for addr in explorer
-        .explore(i2c, &mut executor, &mut serial_logger)?
+        .explore::<_, _, _, BUF_CAP>(i2c, &mut executor, &mut serial_logger)?
         .found_addrs
         .iter()
     {
@@ -427,7 +428,7 @@ where
 }
 
 pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
-    explorer: &crate::explorer::Explorer<'_, N, BUF_CAP>,
+    explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
     target_addr: u8,
@@ -448,7 +449,7 @@ where
         Ok(())
     });
 
-    let single_sequence = explorer.get_one_topological_sort_buf(&mut serial_logger)?;
+    let single_sequence = explorer.get_one_topological_sort_buf::<BUF_CAP>(&mut serial_logger)?;
     serial_logger.log_info_fmt(|buf| write!(buf, "Before sort:\r\n"));
     for (idx, node) in explorer.sequence.iter().enumerate() {
         serial_logger.log_info_fmt(|buf| write!(buf, "Node {} deps: {:?}\r\n", idx, node.deps));
