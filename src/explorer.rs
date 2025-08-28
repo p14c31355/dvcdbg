@@ -160,7 +160,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
             .resize(self.sequence.len(), false)
             .map_err(|_| ExplorerError::BufferOverflow)?;
         let mut hash_table: FnvIndexMap<u64, (), N> = FnvIndexMap::new();
-
+        let mut permutation_iter = PermutationIter::new(self)?;
+        let mut failed_sequences_hashes: Vec<u64, N> = Vec::new();
         loop {
             let order = self.kahn_topo_sort(&visited_nodes)?;
             if order.is_empty() {
@@ -183,6 +184,19 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 .map_err(|_| ExplorerError::BufferOverflow)?;
             permutation_count += 1;
 
+            if failed_sequences_hashes.contains(&current_sequence_hash) {
+                logger.log_info_fmt(|buf| {
+                    use core::fmt::Write;
+                    let _ = write!(
+                        buf,
+                        "[explorer] Skipping previously failed sequence (hash: 0x{:X})",
+                        current_sequence_hash
+                    );
+                    Ok(())
+                });
+                continue; // Skip this sequence
+            }
+
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 let addr_idx = addr_val as usize;
                 if solved_addrs[addr_idx] {
@@ -190,19 +204,21 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 }
 
                 let mut all_ok = true;
-                for &idx in order.iter() {
-                    if let Err(e) = executor.exec(i2c, addr_val, self.sequence[idx].bytes, logger) {
-                        all_ok = false;
-                        logger.log_error_fmt(|buf| {
-                            use core::fmt::Write;
-                            let _ = write!(
-                                buf,
-                                "[explorer] Execution failed for addr 0x{:02X}: {:?}\r\n",
-                                addr_val, e
-                            );
-                            Ok(())
-                        });
-                        break;
+                for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
+                    for &cmd_bytes in sequence_bytes.iter() {
+                        if let Err(e) = executor.exec(i2c, addr_val, cmd_bytes, logger) {
+                            all_ok = false;
+                            logger.log_error_fmt(|buf| {
+                                use core::fmt::Write;
+                                let _ = write!(
+                                    buf,
+                                    "[explorer] Execution failed for addr 0x{:02X}: {:?}\r\n",
+                                    addr_val, e
+                                );
+                                Ok(())
+                            });
+                            break;
+                        }
                     }
                 }
 
@@ -210,6 +226,12 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     solved_addrs[addr_idx] = true;
                     found_addresses
                         .push(addr_val)
+                        .map_err(|_| ExplorerError::BufferOverflow)?;
+                }
+
+                if !all_ok {
+                    failed_sequences_hashes
+                        .insert(current_sequence_hash, ())
                         .map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
@@ -239,7 +261,6 @@ impl<'a, const N: usize> Explorer<'a, N> {
             permutations_tested: permutation_count,
         })
     }
-
     /// Generates a single valid topological sort of the command sequence.
     /// This is useful when only one valid ordering is needed, and avoids
     /// the computational cost of generating all permutations.
@@ -266,14 +287,16 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 serial,
                 "[dbg] Node {i} deps={:?}, in_degree={}",
                 node.deps, in_degree[i]
-            ).ok();
+            )
+            .ok();
 
             for &dep_idx in node.deps.iter() {
                 if dep_idx >= len {
                     writeln!(
                         serial,
                         "[error] Node {i} has invalid dep index {dep_idx} (len={len})"
-                    ).ok();
+                    )
+                    .ok();
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
                 let pos = adj_list_len[dep_idx];
@@ -323,7 +346,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 "[dbg] Node {i} bytes={:02X?} (len={})",
                 &result_sequence[i][..result_len_per_node[i]],
                 result_len_per_node[i]
-            ).ok();
+            )
+            .ok();
         }
 
         Ok((result_sequence, result_len_per_node))
@@ -344,7 +368,7 @@ pub struct PermutationIter<'a, const N: usize> {
 }
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
-        pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
+    pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
         let total_nodes = explorer.sequence.len();
         if total_nodes > N {
             return Err(ExplorerError::TooManyCommands);

@@ -58,9 +58,8 @@ where
         let addr_idx = addr as usize;
 
         if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
-            logger.log_info_fmt(|buf| {
-                write!(buf, "[Info] I2C initializing for 0x{addr:02X}...\r\n")
-            });
+            logger
+                .log_info_fmt(|buf| write!(buf, "[Info] I2C initializing for 0x{addr:02X}...\r\n"));
 
             for &c in self.init_sequence.iter() {
                 let command = [self.prefix, c];
@@ -91,8 +90,7 @@ where
             }
 
             self.initialized_addrs[addr_idx] = true;
-            logger
-                .log_info_fmt(|buf| write!(buf, "[Info] I2C initialized for 0x{addr:02X}\r\n"));
+            logger.log_info_fmt(|buf| write!(buf, "[Info] I2C initialized for 0x{addr:02X}\r\n"));
         }
 
         self.buffer.clear();
@@ -111,8 +109,7 @@ where
                 }
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
-                    logger
-                        .log_error_fmt(|buf| write!(buf, "[I2C retry error] {compat_err:?}\r\n"));
+                    logger.log_error_fmt(|buf| write!(buf, "[I2C retry error] {compat_err:?}\r\n"));
                     short_delay();
                 }
             }
@@ -349,7 +346,8 @@ macro_rules! define_scanner {
                         writeln!(
                             serial,
                             "[warn] Missing commands buffer is full, list is truncated."
-                        ).ok();
+                        )
+                        .ok();
                         break;
                     }
                 }
@@ -402,7 +400,8 @@ where
                 writeln!(
                     serial,
                     "[error] Initial sequence scan failed: {e:?}. Aborting explorer."
-                ).ok();
+                )
+                .ok();
                 return Err(crate::explorer::ExplorerError::ExecutionFailed);
             }
         };
