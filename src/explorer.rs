@@ -344,7 +344,7 @@ pub struct PermutationIter<'a, const N: usize> {
 }
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
-    pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
+        pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
         let total_nodes = explorer.sequence.len();
         if total_nodes > N {
             return Err(ExplorerError::TooManyCommands);
@@ -370,6 +370,34 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                     .push(i)
                     .map_err(|_| ExplorerError::BufferOverflow)?;
             }
+        }
+
+        // Cycle detection using Kahn's algorithm
+        let mut temp_in_degree = in_degree.clone();
+        let mut q = Vec::<usize, N>::new();
+        for i in 0..total_nodes {
+            if temp_in_degree[i] == 0 {
+                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+        }
+
+        let mut count = 0;
+        let mut q_idx = 0;
+        while q_idx < q.len() {
+            let u = q[q_idx];
+            q_idx += 1;
+            count += 1;
+
+            for &v in adj_list_rev[u].iter() {
+                temp_in_degree[v] -= 1;
+                if temp_in_degree[v] == 0 {
+                    q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
+                }
+            }
+        }
+
+        if count != total_nodes {
+            return Err(ExplorerError::DependencyCycle);
         }
 
         Ok(Self {
