@@ -96,7 +96,7 @@ Represents a single I2C command in the dependency graph.
 
 The dependency is now on the index of the dependent command in the sequence.
 
-```
+```rust
 #[derive(Copy, Clone)]
 pub struct CmdNode {
     pub bytes: &'static [u8],
