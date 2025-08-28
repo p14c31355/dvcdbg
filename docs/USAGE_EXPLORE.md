@@ -1,4 +1,4 @@
-//! # I2C Command Sequence Explorer
+# I2C Command Sequence Explorer
 //!
 //! This module provides an algorithm and supporting utilities for discovering
 //! valid sequences of I2C commands when device dependencies are unknown or
