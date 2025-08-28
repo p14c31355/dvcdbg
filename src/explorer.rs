@@ -1,93 +1,4 @@
 // explorer.rs
-//! # I2C Command Sequence Explorer
-//!
-//! This module provides an algorithm and supporting utilities for discovering
-//! valid sequences of I2C commands when device dependencies are unknown or
-//! partially specified. It is designed for embedded bring-up scenarios, where
-//! experimenting with permutations of initialization commands can reveal the
-//! correct sequence for a new or undocumented device.
-//!
-//! ## Overview
-//! - [`Explorer`] manages a dependency graph of commands and produces only
-//!   valid permutations that satisfy the declared constraints.
-//! - [`PermutationIter`] generates these permutations using an iterative,
-//!   stack-safe backtracking algorithm (no recursion).
-//! - [`CmdExecutor`] abstracts the execution of a command on the I2C bus.
-//! - [`Logger`] provides pluggable logging backends (serial console, null logger, etc.).
-//!
-//! ## Key Features
-//! 1. **Separation of Concerns**: The permutation engine (`PermutationIter`) is
-//!    isolated from bus execution logic (`explore`).
-//! 2. **Iterator-based API**: The [`Explorer::permutations`] method yields an
-//!    iterator, making the algorithm testable and composable.
-//! 3. **Generic Capacity**: The const generic `N` defines the maximum command
-//!    capacity at compile time, enabling efficient use on resource-constrained
-//!    microcontrollers.
-//! 4. **Flexible Logging**: The [`Logger`] trait supports both formatted and
-//!    lightweight logging without allocating large buffers.
-//! 5. **Robust Error Handling**: [`ExplorerError`] reports dependency cycles,
-//!    buffer exhaustion, and runtime execution issues explicitly.
-//!
-//! ## Typical Use Case
-//! - Bring-up of a new I2C peripheral when the required initialization sequence
-//!   is undocumented or incomplete.
-//! - Automated discovery of valid command orderings under dependency constraints.
-//! - Filtering of device addresses that respond consistently to a tested sequence.
-//!
-//! ## Example
-//! ```ignore
-//! use dvcdbg::prelude::*;
-//! use heapless::Vec;
-//!
-//! // Example executor for a specific I2C implementation.
-//! struct MyExecutor;
-//! impl<I2C: crate::compat::I2cCompat> CmdExecutor<I2C> for MyExecutor {
-//!     fn exec(
-//!         &mut self,
-//!         i2c: &mut I2C,
-//!         addr: u8,
-//!         cmd: &[u8]
-//!     ) -> Result<(), crate::explorer::ExecutorError> {
-//!         // Simplified example: prepend 0x00 control byte.
-//!         if cmd.len() != 1 {
-//!             return Err(crate::explorer::ExecutorError::ExecFailed);
-//!         }
-//!         let buf = [0x00, cmd[0]];
-//!         i2c.write(addr, &buf)
-//!             .map_err(|e| crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr))))
-//!     }
-//! }
-//!
-//! // Dummy logger that ignores messages.
-//! struct NullLogger;
-//! impl Logger for NullLogger {
-//!     fn log_info(&mut self, _msg: &str) {}
-//!     fn log_warning(&mut self, _msg: &str) {}
-//!     fn log_error(&mut self, _msg: &str) {}
-//!     fn log_info_fmt<F>(&mut self, _fmt: F)
-//!     where F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error> {}
-//!     fn log_error_fmt<F>(&mut self, _fmt: F)
-//!     where F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error> {}
-//! }
-//!
-//! // Define candidate commands with dependencies.
-//! const CAPACITY: usize = 32;
-//! let cmds = &[
-//!     CmdNode { bytes: &[0x01], deps: &[] },
-//!     CmdNode { bytes: &[0x02], deps: &[0] }, // depends on first command
-//!     CmdNode { bytes: &[0x03], deps: &[0] },
-//! ];
-//!
-//! let explorer = Explorer::<CAPACITY> { sequence: cmds };
-//! let mut executor = MyExecutor;
-//! let mut logger = NullLogger;
-//! let mut i2c = /* platform-specific I2C impl */;
-//!
-//! let result = explorer.explore(&mut i2c, &mut executor, &mut logger);
-//! if let Err(e) = result {
-//!     logger.log_error(&format!("Exploration failed: {:?}", e));
-//! }
-//! ```
 
 use crate::compat::ascii;
 use core::fmt::Write;
@@ -135,12 +46,6 @@ impl From<ExecutorError> for ExplorerError {
     }
 }
 
-/// Represents a single I2C command in the dependency graph.
-///
-/// - `bytes` - The I2C command bytes to be sent.
-/// - `deps` - The indices of the commands that must precede this command.
-///
-/// The dependency is now on the index of the dependent command in the sequence.
 #[derive(Copy, Clone)]
 pub struct CmdNode {
     pub bytes: &'static [u8],
@@ -200,11 +105,7 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
         }
         max_len + 1 // prefix add
     }
-    /// Returns a stack-safe iterator for all valid command permutations (topological sorts).
-    ///
-    /// This function first performs cycle detection using a modified Kahn's algorithm.
-    /// If a cycle is detected, it returns an `ExplorerError::DependencyCycle`.
-    /// Otherwise, it initializes and returns a `PermutationIter` to generate all valid permutations.
+    
     pub fn permutations(&self) -> Result<PermutationIter<'a, N>, ExplorerError> {
         if self.sequence.len() > N {
             return Err(ExplorerError::TooManyCommands);
@@ -275,20 +176,7 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
         })
     }
 
-    /// Explores valid sequences, attempting to execute them on an I2C bus.
-    ///
-    /// This function iterates through all valid command permutations generated by `PermutationIter`,
-    /// and for each permutation, attempts to execute it on all active I2C addresses.
-    /// It filters out addresses that fail to respond to any command in a sequence.
-    ///
-    /// # Parameters
-    /// - `i2c`: An I2C implementation used to test candidate sequences against device addresses.
-    /// - `executor`: The object responsible for executing a single command on the bus.
-    /// - `logger`: The object responsible for logging progress and results.
-    ///
-    /// # Returns
-    /// - `Ok(ExploreResult)` containing the list of found addresses and the number of permutations tested.
-    /// - `Err(ExplorerError)` if an error occurs during permutation generation or I2C execution.
+    
     pub fn explore<I2C, E, L>(
         &self,
         i2c: &mut I2C,
@@ -374,12 +262,7 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
         }
     }
 
-    /// Generates a single valid topological sort of the command sequence.
-    /// This is useful when only one valid ordering is needed, and avoids
-    /// the computational cost of generating all permutations.
-    ///
-    /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
-    /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
+    
     pub fn get_one_topological_sort_buf(
         &self,
         serial: &mut impl core::fmt::Write,
@@ -504,14 +387,6 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
 }
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
-    /// Attempts to extend the current partial permutation by adding a new command.
-    ///
-    /// It iterates through all available (not yet used) commands and checks if their
-    /// dependencies are satisfied (i.e., their in-degree is 0). If a valid command
-    /// is found, it's added to the current permutation, its `used` status is updated,
-    /// and the in-degrees of its dependent nodes are decremented.
-    ///
-    /// Returns `true` if a command was successfully added, `false` otherwise.
     fn try_extend(&mut self) -> bool {
         // The `loop_start_indices` tracks the starting point for the search at the current depth.
         // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
@@ -547,17 +422,6 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         false // No node found to extend the current permutation
     }
 
-    /// Backtracks to the previous decision point in the permutation search.
-    ///
-    /// This method undoes the last choice made: it removes the last added command
-    /// from the current permutation, unmarks it as used, and increments the
-    /// in-degrees of its dependent nodes (reversing the decrement).
-    /// It then updates the `loop_start_indices` to ensure the next search
-    /// at the parent level continues from the next sibling.
-    ///
-    /// Returns `true` if backtracking can continue (i.e., there are more options
-    /// at a previous level), or `false` if the root was reached and no more
-    /// permutations can be generated.
     fn backtrack(&mut self) -> bool {
         if let Some(last_added_idx) = self.path_stack.pop() {
             // Undo the choice: Remove the last added node from the permutation

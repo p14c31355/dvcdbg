@@ -383,68 +383,6 @@ macro_rules! define_scanner {
     };
 }
 
-/// Runs the I2C explorer with a given initial sequence and logs the results.
-///
-/// This function first performs an I2C scan with the provided `init_sequence` to identify
-/// responsive commands. Then, it uses the `explorer` to find valid command sequences
-/// for discovered devices, applying a `prefix` to each command.
-///
-/// # Type Parameters
-///
-/// - `I2C`: The I2C interface type that implements `crate::compat::I2cCompat`.
-/// - `S`: The serial interface type used for logging, implementing `core::fmt::Write`.
-/// - `N`: A const generic for the maximum number of commands.
-/// - `BUF_CAP`: A const generic for the command buffer capacity.
-///
-/// # Parameters
-///
-/// - `explorer`: An instance of `Explorer` containing the command nodes and their dependencies.
-/// - `i2c`: The I2C bus instance.
-/// - `serial`: The serial writer for logging.
-/// - `init_sequence`: The initial sequence of bytes to test for device responsiveness.
-/// - `prefix`: A byte to prepend to every command sent during exploration.
-/// - `log_level`: The desired logging level.
-///
-/// # Example
-///
-/// ```ignore
-/// use dvcdbg::prelude::*;
-/// use arduino_hal::I2c;
-/// use arduino_hal::hal::port::Port;
-/// use arduino_hal::pac::TWI;
-/// use heapless::Vec;
-/// use core::fmt::Write;
-///
-/// # struct MyI2c; // Dummy I2c implementation
-/// # impl dvcdbg::compat::I2cCompat for MyI2c {
-/// #     type Error = dvcdbg::error::ErrorKind;
-/// #     fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> { Ok(()) }
-/// #     fn read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), Self::Error> { Ok(()) }
-/// #     fn write_read(&mut self, addr: u8, bytes: &[u8], buffer: &mut [u8]) -> Result<(), Self::Error> { Ok(()) }
-/// # }
-/// # struct MySerial; // Dummy Serial implementation
-/// # impl core::fmt::Write for MySerial {
-/// #     fn write_str(&mut self, s: &str) -> core::fmt::Result { Ok(()) }
-/// # }
-///
-/// let mut i2c = /* your I2C instance */;
-/// let mut serial = /* your serial instance */;
-/// let init_sequence = [0u8; 16]; // Example initial sequence
-/// const EXPLORER_CAP: usize = 32;
-/// const BUF_CAP: usize = 128;
-/// let explorer = Explorer::<EXPLORER_CAP> { sequence: &[] }; // Dummy explorer
-///
-/// run_explorer::<_, _, EXPLORER_CAP, BUF_CAP>(
-///     &explorer,
-///     &mut i2c,
-///     &mut serial,
-///     &init_sequence,
-///     0x00, // Example prefix
-///     LogLevel::Verbose,
-/// ).unwrap();
-/// # Ok::<(), dvcdbg::explorer::ExplorerError>(())
-/// # }
-/// ```
 pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
     explorer: &crate::explorer::Explorer<'_, N, BUF_CAP>,
     i2c: &mut I2C,
@@ -488,35 +426,6 @@ where
     Ok(())
 }
 
-// In src/scanner.rs, add this new function:
-
-/// Runs the I2C explorer to find and execute a single valid command sequence.
-///
-/// This function first obtains one topological sort of the commands from the explorer.
-/// Then, it attempts to execute this single sequence on a specified I2C address.
-/// This is useful for device initialization where only one valid sequence is needed,
-/// avoiding the high computational cost of exploring all permutations.
-///
-/// # Type Parameters
-///
-/// - `I2C`: The I2C interface type that implements `crate::compat::I2cCompat`.
-/// - `S`: The serial interface type used for logging, implementing `core::fmt::Write`.
-/// - `N`: A const generic for the maximum number of commands.
-/// - `BUF_CAP`: A const generic for the command buffer capacity.
-///
-/// # Parameters
-///
-/// - `explorer`: An instance of `Explorer` containing the command nodes and their dependencies.
-/// - `i2c`: The I2C bus instance.
-/// - `serial`: The serial writer for logging.
-/// - `target_addr`: The specific I2C address to execute the sequence on.
-/// - `prefix`: A byte to prepend to every command sent during execution.
-/// - `log_level`: The desired logging level.
-///
-/// # Returns
-///
-/// Returns `Ok(())` if the sequence was successfully executed,
-/// or `Err(ExplorerError)` if an error occurred (e.g., cycle detected, execution failed).
 pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
     explorer: &crate::explorer::Explorer<'_, N, BUF_CAP>,
     i2c: &mut I2C,
