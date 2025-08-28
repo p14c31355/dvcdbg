@@ -85,56 +85,6 @@ impl<'a, const N: usize> Explorer<'a, N> {
 }
 
 impl<'a, const N: usize> Explorer<'a, N> {
-    fn kahn_topo_sort(&self, visited: &Vec<bool, N>) -> Result<Vec<usize, N>, ExplorerError> {
-        let mut in_degree: Vec<usize, N> = Vec::new();
-        let mut adj_rev: Vec<Vec<usize, N>, N> = Vec::new();
-        in_degree
-            .resize(self.sequence.len(), 0)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-        adj_rev
-            .resize(self.sequence.len(), Vec::new())
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-
-        for (i, node) in self.sequence.iter().enumerate() {
-            in_degree[i] = node.deps.len();
-            for &dep in node.deps.iter() {
-                if dep >= self.sequence.len() {
-                    return Err(ExplorerError::InvalidDependencyIndex);
-                }
-                adj_rev[dep]
-                    .push(i)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-        }
-
-        let mut q: Vec<usize, N> = Vec::new();
-        for i in 0..self.sequence.len() {
-            if in_degree[i] == 0 && !visited[i] {
-                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-        }
-
-        let mut order: Vec<usize, N> = Vec::new();
-        let mut idx = 0;
-        while idx < q.len() {
-            let u = q[idx];
-            idx += 1;
-            order.push(u).map_err(|_| ExplorerError::BufferOverflow)?;
-            for &v in adj_rev[u].iter() {
-                in_degree[v] -= 1;
-                if in_degree[v] == 0 && !visited[v] {
-                    q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
-                }
-            }
-        }
-
-        if order.len() != self.sequence.len() - visited.iter().filter(|&&b| b).count() {
-            return Err(ExplorerError::DependencyCycle);
-        }
-
-        Ok(order)
-    }
-
     pub fn explore<I2C, E, L, const BUF_CAP: usize>(
         &self,
         i2c: &mut I2C,
@@ -158,34 +108,17 @@ impl<'a, const N: usize> Explorer<'a, N> {
         visited_nodes
             .resize(self.sequence.len(), false)
             .map_err(|_| ExplorerError::BufferOverflow)?;
-        let mut executed_sequences: Vec<Vec<usize, N>, 128> = Vec::new();
-        let mut failed_sequences: Vec<Vec<usize, N>, 128> = Vec::new();
-        loop {
-            let order = self.kahn_topo_sort(&visited_nodes)?;
-            if order.is_empty() {
-                break;
-            }
-
-            if executed_sequences.contains(&order) || failed_sequences.contains(&order) {
-                for &idx in order.iter() {
-                    visited_nodes[idx] = true;
-                }
-                continue;
-            }
-            executed_sequences
-                .push(order.clone())
-                .map_err(|_| ExplorerError::BufferOverflow)?;
+        let iter = PermutationIter::new(self)?;
+        logger.log_info("[explorer] Starting permutation exploration...");
+        for sequence in iter {
             permutation_count += 1;
-
-            let mut all_ok = true;
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 let addr_idx = addr_val as usize;
                 if solved_addrs[addr_idx] {
                     continue;
                 }
-
-                for &idx in order.iter() {
-                    let cmd_bytes = self.sequence[idx].bytes;
+                let mut all_ok = true;
+                for &cmd_bytes in sequence.iter() {
                     if let Err(e) = executor.exec(i2c, addr_val, cmd_bytes, logger) {
                         all_ok = false;
                         logger.log_error_fmt(|buf| {
@@ -200,23 +133,17 @@ impl<'a, const N: usize> Explorer<'a, N> {
                         break;
                     }
                 }
-
                 if all_ok {
-                    solved_addrs[addr_idx] = true;
-                    found_addresses
-                        .push(addr_val)
-                        .map_err(|_| ExplorerError::BufferOverflow)?;
+                    if found_addresses.push(addr_val).is_ok() {
+                        solved_addrs[addr_idx] = true;
+                    } else {
+                        return Err(ExplorerError::BufferOverflow);
+                    }
                 }
             }
-
-            if !all_ok {
-                failed_sequences
-                    .push(order.clone())
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-
-            for &idx in order.iter() {
-                visited_nodes[idx] = true;
+            // Optimization: if all possible addresses have been found, we can stop.
+            if found_addresses.len() == (I2C_SCAN_ADDR_END - I2C_SCAN_ADDR_START + 1) as usize {
+                break;
             }
         }
 
