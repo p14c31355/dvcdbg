@@ -264,19 +264,16 @@ impl<'a, const N: usize> Explorer<'a, N> {
             in_degree[i] = node.deps.len();
             writeln!(
                 serial,
-                "[dbg] Node {} deps={:?}, in_degree={}",
-                i, node.deps, in_degree[i]
-            )
-            .ok();
+                "[dbg] Node {i} deps={:?}, in_degree={}",
+                node.deps, in_degree[i]
+            ).ok();
 
             for &dep_idx in node.deps.iter() {
                 if dep_idx >= len {
                     writeln!(
                         serial,
-                        "[error] Node {} has invalid dep index {} (len={})",
-                        i, dep_idx, len
-                    )
-                    .ok();
+                        "[error] Node {i} has invalid dep index {dep_idx} (len={len})"
+                    ).ok();
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
                 let pos = adj_list_len[dep_idx];
@@ -288,8 +285,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut q: [usize; N] = [0; N];
         let mut head = 0;
         let mut tail = 0;
-        for i in 0..len {
-            if in_degree[i] == 0 {
+        for (i, &degree) in in_degree.iter().enumerate().take(len) {
+            if degree == 0 {
                 q[tail] = i;
                 tail += 1;
             }
@@ -323,12 +320,10 @@ impl<'a, const N: usize> Explorer<'a, N> {
         for i in 0..len {
             writeln!(
                 serial,
-                "[dbg] Node {} bytes={:02X?} (len={})",
-                i,
+                "[dbg] Node {i} bytes={:02X?} (len={})",
                 &result_sequence[i][..result_len_per_node[i]],
                 result_len_per_node[i]
-            )
-            .ok();
+            ).ok();
         }
 
         Ok((result_sequence, result_len_per_node))
