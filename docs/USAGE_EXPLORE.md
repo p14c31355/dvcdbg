@@ -228,19 +228,19 @@ pub struct CmdNode {
 ///
 /// - `I2C`: The I2C interface type that implements `crate::compat::I2cCompat`.
 /// - `S`: The serial interface type used for logging, implementing `core::fmt::Write`.
-/// - `N`: A const generic for the maximum number of commands.
-/// - `BUF_CAP`: A const generic for the command buffer capacity.
-///
-/// # Parameters
-///
-/// - `explorer`: An instance of `Explorer` containing the command nodes and their dependencies.
-/// - `i2c`: The I2C bus instance.
-/// - `serial`: The serial writer for logging.
-/// - `target_addr`: The specific I2C address to execute the sequence on.
-/// - `prefix`: A byte to prepend to every command sent during execution.
-/// - `log_level`: The desired logging level.
-///
-/// # Returns
-///
-/// Returns `Ok(())` if the sequence was successfully executed,
-/// or `Err(ExplorerError)` if an error occurred (e.g., cycle detected, execution failed).
+ - `N`: A const generic for the maximum number of commands.
+ - `BUF_CAP`: A const generic for the command buffer capacity.
+
+ # Parameters
+
+ - `explorer`: An instance of `Explorer` containing the command nodes and their dependencies.
+ - `i2c`: The I2C bus instance.
+ - `serial`: The serial writer for logging.
+ - `target_addr`: The specific I2C address to execute the sequence on.
+ - `prefix`: A byte to prepend to every command sent during execution.
+ - `log_level`: The desired logging level.
+
+# Returns
+
+Returns `Ok(())` if the sequence was successfully executed,
+or `Err(ExplorerError)` if an error occurred (e.g., cycle detected, execution failed).
