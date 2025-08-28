@@ -532,19 +532,19 @@ where
 {
     let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
     serial_logger.log_info_fmt(|buf| {
-        write!(buf, "[explorer] Attempting to get one topological sort...\r\n")?;
+        write!(
+            buf,
+            "[explorer] Attempting to get one topological sort...\r\n"
+        )?;
         Ok(())
     });
 
     let single_sequence = explorer.get_one_topological_sort_buf(&mut serial_logger)?;
     serial_logger.log_info_fmt(|buf| write!(buf, "Before sort:\r\n"));
     for (idx, node) in explorer.sequence.iter().enumerate() {
-    serial_logger.log_info_fmt(|buf| {
-        write!(buf, "Node {} deps: {:?}\r\n", idx, node.deps)
-    });
-}
+        serial_logger.log_info_fmt(|buf| write!(buf, "Node {} deps: {:?}\r\n", idx, node.deps));
+    }
 
-    
     let sequence_len = explorer.sequence.len();
 
     serial_logger.log_info_fmt(|buf| {
@@ -564,26 +564,28 @@ where
 
     for i in 0..sequence_len {
         serial_logger.log_info_fmt(|buf| {
-        write!(buf, "[explorer] Sending node {} bytes: {:02X?} ... ", i, single_sequence.0[i])?;
-        Ok(())
-    });
+            write!(
+                buf,
+                "[explorer] Sending node {} bytes: {:02X?} ... ",
+                i, single_sequence.0[i]
+            )?;
+            Ok(())
+        });
         match executor.exec(i2c, target_addr, &single_sequence.0[i], &mut serial_logger) {
             Ok(_) => {
                 let _ = serial_logger.log_info_fmt(|buf| {
                     write!(buf, "OK\r\n")?;
                     Ok(())
                 });
-            },
+            }
             Err(e) => {
                 let _ = serial_logger.log_error_fmt(|buf| {
                     write!(buf, "FAILED: {:?}\r\n", e)?; // `e` is now in scope
                     Ok(())
                 });
                 return Err(e.into()); // Convert ExecutorError to ExplorerError and return
-            },
+            }
         };
-    
-    
     }
 
     serial_logger.log_info_fmt(|buf| {
@@ -597,7 +599,6 @@ where
 
     Ok(())
 }
-
 
 define_scanner!(
     crate::compat::I2cCompat,

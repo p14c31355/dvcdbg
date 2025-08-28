@@ -136,7 +136,7 @@ impl From<ExecutorError> for ExplorerError {
 }
 
 /// Represents a single I2C command in the dependency graph.
-/// 
+///
 /// - `bytes` - The I2C command bytes to be sent.
 /// - `deps` - The indices of the commands that must precede this command.
 ///
@@ -146,7 +146,6 @@ pub struct CmdNode {
     pub bytes: &'static [u8],
     pub deps: &'static [usize],
 }
-
 
 /// A trait for executing a command on an I2C bus.
 pub trait CmdExecutor<I2C> {
@@ -189,7 +188,6 @@ pub struct ExploreResult {
 }
 
 impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> {
-
     pub const fn max_cmd_len(&self) -> usize {
         let mut max_len = 0;
         let mut i = 0;
@@ -382,23 +380,20 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
     ///
     /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
     /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
- pub fn get_one_topological_sort_buf(
+    pub fn get_one_topological_sort_buf(
         &self,
         serial: &mut impl core::fmt::Write,
     ) -> Result<([[u8; MAX_CMD_LEN]; N], [usize; N]), ExplorerError> {
         let len = self.sequence.len();
 
-        // in-degree と隣接リスト初期化
         let mut in_degree: [usize; N] = [0; N];
         let mut adj_list_rev: [[usize; N]; N] = [[0; N]; N];
         let mut adj_list_len: [usize; N] = [0; N];
 
-        // 結果配列（固定長バッファ）と有効長配列
         let mut result_sequence: [[u8; MAX_CMD_LEN]; N] = [[0; MAX_CMD_LEN]; N];
         let mut result_len_per_node: [usize; N] = [0; N];
         let mut result_len = 0;
 
-        // in-degree 計算 & 隣接リスト構築
         for (i, node) in self.sequence.iter().enumerate() {
             in_degree[i] = node.deps.len();
             writeln!(
@@ -424,7 +419,6 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
             }
         }
 
-        // zero in-degree ノードをキューに格納
         let mut q: [usize; N] = [0; N];
         let mut head = 0;
         let mut tail = 0;
@@ -435,19 +429,16 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
             }
         }
 
-        // トポロジカルソート
         while head < tail {
             let u = q[head];
             head += 1;
 
-            // 固定長バッファにコピー
             let cmd_bytes = self.sequence[u].bytes;
             let copy_len = cmd_bytes.len().min(MAX_CMD_LEN);
             result_sequence[result_len][..copy_len].copy_from_slice(&cmd_bytes[..copy_len]);
             result_len_per_node[result_len] = copy_len;
             result_len += 1;
 
-            // 隣接ノードの in-degree を減らし、0ならキューに追加
             for i in 0..adj_list_len[u] {
                 let v = adj_list_rev[u][i];
                 in_degree[v] -= 1;
@@ -463,7 +454,6 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
             return Err(ExplorerError::DependencyCycle);
         }
 
-        // デバッグ: 有効長で表示
         for i in 0..len {
             writeln!(
                 serial,
@@ -477,8 +467,6 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
 
         Ok((result_sequence, result_len_per_node))
     }
-
-
 }
 
 impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
