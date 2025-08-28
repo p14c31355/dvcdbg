@@ -33,7 +33,8 @@ impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
     }
 }
 
-impl<I2C, const BUF_CAP: usize> crate::explorer::CmdExecutor<I2C, BUF_CAP> for PrefixExecutor<BUF_CAP>
+impl<I2C, const BUF_CAP: usize> crate::explorer::CmdExecutor<I2C, BUF_CAP>
+    for PrefixExecutor<BUF_CAP>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,

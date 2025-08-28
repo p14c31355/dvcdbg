@@ -1,6 +1,6 @@
+use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use heapless::Vec;
 use heapless::index_map::FnvIndexMap;
-use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 const I2C_ADDRESS_COUNT: usize = 128;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -61,8 +61,12 @@ impl<'a, const N: usize> Explorer<'a, N> {
     fn kahn_topo_sort(&self, visited: &Vec<bool, N>) -> Result<Vec<usize, N>, ExplorerError> {
         let mut in_degree: Vec<usize, N> = Vec::new();
         let mut adj_rev: Vec<Vec<usize, N>, N> = Vec::new();
-        in_degree.resize(self.sequence.len(), 0).map_err(|_| ExplorerError::BufferOverflow)?;
-        adj_rev.resize(self.sequence.len(), Vec::new()).map_err(|_| ExplorerError::BufferOverflow)?;
+        in_degree
+            .resize(self.sequence.len(), 0)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
+        adj_rev
+            .resize(self.sequence.len(), Vec::new())
+            .map_err(|_| ExplorerError::BufferOverflow)?;
 
         for (i, node) in self.sequence.iter().enumerate() {
             in_degree[i] = node.deps.len();
@@ -70,7 +74,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 if dep >= self.sequence.len() {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_rev[dep].push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+                adj_rev[dep]
+                    .push(i)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
@@ -122,7 +128,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut solved_addrs: [bool; I2C_ADDRESS_COUNT] = [false; I2C_ADDRESS_COUNT];
         let mut permutation_count = 0;
         let mut visited_nodes: Vec<bool, N> = Vec::new();
-        visited_nodes.resize(self.sequence.len(), false).map_err(|_| ExplorerError::BufferOverflow)?;
+        visited_nodes
+            .resize(self.sequence.len(), false)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
         let mut hash_table: FnvIndexMap<u64, (), N> = FnvIndexMap::new();
 
         loop {
@@ -142,7 +150,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 }
                 continue;
             }
-            hash_table.insert(hash, ()).map_err(|_| ExplorerError::BufferOverflow)?;
+            hash_table
+                .insert(hash, ())
+                .map_err(|_| ExplorerError::BufferOverflow)?;
             permutation_count += 1;
 
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
@@ -153,15 +163,26 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
                 let mut all_ok = true;
                 for &idx in order.iter() {
-                    if let Err(_) = executor.exec(i2c, addr_val, self.sequence[idx].bytes, logger) {
+                    if let Err(e) = executor.exec(i2c, addr_val, self.sequence[idx].bytes, logger) {
                         all_ok = false;
+                        logger.log_error_fmt(|buf| {
+                            use core::fmt::Write;
+                            let _ = write!(
+                                buf,
+                                "[explorer] Execution failed for addr 0x{:02X}: {:?}\r\n",
+                                addr_val, e
+                            );
+                            Ok(())
+                        });
                         break;
                     }
                 }
 
                 if all_ok {
                     solved_addrs[addr_idx] = true;
-                    found_addresses.push(addr_val).map_err(|_| ExplorerError::BufferOverflow)?;
+                    found_addresses
+                        .push(addr_val)
+                        .map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
 
@@ -169,6 +190,17 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 visited_nodes[idx] = true;
             }
         }
+
+        logger.log_info_fmt(|buf| {
+            use core::fmt::Write;
+            let _ = writeln!(
+                buf,
+                "[explorer] Exploration complete. {} addresses found across {} permutations.",
+                found_addresses.len(),
+                permutation_count
+            );
+            Ok(())
+        });
 
         if found_addresses.is_empty() {
             return Err(ExplorerError::NoValidAddressesFound);
