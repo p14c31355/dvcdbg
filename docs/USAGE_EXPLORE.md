@@ -1,11 +1,11 @@
 # I2C Command Sequence Explorer
-//!
-//! This module provides an algorithm and supporting utilities for discovering
-//! valid sequences of I2C commands when device dependencies are unknown or
-//! partially specified. It is designed for embedded bring-up scenarios, where
-//! experimenting with permutations of initialization commands can reveal the
-//! correct sequence for a new or undocumented device.
-//!
+
+This module provides an algorithm and supporting utilities for discovering
+valid sequences of I2C commands when device dependencies are unknown or
+partially specified. It is designed for embedded bring-up scenarios, where
+experimenting with permutations of initialization commands can reveal the
+correct sequence for a new or undocumented device.
+
 //! ## Overview
 //! - [`Explorer`] manages a dependency graph of commands and produces only
 //!   valid permutations that satisfy the declared constraints.
