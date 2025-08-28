@@ -184,7 +184,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 .map_err(|_| ExplorerError::BufferOverflow)?;
             permutation_count += 1;
 
-            if failed_sequences_hashes.contains(&current_sequence_hash) {
+            if failed_sequences_hashes.contains_key(&hash) {
                 logger.log_info_fmt(|buf| {
                     use core::fmt::Write;
                     let _ = write!(
