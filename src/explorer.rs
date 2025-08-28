@@ -1,3 +1,6 @@
+// explorer.rs
+
+use crate::compat::ascii;
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use heapless::Vec;
 use heapless::index_map::FnvIndexMap;
@@ -57,11 +60,33 @@ pub struct ExploreResult {
     pub permutations_tested: usize,
 }
 
+impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> {
+    pub const fn max_cmd_len(&self) -> usize {
+        let mut max_len = 0;
+        let mut i = 0;
+        while i < N {
+            let len = self.sequence[i].bytes.len();
+            if len > max_len {
+                max_len = len;
+            }
+            i += 1;
+        }
+        max_len + 1 // prefix add
+    }
+    
+    pub fn permutations(&self) -> Result<PermutationIter<'a, N>, ExplorerError> {
+        if self.sequence.len() > N {
+            return Err(ExplorerError::TooManyCommands);
+        }
+
+        let mut initial_in_degree = Vec::<usize, N>::new();
+        initial_in_degree
 impl<'a, const N: usize> Explorer<'a, N> {
     fn kahn_topo_sort(&self, visited: &Vec<bool, N>) -> Result<Vec<usize, N>, ExplorerError> {
         let mut in_degree: Vec<usize, N> = Vec::new();
         let mut adj_rev: Vec<Vec<usize, N>, N> = Vec::new();
         in_degree
+      
             .resize(self.sequence.len(), 0)
             .map_err(|_| ExplorerError::BufferOverflow)?;
         adj_rev
@@ -109,6 +134,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
     }
 
     pub fn explore<I2C, E, L, const BUF_CAP: usize>(
+
         &self,
         i2c: &mut I2C,
         executor: &mut E,
@@ -211,7 +237,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
             permutations_tested: permutation_count,
         })
     }
-
+    
     /// Generates a single valid topological sort of the command sequence.
     /// This is useful when only one valid ordering is needed, and avoids
     /// the computational cost of generating all permutations.
@@ -304,5 +330,104 @@ impl<'a, const N: usize> Explorer<'a, N> {
         }
 
         Ok((result_sequence, result_len_per_node))
+    }
+}
+
+impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
+    type Item = Vec<&'a [u8], N>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_done {
+            return None;
+        }
+
+        loop {
+            // If we have a complete permutation, return it and prepare for the next one.
+            if self.current_permutation.len() == self.total_nodes {
+                let full_sequence = self.current_permutation.clone();
+                // Backtrack to find the next permutation
+                if !self.backtrack() {
+                    self.is_done = true;
+                }
+                return Some(full_sequence);
+            }
+
+            // Try to extend the current partial permutation
+            if self.try_extend() {
+                // Successfully extended, continue building the permutation
+                continue;
+            } else {
+                // Could not extend, backtrack
+                if !self.backtrack() {
+                    self.is_done = true;
+                    return None; // No more permutations
+                }
+            }
+        }
+    }
+}
+
+impl<'a, const N: usize> PermutationIter<'a, N> {
+    fn try_extend(&mut self) -> bool {
+        // The `loop_start_indices` tracks the starting point for the search at the current depth.
+        // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
+        let start_idx_for_level = self.loop_start_indices.last().copied().unwrap_or(0);
+
+        // Iterate through all possible nodes (0 to total_nodes-1)
+        for idx in start_idx_for_level..self.total_nodes {
+            // If this node is already used in the current permutation, skip it
+            if self.used[idx] {
+                continue;
+            }
+
+            // Check if this node's dependencies are satisfied (i.e., its current in-degree is 0)
+            if self.in_degree[idx] == 0 {
+                // Make choice: Add this node to the current permutation
+                // Note: unwrap() is used here assuming N is sufficiently large based on initial checks.
+                self.current_permutation
+                    .push(self.sequence[idx].bytes)
+                    .unwrap();
+                self.used[idx] = true; // Mark as used
+
+                // Decrement in-degrees for all nodes that depend on this one
+                for &dependent_idx in self.adj_list_rev[idx].iter() {
+                    self.in_degree[dependent_idx] -= 1;
+                }
+
+                self.path_stack.push(idx).unwrap(); // Push the original index of the command
+                // Store the next starting point for this level (for backtracking to this level)
+                self.loop_start_indices.push(idx + 1).unwrap();
+                return true; // Successfully extended
+            }
+        }
+        false // No node found to extend the current permutation
+    }
+
+    fn backtrack(&mut self) -> bool {
+        if let Some(last_added_idx) = self.path_stack.pop() {
+            // Undo the choice: Remove the last added node from the permutation
+            self.current_permutation.pop();
+            self.used[last_added_idx] = false; // Unmark as used
+
+            // Increment in-degrees for all nodes that depend on this one (undo decrement)
+            for &dependent_idx in self.adj_list_rev[last_added_idx].iter() {
+                self.in_degree[dependent_idx] += 1;
+            }
+
+            // Pop the loop start for the level we just finished. The next search start for the parent
+            // was already set when this level was pushed.
+            self.loop_start_indices.pop();
+
+            // If path_stack is empty after pop, we've backtracked past the root
+            if self.path_stack.is_empty() {
+                self.is_done = true;
+                return false;
+            }
+            true
+        } else {
+            // Already at the root and no more options
+            self.is_done = true;
+            false
+        }
     }
 }
