@@ -161,7 +161,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
             .map_err(|_| ExplorerError::BufferOverflow)?;
         let mut hash_table: FnvIndexMap<u64, (), N> = FnvIndexMap::new();
         let mut permutation_iter = PermutationIter::new(self)?;
-        let mut failed_sequences_hashes: Vec<u64, N> = Vec::new();
+        let mut failed_sequences_hashes: FnvIndexMap<u64, (), N> = FnvIndexMap::new();
         loop {
             let order = self.kahn_topo_sort(&visited_nodes)?;
             if order.is_empty() {
