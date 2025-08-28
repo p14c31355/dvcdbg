@@ -1,25 +1,35 @@
 // explorer.rs
 
-use crate::compat::ascii;
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use heapless::Vec;
 use heapless::index_map::FnvIndexMap;
 const I2C_ADDRESS_COUNT: usize = 128;
 
+/// Errors that can occur during exploration of command sequences.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ExplorerError {
+    /// The provided sequence contained more commands than supported by the capacity N.
     TooManyCommands,
+    /// The command dependency graph contains a cycle.
     DependencyCycle,
+    /// No valid I2C addresses were found for any command sequence.
     NoValidAddressesFound,
+    /// An I2C command execution failed.
     ExecutionFailed,
+    /// An internal buffer overflowed.
     BufferOverflow,
+    /// A dependency index is out of bounds.
     InvalidDependencyIndex,
 }
 
+/// Errors that can occur during command execution.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ExecutorError {
+    /// The command failed to execute due to an I2C error.
     I2cError(crate::error::ErrorKind),
+    /// The command failed to execute (e.g., NACK, I/O error).
     ExecFailed,
+    /// An internal buffer overflowed during command preparation.
     BufferOverflow,
 }
 
@@ -60,7 +70,7 @@ pub struct ExploreResult {
     pub permutations_tested: usize,
 }
 
-impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> {
+impl<'a, const N: usize> Explorer<'a, N> {
     pub const fn max_cmd_len(&self) -> usize {
         let mut max_len = 0;
         let mut i = 0;
@@ -73,14 +83,8 @@ impl<'a, const N: usize, const MAX_CMD_LEN: usize> Explorer<'a, N, MAX_CMD_LEN> 
         }
         max_len + 1 // prefix add
     }
-    
-    pub fn permutations(&self) -> Result<PermutationIter<'a, N>, ExplorerError> {
-        if self.sequence.len() > N {
-            return Err(ExplorerError::TooManyCommands);
-        }
+}
 
-        let mut initial_in_degree = Vec::<usize, N>::new();
-        initial_in_degree
 impl<'a, const N: usize> Explorer<'a, N> {
     fn kahn_topo_sort(&self, visited: &Vec<bool, N>) -> Result<Vec<usize, N>, ExplorerError> {
         let mut in_degree: Vec<usize, N> = Vec::new();
@@ -330,6 +334,67 @@ impl<'a, const N: usize> Explorer<'a, N> {
         }
 
         Ok((result_sequence, result_len_per_node))
+    }
+}
+
+/// An iterator that generates all valid topological permutations of the command sequence.
+pub struct PermutationIter<'a, const N: usize> {
+    sequence: &'a [CmdNode],
+    total_nodes: usize,
+    current_permutation: Vec<&'a [u8], N>,
+    used: Vec<bool, N>,
+    in_degree: Vec<usize, N>,
+    adj_list_rev: Vec<Vec<usize, N>, N>,
+    path_stack: Vec<usize, N>, // Stores original indices of commands in current_permutation
+    loop_start_indices: Vec<usize, N>, // Tracks the starting point for the next search at each level
+    is_done: bool,
+}
+
+impl<'a, const N: usize> PermutationIter<'a, N> {
+    pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
+        let total_nodes = explorer.sequence.len();
+        if total_nodes > N {
+            return Err(ExplorerError::TooManyCommands);
+        }
+
+        let mut in_degree: Vec<usize, N> = Vec::new();
+        let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
+
+        in_degree
+            .resize(total_nodes, 0)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
+        adj_list_rev
+            .resize(total_nodes, Vec::new())
+            .map_err(|_| ExplorerError::BufferOverflow)?;
+
+        for (i, node) in explorer.sequence.iter().enumerate() {
+            in_degree[i] = node.deps.len();
+            for &dep in node.deps.iter() {
+                if dep >= total_nodes {
+                    return Err(ExplorerError::InvalidDependencyIndex);
+                }
+                adj_list_rev[dep]
+                    .push(i)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+        }
+
+        Ok(Self {
+            sequence: explorer.sequence,
+            total_nodes,
+            current_permutation: Vec::new(),
+            used: {
+                let mut v = Vec::new();
+                v.resize(total_nodes, false)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
+                v
+            },
+            in_degree,
+            adj_list_rev,
+            path_stack: Vec::new(),
+            loop_start_indices: Vec::new(),
+            is_done: false,
+        })
     }
 }
 
