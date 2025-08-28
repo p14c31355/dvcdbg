@@ -397,7 +397,7 @@ pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    S: core::fmt::Write + crate::logger::Logger<BUF_CAP>,
+    S: core::fmt::Write,
 {
     let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
 
