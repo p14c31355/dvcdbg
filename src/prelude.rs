@@ -8,6 +8,13 @@ pub use crate::{
 };
 
 pub use crate::compat::adapt::FmtWriteAdapter;
+pub use crate::compat::ascii::{write_byte_hex, write_bytes_hex, write_bytes_hex_prefixed};
 pub use crate::compat::{HalErrorExt, I2cCompat, SerialCompat, SerialEio, UartLike};
-pub use crate::explorer::{CmdExecutor, CmdNode, Explorer};
-pub use crate::scanner::{LogLevel, scan_i2c, scan_i2c_with_ctrl, scan_init_sequence, PrefixExecutor};
+pub use crate::explorer::{CmdExecutor, CmdNode, ExecutorError, Explorer};
+// In src/prelude.rs
+
+pub use crate::scanner::{
+    run_explorer, run_single_sequence_explorer, scan_i2c, scan_init_sequence,
+};
+
+pub use crate::logger::{LogLevel, Logger, SerialLogger};
