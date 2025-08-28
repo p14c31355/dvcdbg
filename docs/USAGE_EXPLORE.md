@@ -88,12 +88,13 @@
 //! }
 //! ```
 
-/// Represents a single I2C command in the dependency graph.
-///
-/// - `bytes` - The I2C command bytes to be sent.
-/// - `deps` - The indices of the commands that must precede this command.
-///
-/// The dependency is now on the index of the dependent command in the sequence.
+### `CmdNode`
+Represents a single I2C command in the dependency graph.
+
+- `bytes` - The I2C command bytes to be sent.
+- `deps` - The indices of the commands that must precede this command.
+
+The dependency is now on the index of the dependent command in the sequence.
 
 ```
 #[derive(Copy, Clone)]
