@@ -38,7 +38,7 @@ where
                     "[error] Initial sequence scan failed: {e:?}. Aborting explorer."
                 )
             });
-            return Err(ExplorerError::ExecutionFailed);
+            return Err(ExplorerError::ExecutionFailed(e));
         }
     };
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
