@@ -98,3 +98,43 @@ impl fmt::Display for ErrorKind {
         }
     }
 }
+
+/// Errors that can occur during exploration of command sequences.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExplorerError {
+    /// The provided sequence contained more commands than supported by the capacity N.
+    TooManyCommands,
+    /// The command dependency graph contains a cycle.
+    DependencyCycle,
+    /// No valid I2C addresses were found for any command sequence.
+    NoValidAddressesFound,
+    /// An I2C command execution failed.
+    ExecutionFailed,
+    /// An internal buffer overflowed.
+    BufferOverflow,
+    /// A dependency index is out of bounds.
+    InvalidDependencyIndex,
+    /// An I2C scan operation failed.
+    DeviceNotFound(crate::error::ErrorKind),
+}
+
+/// Errors that can occur during command execution.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExecutorError {
+    /// The command failed to execute due to an I2C error.
+    I2cError(crate::error::ErrorKind),
+    /// The command failed to execute (e.g., NACK, I/O error).
+    ExecFailed,
+    /// An internal buffer overflowed during command preparation.
+    BufferOverflow,
+}
+
+impl From<ExecutorError> for ExplorerError {
+    fn from(error: ExecutorError) -> Self {
+        match error {
+            ExecutorError::I2cError(_) => ExplorerError::ExecutionFailed,
+            ExecutorError::ExecFailed => ExplorerError::ExecutionFailed,
+            ExecutorError::BufferOverflow => ExplorerError::BufferOverflow,
+        }
+    }
+}

@@ -1,48 +1,11 @@
 // explorer.rs
+use crate::error::{ExecutorError, ExplorerError};
+use crate::compat::err_compat::HalErrorExt;
+use core::fmt::Write;
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use heapless::Vec;
 const I2C_ADDRESS_COUNT: usize = 128;
-
-/// Errors that can occur during exploration of command sequences.
-#[derive(Debug, PartialEq, Eq)]
-pub enum ExplorerError {
-    /// The provided sequence contained more commands than supported by the capacity N.
-    TooManyCommands,
-    /// The command dependency graph contains a cycle.
-    DependencyCycle,
-    /// No valid I2C addresses were found for any command sequence.
-    NoValidAddressesFound,
-    /// An I2C command execution failed.
-    ExecutionFailed,
-    /// An internal buffer overflowed.
-    BufferOverflow,
-    /// A dependency index is out of bounds.
-    InvalidDependencyIndex,
-    /// An I2C scan operation failed.
-    DeviceNotFound(crate::error::ErrorKind),
-}
-
-/// Errors that can occur during command execution.
-#[derive(Debug, PartialEq, Eq)]
-pub enum ExecutorError {
-    /// The command failed to execute due to an I2C error.
-    I2cError(crate::error::ErrorKind),
-    /// The command failed to execute (e.g., NACK, I/O error).
-    ExecFailed,
-    /// An internal buffer overflowed during command preparation.
-    BufferOverflow,
-}
-
-impl From<ExecutorError> for ExplorerError {
-    fn from(error: ExecutorError) -> Self {
-        match error {
-            ExecutorError::I2cError(_) => ExplorerError::ExecutionFailed,
-            ExecutorError::ExecFailed => ExplorerError::ExecutionFailed,
-            ExecutorError::BufferOverflow => ExplorerError::BufferOverflow,
-        }
-    }
-}
 
 #[derive(Copy, Clone)]
 pub struct CmdNode {
@@ -59,8 +22,116 @@ pub trait CmdExecutor<I2C, const BUF_CAP: usize> {
         logger: &mut S,
     ) -> Result<(), ExecutorError>
     where
-        S: core::fmt::Write + crate::logger::Logger<BUF_CAP>;
+        S: core::fmt::Write + crate::explore::logger::Logger<BUF_CAP>;
 }
+
+/// A command executor that prepends a prefix to each command.
+pub struct PrefixExecutor<const BUF_CAP: usize> {
+    prefix: u8,
+    init_sequence: heapless::Vec<u8, 64>,
+    initialized_addrs: [bool; 128],
+    buffer: heapless::Vec<u8, BUF_CAP>,
+}
+
+impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
+    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
+        Self {
+            prefix,
+            init_sequence,
+            initialized_addrs: [false; 128],
+            buffer: heapless::Vec::new(),
+        }
+    }
+}
+
+impl<I2C, const BUF_CAP: usize> crate::explore::explorer::CmdExecutor<I2C, BUF_CAP>
+    for PrefixExecutor<BUF_CAP>
+where
+    I2C: crate::compat::I2cCompat,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+{
+    fn exec<S>(
+        &mut self,
+        i2c: &mut I2C,
+        addr: u8,
+        cmd: &[u8],
+        logger: &mut S,
+    ) -> Result<(), ExecutorError>
+    where
+        S: core::fmt::Write + crate::explore::logger::Logger<BUF_CAP>,
+    {
+        fn short_delay() {
+            for _ in 0..8_000 {
+                core::hint::spin_loop();
+            }
+        }
+
+        let addr_idx = addr as usize;
+
+        if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
+            logger
+                .log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
+
+            for &c in self.init_sequence.iter() {
+                let command = [self.prefix, c];
+                let mut ok = false;
+
+                for _attempt in 0..10 {
+                    match i2c.write(addr, &command) {
+                        Ok(_) => {
+                            ok = true;
+                            break;
+                        }
+                        Err(e) => {
+                            let compat_err = e.to_compat(Some(addr));
+                            logger.log_error_fmt(|buf| {
+                                writeln!(buf, "[I2C retry error] {compat_err:?}")
+                            });
+                            short_delay();
+                        }
+                    }
+                }
+
+                if !ok {
+                    return Err(ExecutorError::I2cError(
+                        crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
+                    ));
+                }
+                short_delay();
+            }
+
+            self.initialized_addrs[addr_idx] = true;
+            logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initialized for 0x{addr:02X}"));
+        }
+
+        self.buffer.clear();
+        self.buffer
+            .push(self.prefix)
+            .map_err(|_| ExecutorError::BufferOverflow)?;
+        self.buffer
+            .extend_from_slice(cmd)
+            .map_err(|_| ExecutorError::BufferOverflow)?;
+
+        for _ in 0..10 {
+            match i2c.write(addr, &self.buffer) {
+                Ok(_) => {
+                    short_delay();
+                    return Ok(());
+                }
+                Err(e) => {
+                    let compat_err = e.to_compat(Some(addr));
+                    logger.log_error_fmt(|buf| writeln!(buf, "[I2C retry error] {compat_err:?}"));
+                    short_delay();
+                }
+            }
+        }
+
+        Err(ExecutorError::I2cError(
+            crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
+        ))
+    }
+}
+
 
 pub struct Explorer<'a, const N: usize> {
     pub sequence: &'a [CmdNode],
@@ -96,7 +167,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
     where
         I2C: crate::compat::I2cCompat,
         E: CmdExecutor<I2C, BUF_CAP>,
-        L: crate::logger::Logger<BUF_CAP> + core::fmt::Write,
+        L: crate::explore::logger::Logger<BUF_CAP> + core::fmt::Write,
     {
         if self.sequence.is_empty() {
             logger.log_info("[explorer] No commands provided.");
