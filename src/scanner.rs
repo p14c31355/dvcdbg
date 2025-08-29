@@ -458,11 +458,15 @@ where
     S: core::fmt::Write + crate::logger::Logger<BUF_CAP>,
 {
     let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
-
+    let mut found_addrs = match crate::scanner::scan_i2c(i2c, &mut serial_logger, &[prefix], log_level) {
+        Ok(addrs) => addrs,
+        Err(e) => return Err(crate::explorer::ExplorerError::DeviceNoFound(e)),
+    };
+    if found_addrs.is_empty() {
+        return Err(crate::explorer::ExplorerError::NoValidAddressesFound);
+    }
     let mut failed_nodes = [false; N];
-    let mut solved_addrs = [false; 128];
     let mut commands_found = 0;
-
     loop {
         let (sequence_bytes, sequence_len) =
             match explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes) {
@@ -479,40 +483,39 @@ where
                     }
                 }
             };
-
-        for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-            if solved_addrs[addr as usize] {
-                continue;
-            }
-
+        let mut addrs_to_remove: heapless::Vec<usize, 128> = heapless::Vec::new();
+        for (addr_idx, &addr) in found_addrs.iter().enumerate() {
             let mut all_ok = true;
+            let mut current_failed_nodes = failed_nodes;
             for i in 0..explorer.sequence.len() {
                 let cmd_bytes = &sequence_bytes[i][..sequence_len[i]];
                 match executor.exec(i2c, addr, cmd_bytes, &mut serial_logger) {
                     Ok(_) => {}
                     Err(_) => {
-                        failed_nodes[i] = true;
+                        current_failed_nodes[i] = true;
                         all_ok = false;
                         break;
                     }
                 }
             }
-
             if all_ok {
-                solved_addrs[addr as usize] = true;
+                addrs_to_remove.push(addr_idx).ok();
                 commands_found += explorer.sequence.len();
-                serial_logger.log_info_fmt(|buf| {
-                    writeln!(buf, "[ok] Device at 0x{:02X} successfully initialized.", addr)
-                });
             }
+            failed_nodes = current_failed_nodes;
         }
-
-        let all_nodes_visited = failed_nodes.iter().all(|&x| x) || solved_addrs.iter().all(|&x| x);
+        for &idx in addrs_to_remove.iter().rev() {
+            found_addrs.swap_remove(idx);
+        }
+        if found_addrs.is_empty() {
+            break;
+        }
+        let all_nodes_visited = failed_nodes.iter().all(|&x| x);
         if all_nodes_visited {
-            serial_logger.log_info("[explorer] Exploration complete.");
-            return Ok(());
+            break;
         }
     }
+    Ok(())
 }
 
 pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize, const MAX_CMD_LEN: usize>(

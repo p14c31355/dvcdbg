@@ -19,6 +19,8 @@ pub enum ExplorerError {
     BufferOverflow,
     /// A dependency index is out of bounds.
     InvalidDependencyIndex,
+    /// An I2C scan operation failed.
+    DeviceNoFound(crate::error::ErrorKind),
 }
 
 /// Errors that can occur during command execution.
@@ -175,7 +177,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
     /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
     pub fn get_one_topological_sort_buf<const MAX_CMD_LEN: usize>(
         &self,
-        serial: &mut impl core::fmt::Write,
+        _serial: &mut impl core::fmt::Write,
         failed_nodes: &[bool; N],
     ) -> Result<(heapless::Vec<heapless::Vec<u8, MAX_CMD_LEN>, N>, heapless::Vec<usize, N>), ExplorerError> {
         let len = self.sequence.len();
