@@ -5,7 +5,9 @@
 //! optionally testing with control bytes or initialization command sequences.
 
 use crate::{
-    compat::{HalErrorExt, ascii}, logger::Logger, prelude::CmdExecutor
+    compat::{HalErrorExt, ascii},
+    logger::Logger,
+    prelude::CmdExecutor,
 };
 use core::fmt::Write;
 
@@ -283,14 +285,16 @@ macro_rules! define_scanner {
         {
             if let $crate::logger::LogLevel::Verbose = log_level {
                 writeln!(serial, "[scan] Scanning I2C bus with init sequence:").ok();
-                for b in init_sequence.iter() {
-                    write!(serial, " ").ok();
-                    $crate::compat::ascii::write_bytes_hex_fmt(serial, &[*b]).ok();
-                    writeln!(serial, "").ok();
+                for (i, b) in init_sequence.iter().enumerate() {
+                    if i % 16 == 0 {
+                        writeln!(serial).ok();
+                    }
+                    write!(serial, "{:02X} ", b).ok();
                 }
                 writeln!(serial).ok();
             }
-            let initial_found_addrs = crate::scanner::scan_i2c(i2c, serial, &[ctrl_byte], log_level)?;
+            let initial_found_addrs =
+                crate::scanner::scan_i2c(i2c, serial, &[ctrl_byte], log_level)?;
 
             let mut detected_cmds = heapless::Vec::<u8, 64>::new();
             let mut last_error: Option<$crate::error::ErrorKind> = None;
@@ -303,9 +307,11 @@ macro_rules! define_scanner {
                             if initial_found_addrs.contains(&addr) {
                                 if let $crate::logger::LogLevel::Verbose = log_level {
                                     write!(serial, "[ok] Found device at ").ok();
-                                    $crate::compat::ascii::write_bytes_hex_fmt(serial, &[addr]).ok();
+                                    $crate::compat::ascii::write_bytes_hex_fmt(serial, &[addr])
+                                        .ok();
                                     write!(serial, " responding to ").ok();
-                                    $crate::compat::ascii::write_bytes_hex_fmt(serial, &[seq_cmd]).ok();
+                                    $crate::compat::ascii::write_bytes_hex_fmt(serial, &[seq_cmd])
+                                        .ok();
                                     writeln!(serial, "").ok();
                                 }
                                 cmd_responded_by_initial_device = true;
@@ -402,7 +408,6 @@ where
     let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
 
     serial_logger.log_info_fmt(|buf| write!(buf, "[log] Initial I2C bus scan..."));
-    
 
     let successful_seq = match crate::scanner::scan_init_sequence(
         i2c,
@@ -414,7 +419,10 @@ where
         Ok(seq) => seq,
         Err(e) => {
             serial_logger.log_error_fmt(|buf| {
-                write!(buf, "[error] Initial sequence scan failed: {e:?}. Aborting explorer.")
+                write!(
+                    buf,
+                    "[error] Initial sequence scan failed: {e:?}. Aborting explorer."
+                )
             });
             return Err(crate::explorer::ExplorerError::ExecutionFailed);
         }
@@ -424,7 +432,8 @@ where
 
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, successful_seq);
 
-    let exploration_result = explorer.explore::<_, _, _, BUF_CAP>(i2c, &mut executor, &mut serial_logger)?;
+    let exploration_result =
+        explorer.explore::<_, _, _, BUF_CAP>(i2c, &mut executor, &mut serial_logger)?;
 
     for addr in exploration_result.found_addrs.iter() {
         write!(serial, "[driver] Found device at ").ok();
