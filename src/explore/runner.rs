@@ -6,6 +6,42 @@ use crate::error::ExplorerError;
 
 use core::fmt::Write;
 
+// Helper for logging info with the [explorer] prefix
+pub fn explorer_log_info<S, F, const BUF_CAP: usize>(logger: &mut SerialLogger<S, BUF_CAP>, f: F)
+where
+    S: core::fmt::Write,
+    F: FnOnce(&mut heapless::String<BUF_CAP>) -> core::fmt::Result,
+{
+    logger.log_info_fmt(|buf| {
+        write!(buf, "[explorer] ")?;
+        f(buf)
+    });
+}
+
+// Helper for logging errors with the [explorer] prefix
+pub fn explorer_log_error<S, F, const BUF_CAP: usize>(logger: &mut SerialLogger<S, BUF_CAP>, f: F)
+where
+    S: core::fmt::Write,
+    F: FnOnce(&mut heapless::String<BUF_CAP>) -> core::fmt::Result,
+{
+    logger.log_error_fmt(|buf| {
+        write!(buf, "[explorer] ")?;
+        f(buf)
+    });
+}
+
+// Helper for logging errors with the [error] prefix (used in run_explorer and run_pruned_explorer)
+pub fn runner_log_error<S, F, const BUF_CAP: usize>(logger: &mut SerialLogger<S, BUF_CAP>, f: F)
+where
+    S: core::fmt::Write,
+    F: FnOnce(&mut heapless::String<BUF_CAP>) -> core::fmt::Result,
+{
+    logger.log_error_fmt(|buf| {
+        write!(buf, "[error] ")?;
+        f(buf)
+    });
+}
+
 pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
@@ -165,12 +201,8 @@ where
     S: core::fmt::Write,
 {
     let mut serial_logger = SerialLogger::new(serial, log_level);
-    serial_logger.log_info_fmt(|buf| {
-        write!(
-            buf,
-            "[explorer] Attempting to get one topological sort...\r\n"
-        )?;
-        Ok(())
+    explorer_log_info(&mut serial_logger, |buf| {
+        writeln!(buf, "Attempting to get one topological sort...")
     });
 
     let single_sequence =
@@ -213,10 +245,7 @@ where
                 });
             }
             Err(e) => {
-                serial_logger.log_error_fmt(|buf| {
-                    writeln!(buf, "FAILED: {e:?}")?; // `e` is now in scope
-                    Ok(())
-                });
+                explorer_log_error(&mut serial_logger, |buf| writeln!(buf, "FAILED: {e:?}"));
                 return Err(e.into()); // Convert ExecutorError to ExplorerError and return
             }
         };
