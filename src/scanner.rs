@@ -25,7 +25,7 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut found_addrs = heapless::Vec::<u8, I2C_BUFFER_SIZE>::new();
+    let mut found_addrs = heapless::Vec::<u8, I2C_MAX_DEVICES>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
     for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
         if let crate::explore::logger::LogLevel::Verbose = log_level {
