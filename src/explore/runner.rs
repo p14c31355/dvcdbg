@@ -1,3 +1,5 @@
+// runner.rs
+
 use crate::explore::explorer::*;
 use crate::explore::logger::*;
 
@@ -9,10 +11,10 @@ use core::fmt::Write;
 use crate::scanner::{I2C_MAX_DEVICES};
 
 // Helper for logging info with the [explorer] prefix
-pub fn explorer_log_info<S, F, const BUF_CAP: usize>(logger: &mut SerialLogger<S, BUF_CAP>, f: F)
+pub fn explorer_log_info<S, F>(logger: &mut SerialLogger<S>, f: F)
 where
     S: core::fmt::Write,
-    F: FnOnce(&mut heapless::String<BUF_CAP>) -> core::fmt::Result,
+    F: FnOnce(&mut heapless::String<512>) -> core::fmt::Result,
 {
     logger.log_info_fmt(|buf| {
         write!(buf, "[explorer] ")?;
@@ -21,10 +23,10 @@ where
 }
 
 // Helper for logging errors with the [explorer] prefix
-pub fn explorer_log_error<S, F, const BUF_CAP: usize>(logger: &mut SerialLogger<S, BUF_CAP>, f: F)
+pub fn explorer_log_error<S, F>(logger: &mut SerialLogger<S>, f: F)
 where
     S: core::fmt::Write,
-    F: FnOnce(&mut heapless::String<BUF_CAP>) -> core::fmt::Result,
+    F: FnOnce(&mut heapless::String<512>) -> core::fmt::Result,
 {
     logger.log_error_fmt(|buf| {
         write!(buf, "[explorer] ")?;
@@ -33,10 +35,10 @@ where
 }
 
 // Helper for logging errors with the [error] prefix (used in run_explorer and run_pruned_explorer)
-pub fn runner_log_error<S, F, const BUF_CAP: usize>(logger: &mut SerialLogger<S, BUF_CAP>, f: F)
+pub fn runner_log_error<S, F>(logger: &mut SerialLogger<S>, f: F)
 where
     S: core::fmt::Write,
-    F: FnOnce(&mut heapless::String<BUF_CAP>) -> core::fmt::Result,
+    F: FnOnce(&mut heapless::String<512>) -> core::fmt::Result,
 {
     logger.log_error_fmt(|buf| {
         write!(buf, "[error] ")?;
@@ -44,7 +46,7 @@ where
     });
 }
 
-pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
+pub fn run_explorer<I2C, S, const N: usize>(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -81,8 +83,17 @@ where
     };
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[log] Start driver safe init"));
+    
+    const BUF_CAP: usize = {
+        let max_cmd_len = explorer.max_cmd_len();
+        if max_cmd_len + 1 > 512 {
+            max_cmd_len + 1
+        } else {
+            512
+        }
+    };
 
-    let mut executor = PrefixExecutor::<BUF_CAP, {successful_seq.len()}>::new(prefix, successful_seq);
+    let mut executor = PrefixExecutor::<{successful_seq.len()}, BUF_CAP>::new(prefix, successful_seq);
 
     let exploration_result =
         explorer.explore::<_, _, _, BUF_CAP>(i2c, &mut executor, &mut serial_logger)?;
@@ -112,7 +123,6 @@ pub fn run_pruned_explorer<
     S,
     E,
     const N: usize,
-    const BUF_CAP: usize,
 >(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
@@ -124,8 +134,15 @@ pub fn run_pruned_explorer<
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    E: CmdExecutor<I2C, BUF_CAP>,
-    S: core::fmt::Write + Logger<BUF_CAP>,
+    E: CmdExecutor<I2C, {
+        let max_len = explorer.max_cmd_len();
+        if max_len + 1 > 512 {
+            max_len + 1
+        } else {
+            512
+        }
+    }>,
+    S: core::fmt::Write + Logger,
 {
     const MAX_CMD_LEN: usize = {
         let max_len = explorer.max_cmd_len();
@@ -162,12 +179,11 @@ where
             let mut all_ok = true;
             let mut current_failed_nodes = failed_nodes;
             for i in 0..explorer.sequence.len() {
-                let cmd_bytes = &sequence_bytes[i][..sequence_len[i]];
+                let cmd_bytes = &sequence_bytes.0[i];
                 match execute_and_log_command(i2c, executor, &mut serial_logger, addr, cmd_bytes, i)
                 {
                     Ok(_) => {}
                     Err(_) => {
-                        // The helper already logs the error and converts it
                         current_failed_nodes[i] = true;
                         all_ok = false;
                         break;
@@ -197,7 +213,6 @@ pub fn run_single_sequence_explorer<
     I2C,
     S,
     const N: usize,
-    const BUF_CAP: usize,
 >(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
@@ -233,7 +248,15 @@ where
         Ok(())
     });
 
-    let mut executor = PrefixExecutor::<BUF_CAP, {single_sequence.0.len()}>::new(prefix, heapless::Vec::new());
+    const BUF_CAP: usize = {
+        let max_len = explorer.max_cmd_len();
+        if max_len + 1 > 512 {
+            max_len + 1
+        } else {
+            512
+        }
+    };
+    let mut executor = PrefixExecutor::<{single_sequence.0.len()}, BUF_CAP>::new(prefix, heapless::Vec::new());
 
     for i in 0..sequence_len {
         execute_and_log_command(
@@ -243,7 +266,7 @@ where
             target_addr,
             &single_sequence.0[i],
             i,
-        )?; // Propagate error
+        )?;
     }
 
     serial_logger.log_info_fmt(|buf| {
