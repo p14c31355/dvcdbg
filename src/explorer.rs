@@ -123,9 +123,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
                         all_ok = false;
                         logger.log_error_fmt(|buf| {
                             use core::fmt::Write;
-                            let _ = write!(
+                            let _ = writeln!(
                                 buf,
-                                "[explorer] Execution failed for addr 0x{:02X}: {:?}\r\n",
+                                "[explorer] Execution failed for addr 0x{:02X}: {:?}",
                                 addr_val, e
                             );
                             Ok(())

@@ -59,7 +59,7 @@ where
 
         if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
             logger
-                .log_info_fmt(|buf| write!(buf, "[Info] I2C initializing for 0x{addr:02X}...\r\n"));
+                .log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
 
             for &c in self.init_sequence.iter() {
                 let command = [self.prefix, c];
@@ -74,7 +74,7 @@ where
                         Err(e) => {
                             let compat_err = e.to_compat(Some(addr));
                             logger.log_error_fmt(|buf| {
-                                write!(buf, "[I2C retry error] {compat_err:?}\r\n")
+                                writeln!(buf, "[I2C retry error] {compat_err:?}")
                             });
                             short_delay();
                         }
@@ -90,7 +90,7 @@ where
             }
 
             self.initialized_addrs[addr_idx] = true;
-            logger.log_info_fmt(|buf| write!(buf, "[Info] I2C initialized for 0x{addr:02X}\r\n"));
+            logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initialized for 0x{addr:02X}"));
         }
 
         self.buffer.clear();
@@ -109,7 +109,7 @@ where
                 }
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
-                    logger.log_error_fmt(|buf| write!(buf, "[I2C retry error] {compat_err:?}\r\n"));
+                    logger.log_error_fmt(|buf| writeln!(buf, "[I2C retry error] {compat_err:?}"));
                     short_delay();
                 }
             }
@@ -406,7 +406,7 @@ where
 {
     let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
 
-    serial_logger.log_info_fmt(|buf| write!(buf, "[log] Initial I2C bus scan..."));
+    serial_logger.log_info_fmt(|buf| writeln!(buf, "[log] Initial I2C bus scan..."));
 
     let successful_seq = match crate::scanner::scan_init_sequence(
         i2c,
@@ -418,7 +418,7 @@ where
         Ok(seq) => seq,
         Err(e) => {
             serial_logger.log_error_fmt(|buf| {
-                write!(
+                writeln!(
                     buf,
                     "[error] Initial sequence scan failed: {e:?}. Aborting explorer."
                 )
@@ -426,8 +426,8 @@ where
             return Err(crate::explorer::ExplorerError::ExecutionFailed);
         }
     };
-    serial_logger.log_info_fmt(|buf| write!(buf, "[scan] initial sequence scan completed"));
-    serial_logger.log_info_fmt(|buf| write!(buf, "[log] Start driver safe init"));
+    serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
+    serial_logger.log_info_fmt(|buf| writeln!(buf, "[log] Start driver safe init"));
 
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, successful_seq);
 
@@ -473,7 +473,7 @@ where
                         return Ok(());
                     } else {
                         serial_logger.log_error_fmt(|buf| {
-                            write!(buf, "[error] Failed to generate a new topological sort. Aborting.")
+                            writeln!(buf, "[error] Failed to generate a new topological sort. Aborting.")
                         });
                         return Err(e);
                     }
@@ -502,7 +502,7 @@ where
                 solved_addrs[addr as usize] = true;
                 commands_found += explorer.sequence.len();
                 serial_logger.log_info_fmt(|buf| {
-                    write!(buf, "[ok] Device at 0x{:02X} successfully initialized.", addr)
+                    writeln!(buf, "[ok] Device at 0x{:02X} successfully initialized.", addr)
                 });
             }
         }
@@ -538,17 +538,17 @@ where
     });
 
     let single_sequence = explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &[false; N])?;
-    serial_logger.log_info_fmt(|buf| write!(buf, "Before sort:\r\n"));
+    serial_logger.log_info_fmt(|buf| writeln!(buf, "Before sort:"));
     for (idx, node) in explorer.sequence.iter().enumerate() {
-        serial_logger.log_info_fmt(|buf| write!(buf, "Node {idx} deps: {:?}\r\n", node.deps));
+        serial_logger.log_info_fmt(|buf| writeln!(buf, "Node {idx} deps: {:?}", node.deps));
     }
 
     let sequence_len = explorer.sequence.len();
 
     serial_logger.log_info_fmt(|buf| {
-        write!(
+        writeln!(
             buf,
-            "[explorer] Obtained one topological sort. Executing on 0x{target_addr:02X}...\r\n"
+            "[explorer] Obtained one topological sort. Executing on 0x{target_addr:02X}..."
         )?;
         Ok(())
     });
@@ -561,9 +561,9 @@ where
 
     for i in 0..sequence_len {
         serial_logger.log_info_fmt(|buf| {
-            write!(
+            writeln!(
                 buf,
-                "[explorer] Sending node {} bytes: {:02X?} ... ",
+                "[explorer] Sending node {} bytes: {:02X?} ...",
                 i, single_sequence.0[i]
             )?;
             Ok(())
@@ -571,13 +571,13 @@ where
         match executor.exec(i2c, target_addr, &single_sequence.0[i], &mut serial_logger) {
             Ok(_) => {
                 serial_logger.log_info_fmt(|buf| {
-                    write!(buf, "OK\r\n")?;
+                    writeln!(buf, "OK")?;
                     Ok(())
                 });
             }
             Err(e) => {
                 serial_logger.log_error_fmt(|buf| {
-                    write!(buf, "FAILED: {e:?}\r\n")?; // `e` is now in scope
+                    writeln!(buf, "FAILED: {e:?}")?; // `e` is now in scope
                     Ok(())
                 });
                 return Err(e.into()); // Convert ExecutorError to ExplorerError and return
@@ -586,9 +586,9 @@ where
     }
 
     serial_logger.log_info_fmt(|buf| {
-        write!(
+        writeln!(
             buf,
-            "[explorer] Single sequence execution complete for 0x{target_addr:02X}.\r\n"
+            "[explorer] Single sequence execution complete for 0x{target_addr:02X}."
         )?;
         Ok(())
     });
