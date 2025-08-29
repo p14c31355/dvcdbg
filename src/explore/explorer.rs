@@ -28,13 +28,13 @@ pub trait CmdExecutor<I2C, const BUF_CAP: usize> {
 /// A command executor that prepends a prefix to each command.
 pub struct PrefixExecutor<const BUF_CAP: usize> {
     prefix: u8,
-    init_sequence: heapless::Vec<u8, 64>,
+    init_sequence: heapless::Vec<u8, 512>,
     initialized_addrs: [bool; 128],
     buffer: heapless::Vec<u8, BUF_CAP>,
 }
 
 impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
-    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
+    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, 512>) -> Self {
         Self {
             prefix,
             init_sequence,
