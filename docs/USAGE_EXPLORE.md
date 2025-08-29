@@ -12,7 +12,7 @@ correct sequence for a new or undocumented device.
 - [`PermutationIter`] generates these permutations using an iterative,
    stack-safe backtracking algorithm (no recursion).
 - [`CmdExecutor`] abstracts the execution of a command on the I2C bus.
-! - [`Logger`] provides pluggable logging backends (serial console, null logger, etc.).
+- [`Logger`] provides pluggable logging backends (serial console, null logger, etc.).
 
 ## Key Features
 1. **Separation of Concerns**: The permutation engine (`PermutationIter`) is
