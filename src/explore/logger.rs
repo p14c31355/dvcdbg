@@ -99,7 +99,7 @@ impl<const B: usize> Logger<B> for NullLogger {
 /// ```
 /// use heapless::String;
 /// use core::fmt::Write;
-/// use dvcdbg::compat::logger::write_bytes_hex_buffered; // Renamed function
+/// use dvcdbg::explore::logger::write_bytes_hex_buffered;
 ///
 /// let mut s: String<64> = String::new();
 /// let bytes = [0xDE, 0xAD, 0xBE, 0xEF];
