@@ -42,40 +42,6 @@ where
     });
 }
 
-fn execute_and_log_command<I2C, S, E, const BUF_CAP: usize>(
-    i2c: &mut I2C,
-    executor: &mut E,
-    serial_logger: &mut SerialLogger<S, BUF_CAP>,
-    addr: u8,
-    cmd_bytes: &[u8],
-    cmd_idx: usize, // To include in logging for context
-) -> Result<(), ExplorerError>
-where
-    I2C: crate::compat::I2cCompat,
-    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    E: CmdExecutor<I2C, BUF_CAP>,
-    S: core::fmt::Write,
-{
-    explorer_log_info(serial_logger, |buf| {
-        writeln!(
-            buf,
-            "Sending node {} bytes: {:02X?} ...",
-            cmd_idx, cmd_bytes
-        )
-    });
-
-    match executor.exec(i2c, addr, cmd_bytes, serial_logger) {
-        Ok(_) => {
-            explorer_log_info(serial_logger, |buf| writeln!(buf, "OK"));
-            Ok(())
-        }
-        Err(e) => {
-            explorer_log_error(serial_logger, |buf| writeln!(buf, "FAILED: {:?}", e));
-            Err(e.into()) // Convert ExecutorError to ExplorerError
-        }
-    }
-}
-
 pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,

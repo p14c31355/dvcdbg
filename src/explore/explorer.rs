@@ -81,6 +81,40 @@ impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
     }
 }
 
+pub fn execute_and_log_command<I2C, E, L, const BUF_CAP: usize>(
+    i2c: &mut I2C,
+    executor: &mut E,
+    logger: &mut L,
+    addr: u8,
+    cmd_bytes: &[u8],
+    cmd_idx: usize,
+) -> Result<(), ExplorerError>
+where
+    I2C: crate::compat::I2cCompat,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+    E: CmdExecutor<I2C, BUF_CAP>,
+    L: crate::explore::logger::Logger<BUF_CAP> + core::fmt::Write,
+{
+    logger.log_info_fmt(|buf| {
+        writeln!(
+            buf,
+            "[explorer] Sending node {} bytes: {:02X?} ...",
+            cmd_idx, cmd_bytes
+        )
+    });
+
+    match executor.exec(i2c, addr, cmd_bytes, logger) {
+        Ok(_) => {
+            logger.log_info_fmt(|buf| writeln!(buf, "[explorer] OK"));
+            Ok(())
+        }
+        Err(e) => {
+            logger.log_error_fmt(|buf| writeln!(buf, "[explorer] FAILED: {:?}", e));
+            Err(e.into())
+        }
+    }
+}
+
 impl<I2C, const BUF_CAP: usize> CmdExecutor<I2C, BUF_CAP> for PrefixExecutor<BUF_CAP>
 where
     I2C: crate::compat::I2cCompat,
@@ -158,6 +192,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
     ) -> Result<ExploreResult, ExplorerError>
     where
         I2C: crate::compat::I2cCompat,
+        <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
         E: CmdExecutor<I2C, BUF_CAP>,
         L: crate::explore::logger::Logger<BUF_CAP> + core::fmt::Write,
     {
@@ -166,66 +201,72 @@ impl<'a, const N: usize> Explorer<'a, N> {
             return Err(ExplorerError::NoValidAddressesFound);
         }
 
-        let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
+        let mut found_addrs: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
         let mut solved_addrs: [bool; I2C_ADDRESS_COUNT] = [false; I2C_ADDRESS_COUNT];
-        let mut permutation_count = 0;
+        let mut permutations_tested = 0;
         let iter = PermutationIter::new(self)?;
         logger.log_info_fmt(|buf| writeln!(buf, "[explorer] Starting permutation exploration..."));
         for sequence in iter {
-            permutation_count += 1;
+            permutations_tested += 1;
+            // Inside impl<'a, const N: usize> Explorer<'a, N> for the explore method
+            // ...
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                let addr_idx = addr_val as usize;
-                if solved_addrs[addr_idx] {
+                let addr = addr_val;
+                if solved_addrs[addr as usize] {
                     continue;
                 }
+
+                logger.log_info_fmt(|buf| {
+                    writeln!(
+                        buf,
+                        "[explorer] Trying sequence on 0x{:02X} (permutation {}/{})",
+                        addr,
+                        permutations_tested,
+                        self.sequence.len()
+                    )
+                });
+
                 let mut all_ok = true;
-                for &cmd_bytes in sequence.iter() {
-                    if let Err(e) = executor.exec(i2c, addr_val, cmd_bytes, logger) {
-                        all_ok = false;
-                        logger.log_error_fmt(|buf| {
-                            use core::fmt::Write;
-                            let _ = writeln!(
-                                buf,
-                                "[explorer] Execution failed for addr 0x{:02X}: {:?}",
-                                addr_val, e
-                            );
-                            Ok(())
-                        });
-                        break;
+                for i in 0..self.sequence.len() {
+                    let cmd_bytes = sequence[i];
+                    match execute_and_log_command(i2c, executor, logger, addr, cmd_bytes, i) {
+                        Ok(_) => {}
+                        Err(_) => {
+                            all_ok = false;
+                            break;
+                        }
                     }
                 }
+
                 if all_ok {
-                    if found_addresses.push(addr_val).is_ok() {
-                        solved_addrs[addr_idx] = true;
-                    } else {
+                    logger.log_info_fmt(|buf| {
+                        writeln!(
+                            buf,
+                            "[explorer] Successfully executed sequence on 0x{:02X}",
+                            addr
+                        )
+                    });
+                    if found_addrs.push(addr).is_err() {
+                        logger.log_error_fmt(|buf| {
+                            writeln!(buf, "[error] Buffer overflow in found_addrs")
+                        });
                         return Err(ExplorerError::BufferOverflow);
                     }
+                    solved_addrs[addr as usize] = true;
+                } else {
+                    logger.log_info_fmt(|buf| {
+                        writeln!(
+                            buf,
+                            "[explorer] Failed to execute sequence on 0x{:02X}",
+                            addr
+                        )
+                    });
                 }
             }
-            // Optimization: if all possible addresses have been found, we can stop.
-            if found_addresses.len() == (I2C_SCAN_ADDR_END - I2C_SCAN_ADDR_START + 1) as usize {
-                break;
-            }
         }
-
-        logger.log_info_fmt(|buf| {
-            use core::fmt::Write;
-            let _ = writeln!(
-                buf,
-                "[explorer] Exploration complete. {} addresses found across {} permutations.",
-                found_addresses.len(),
-                permutation_count
-            );
-            Ok(())
-        });
-
-        if found_addresses.is_empty() {
-            return Err(ExplorerError::NoValidAddressesFound);
-        }
-
         Ok(ExploreResult {
-            found_addrs: found_addresses,
-            permutations_tested: permutation_count,
+            found_addrs,
+            permutations_tested,
         })
     }
     /// Generates a single valid topological sort of the command sequence.
