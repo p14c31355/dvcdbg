@@ -5,7 +5,7 @@ use crate::error::{ExecutorError, ExplorerError};
 use core::fmt::Write;
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
-use heapless::{Vec, String};
+use heapless::Vec;
 const I2C_ADDRESS_COUNT: usize = 128;
 
 #[derive(Copy, Clone)]
@@ -116,7 +116,8 @@ where
     }
 }
 
-impl<I2C, const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> CmdExecutor<I2C, BUF_CAP> for PrefixExecutor<INIT_SEQ_SIZE, BUF_CAP>
+impl<I2C, const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> CmdExecutor<I2C, BUF_CAP>
+    for PrefixExecutor<INIT_SEQ_SIZE, BUF_CAP>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -219,8 +220,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     writeln!(
                         buf,
                         "[explorer] Trying sequence on 0x{:02X} (permutation {})",
-                        addr,
-                        permutations_tested
+                        addr, permutations_tested
                     )
                 });
 
