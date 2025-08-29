@@ -244,6 +244,11 @@ where
                 }
             }
             Err(e) => {
+                if let crate::explore::logger::LogLevel::Verbose = log_level {
+                    write!(serial, "[error] scan failed for command 0x").ok();
+                    crate::compat::ascii::write_bytes_hex_fmt(serial, &[seq_cmd]).ok();
+                    writeln!(serial, ": {:?}", e).ok();
+                }
                 last_error = Some(e);
             }
         }

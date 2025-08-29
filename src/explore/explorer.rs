@@ -263,6 +263,10 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     });
                 }
             }
+            // After the inner loop over addresses
+            if found_addrs.len() == (I2C_SCAN_ADDR_END - I2C_SCAN_ADDR_START + 1) as usize {
+                break;
+            }
         }
         Ok(ExploreResult {
             found_addrs,

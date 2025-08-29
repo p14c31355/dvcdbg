@@ -86,10 +86,21 @@ where
         explorer.explore::<_, _, _, BUF_CAP>(i2c, &mut executor, &mut serial_logger)?;
 
     for addr in exploration_result.found_addrs.iter() {
-        write!(serial, "[driver] Found device at ").ok();
-        ascii::write_bytes_hex_fmt(serial, &[*addr]).ok();
-        writeln!(serial).ok();
+        serial_logger.log_info_fmt(|buf| {
+            write!(buf, "[driver] Found device at ")?;
+            ascii::write_bytes_hex_fmt(buf, &[*addr])?;
+            writeln!(buf)
+        });
     }
+
+    serial_logger.log_info_fmt(|buf| {
+        writeln!(
+            buf,
+            "[explorer] Exploration complete. {} addresses found across {} permutations.",
+            exploration_result.found_addrs.len(),
+            exploration_result.permutations_tested
+        )
+    });
 
     Ok(())
 }
@@ -203,10 +214,6 @@ where
 
     let single_sequence =
         explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &[false; N])?;
-    serial_logger.log_info_fmt(|buf| writeln!(buf, "Before sort:"));
-    for (idx, node) in explorer.sequence.iter().enumerate() {
-        serial_logger.log_info_fmt(|buf| writeln!(buf, "Node {idx} deps: {:?}", node.deps));
-    }
 
     let sequence_len = explorer.sequence.len();
 
