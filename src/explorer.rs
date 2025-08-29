@@ -240,7 +240,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
             }
         }
 
-        if visited_count != len {
+        if visited_count != len - failed_nodes.iter().filter(|&&f| f).count() {
             return Err(ExplorerError::DependencyCycle);
         }
 
