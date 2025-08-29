@@ -10,7 +10,6 @@ use crate::{
     prelude::CmdExecutor,
 };
 use core::fmt::Write;
-use heapless::Vec;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -240,9 +239,10 @@ macro_rules! define_scanner {
                             writeln!(serial).ok();
                         }
                         $crate::logger::LogLevel::Normal => {
-                            writeln!(serial, "[ok] Found devices at:").ok();
                             for addr in found_addrs {
-                                writeln!(serial, " 0x{:02X}", addr).ok();
+                                write!(serial, " ").ok();
+                                $crate::compat::ascii::write_bytes_hex_fmt(serial, &[*addr]).ok();
+                                writeln!(serial, "").ok();
                             }
                             writeln!(serial).ok();
                         }

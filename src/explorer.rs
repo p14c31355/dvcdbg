@@ -177,88 +177,69 @@ impl<'a, const N: usize> Explorer<'a, N> {
         &self,
         serial: &mut impl core::fmt::Write,
         failed_nodes: &[bool; N],
-    ) -> Result<([[u8; MAX_CMD_LEN]; N], [usize; N]), ExplorerError> {
+    ) -> Result<(heapless::Vec<heapless::Vec<u8, MAX_CMD_LEN>, N>, heapless::Vec<usize, N>), ExplorerError> {
         let len = self.sequence.len();
-        let mut in_degree: [usize; N] = [0; N];
-        let mut adj_list_rev: [[usize; N]; N] = [[0; N]; N];
-        let mut adj_list_len: [usize; N] = [0; N];
-
-        let mut result_sequence: [[u8; MAX_CMD_LEN]; N] = [[0; MAX_CMD_LEN]; N];
-        let mut result_len_per_node: [usize; N] = [0; N];
-        let mut result_len = 0;
+        let mut in_degree: heapless::Vec<usize, N> = heapless::Vec::new();
+        in_degree.resize(len, 0).map_err(|_| ExplorerError::BufferOverflow)?;
+        let mut adj_list_rev: heapless::Vec<heapless::Vec<usize, N>, N> = heapless::Vec::new();
+        adj_list_rev
+            .resize(len, heapless::Vec::new())
+            .map_err(|_| ExplorerError::BufferOverflow)?;
 
         for (i, node) in self.sequence.iter().enumerate() {
             if failed_nodes[i] {
                 continue;
             }
             in_degree[i] = node.deps.len();
-            writeln!(
-                serial,
-                "[dbg] Node {i} deps={:?}, in_degree={}",
-                node.deps, in_degree[i]
-            )
-            .ok();
-
             for &dep_idx in node.deps.iter() {
                 if dep_idx >= len {
-                    writeln!(
-                        serial,
-                        "[error] Node {i} has invalid dep index {dep_idx} (len={len})"
-                    )
-                    .ok();
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                let pos = adj_list_len[dep_idx];
-                adj_list_rev[dep_idx][pos] = i;
-                adj_list_len[dep_idx] += 1;
+                adj_list_rev[dep_idx]
+                    .push(i)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
-        let mut q: [usize; N] = [0; N];
-        let mut head = 0;
-        let mut tail = 0;
+        let mut q: heapless::Vec<usize, N> = heapless::Vec::new();
         for (i, &degree) in in_degree.iter().enumerate().take(len) {
             if !failed_nodes[i] && degree == 0 {
-                q[tail] = i;
-                tail += 1;
+                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
-        while head < tail {
-            let u = q[head];
-            head += 1;
+        let mut result_sequence: heapless::Vec<heapless::Vec<u8, MAX_CMD_LEN>, N> =
+            heapless::Vec::new();
+        let mut result_len_per_node: heapless::Vec<usize, N> = heapless::Vec::new();
+        let mut visited_count = 0;
+
+        while let Some(u) = q.pop() {
+            visited_count += 1;
 
             let cmd_bytes = self.sequence[u].bytes;
-            let copy_len = cmd_bytes.len().min(MAX_CMD_LEN);
-            result_sequence[result_len][..copy_len].copy_from_slice(&cmd_bytes[..copy_len]);
-            result_len_per_node[result_len] = copy_len;
-            result_len += 1;
+            let mut cmd_vec: heapless::Vec<u8, MAX_CMD_LEN> = heapless::Vec::new();
+            cmd_vec
+                .extend_from_slice(cmd_bytes)
+                .map_err(|_| ExplorerError::BufferOverflow)?;
+            result_len_per_node
+                .push(cmd_vec.len())
+                .map_err(|_| ExplorerError::BufferOverflow)?;
+            result_sequence
+                .push(cmd_vec)
+                .map_err(|_| ExplorerError::BufferOverflow)?;
 
-            for i in 0..adj_list_len[u] {
-                let v = adj_list_rev[u][i];
+            for &v in adj_list_rev[u].iter() {
                 if !failed_nodes[v] {
                     in_degree[v] -= 1;
                     if in_degree[v] == 0 {
-                        q[tail] = v;
-                        tail += 1;
+                        q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
                     }
                 }
             }
         }
 
-        if result_len != len {
-            writeln!(serial, "[error] Dependency cycle detected").ok();
+        if visited_count != len {
             return Err(ExplorerError::DependencyCycle);
-        }
-
-        for i in 0..len {
-            writeln!(
-                serial,
-                "[dbg] Node {i} bytes={:02X?} (len={})",
-                &result_sequence[i][..result_len_per_node[i]],
-                result_len_per_node[i]
-            )
-            .ok();
         }
 
         Ok((result_sequence, result_len_per_node))
