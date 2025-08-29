@@ -443,7 +443,7 @@ where
     Ok(())
 }
 
-pub fn run_pruned_explorer<I2C, S, E, const N: usize, const BUF_CAP: usize>(
+pub fn run_pruned_explorer<I2C, S, E, const N: usize, const BUF_CAP: usize, const MAX_CMD_LEN: usize>(
     explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     executor: &mut E,
@@ -465,7 +465,7 @@ where
 
     loop {
         let (sequence_bytes, sequence_len) =
-            match explorer.get_one_topological_sort_buf(&mut serial_logger, &failed_nodes) {
+            match explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes) {
                 Ok(seq) => seq,
                 Err(e) => {
                     if commands_found == explorer.sequence.len() {
@@ -473,7 +473,7 @@ where
                         return Ok(());
                     } else {
                         serial_logger.log_error_fmt(|buf| {
-                            write!(buf, "[error] Failed to generate a new topological sort. Aborting.").ok()
+                            write!(buf, "[error] Failed to generate a new topological sort. Aborting.")
                         });
                         return Err(e);
                     }
@@ -502,7 +502,7 @@ where
                 solved_addrs[addr as usize] = true;
                 commands_found += explorer.sequence.len();
                 serial_logger.log_info_fmt(|buf| {
-                    write!(buf, "[ok] Device at 0x{:02X} successfully initialized.", addr).ok()
+                    write!(buf, "[ok] Device at 0x{:02X} successfully initialized.", addr)
                 });
             }
         }
@@ -515,7 +515,7 @@ where
     }
 }
 
-pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
+pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize, const MAX_CMD_LEN: usize>(
     explorer: &crate::explorer::Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -537,7 +537,7 @@ where
         Ok(())
     });
 
-    let single_sequence = explorer.get_one_topological_sort_buf::<BUF_CAP>(&mut serial_logger, &[false; N])?;
+    let single_sequence = explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &[false; N])?;
     serial_logger.log_info_fmt(|buf| write!(buf, "Before sort:\r\n"));
     for (idx, node) in explorer.sequence.iter().enumerate() {
         serial_logger.log_info_fmt(|buf| write!(buf, "Node {idx} deps: {:?}\r\n", node.deps));
