@@ -162,7 +162,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         L: crate::explore::logger::Logger<BUF_CAP> + core::fmt::Write,
     {
         if self.sequence.is_empty() {
-            logger.log_info("[explorer] No commands provided.");
+            logger.log_info_fmt(|buf| writeln!(buf, "[explorer] No commands provided."));
             return Err(ExplorerError::NoValidAddressesFound);
         }
 
@@ -170,7 +170,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut solved_addrs: [bool; I2C_ADDRESS_COUNT] = [false; I2C_ADDRESS_COUNT];
         let mut permutation_count = 0;
         let iter = PermutationIter::new(self)?;
-        logger.log_info("[explorer] Starting permutation exploration...");
+        logger.log_info_fmt(|buf| writeln!(buf, "[explorer] Starting permutation exploration..."));
         for sequence in iter {
             permutation_count += 1;
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
