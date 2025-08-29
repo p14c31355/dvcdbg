@@ -140,53 +140,21 @@ macro_rules! define_scanner {
             let initial_found_addrs =
                 $crate::scanner::scan_i2c(i2c, serial, &[ctrl_byte], log_level)?;
 
-            let mut detected_cmds = heapless::Vec::<u8, 64>::new();
-            let mut last_error: Option<$crate::error::ErrorKind> = None;
+            // Call the extracted helper function
+            let detected_cmds = $crate::scanner::sequence_iterative_check(
+                i2c,
+                serial,
+                ctrl_byte,
+                init_sequence,
+                log_level,
+                &initial_found_addrs,
+            )?;
 
-            for &seq_cmd in init_sequence.iter() {
-                match $crate::scanner::internal_scan(i2c, serial, &[ctrl_byte, seq_cmd], log_level)
-                {
-                    Ok(responded_addrs_for_cmd) => {
-                        let mut cmd_responded_by_initial_device = false;
-                        for &addr in responded_addrs_for_cmd.iter() {
-                            if initial_found_addrs.contains(&addr) {
-                                if let $crate::explore::logger::LogLevel::Verbose = log_level {
-                                    write!(serial, "[ok] Found device at ").ok();
-                                    $crate::compat::ascii::write_bytes_hex_fmt(serial, &[addr])
-                                        .ok();
-                                    write!(serial, " responding to ").ok();
-                                    $crate::compat::ascii::write_bytes_hex_fmt(serial, &[seq_cmd])
-                                        .ok();
-                                    writeln!(serial, "").ok();
-                                }
-                                cmd_responded_by_initial_device = true;
-                            }
-                        }
-                        if cmd_responded_by_initial_device {
-                            if detected_cmds.push(seq_cmd).is_err() {
-                                writeln!(serial, "[error] Buffer overflow in detected_cmds").ok();
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        write!(serial, "[error] scan failed for command 0x").ok();
-                        $crate::compat::ascii::write_bytes_hex_fmt(serial, &[seq_cmd]).ok();
-                        writeln!(serial, ": {:?}", e).ok();
-                        if last_error.is_none() {
-                            last_error = Some(e);
-                        }
-                    }
-                }
-            }
             if let $crate::explore::logger::LogLevel::Verbose = log_level {
                 writeln!(serial, "[info] I2C scan with init sequence complete.").ok();
             }
-            log_differences(serial, init_sequence, &detected_cmds);
-            if let Some(e) = last_error {
-                Err(e)
-            } else {
-                Ok(detected_cmds)
-            }
+            $crate::scanner::log_differences(serial, init_sequence, &detected_cmds);
+            Ok(detected_cmds)
         }
 
         fn log_differences<W: core::fmt::Write>(
@@ -235,6 +203,57 @@ macro_rules! define_scanner {
             writeln!(serial).ok();
         }
     };
+}
+
+fn sequence_iterative_check<I2C, S>(
+    i2c: &mut I2C,
+    serial: &mut S,
+    ctrl_byte: u8,
+    init_sequence: &[u8],
+    log_level: crate::explore::logger::LogLevel,
+    initial_found_addrs: &heapless::Vec<u8, 128>,
+) -> Result<heapless::Vec<u8, 64>, crate::error::ErrorKind>
+where
+    I2C: crate::compat::I2cCompat,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+    S: core::fmt::Write,
+{
+    let mut detected_cmds = heapless::Vec::<u8, 64>::new();
+    let mut last_error: Option<crate::error::ErrorKind> = None;
+
+    for &seq_cmd in init_sequence.iter() {
+        match crate::scanner::internal_scan(i2c, serial, &[ctrl_byte, seq_cmd], log_level) {
+            Ok(responded_addrs_for_cmd) => {
+                let mut cmd_responded_by_initial_device = false;
+                for &addr in responded_addrs_for_cmd.iter() {
+                    if initial_found_addrs.contains(&addr) {
+                        if let crate::explore::logger::LogLevel::Verbose = log_level {
+                            write!(serial, "[ok] Found device at ").ok();
+                            crate::compat::ascii::write_bytes_hex_fmt(serial, &[addr]).ok();
+                            writeln!(serial, " responded to 0x").ok();
+                            crate::compat::ascii::write_bytes_hex_fmt(serial, &[seq_cmd]).ok();
+                            writeln!(serial).ok();
+                        }
+                        cmd_responded_by_initial_device = true;
+                    }
+                }
+                if cmd_responded_by_initial_device {
+                    detected_cmds.push(seq_cmd).map_err(|_| {
+                        crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+                    })?;
+                }
+            }
+            Err(e) => {
+                last_error = Some(e);
+            }
+        }
+    }
+
+    if detected_cmds.is_empty() {
+        Err(last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)))
+    } else {
+        Ok(detected_cmds)
+    }
 }
 
 define_scanner!(
