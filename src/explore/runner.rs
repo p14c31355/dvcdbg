@@ -86,7 +86,7 @@ where
         let (sequence_bytes, sequence_len) =
             match explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes) {
                 Ok(seq) => seq,
-                                Err(e) => {
+                Err(e) => {
                     serial_logger.log_error_fmt(|buf| {
                         writeln!(buf, "[error] Failed to generate a new topological sort: {:?}. Aborting.", e)
                     });
