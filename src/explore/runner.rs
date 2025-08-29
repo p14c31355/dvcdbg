@@ -42,6 +42,40 @@ where
     });
 }
 
+fn execute_and_log_command<I2C, S, E, const BUF_CAP: usize>(
+    i2c: &mut I2C,
+    executor: &mut E,
+    serial_logger: &mut SerialLogger<S, BUF_CAP>,
+    addr: u8,
+    cmd_bytes: &[u8],
+    cmd_idx: usize, // To include in logging for context
+) -> Result<(), ExplorerError>
+where
+    I2C: crate::compat::I2cCompat,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+    E: CmdExecutor<I2C, BUF_CAP>,
+    S: core::fmt::Write,
+{
+    explorer_log_info(serial_logger, |buf| {
+        writeln!(
+            buf,
+            "Sending node {} bytes: {:02X?} ...",
+            cmd_idx, cmd_bytes
+        )
+    });
+
+    match executor.exec(i2c, addr, cmd_bytes, serial_logger) {
+        Ok(_) => {
+            explorer_log_info(serial_logger, |buf| writeln!(buf, "OK"));
+            Ok(())
+        }
+        Err(e) => {
+            explorer_log_error(serial_logger, |buf| writeln!(buf, "FAILED: {:?}", e));
+            Err(e.into()) // Convert ExecutorError to ExplorerError
+        }
+    }
+}
+
 pub fn run_explorer<I2C, S, const N: usize, const BUF_CAP: usize>(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
@@ -147,13 +181,11 @@ where
             let mut current_failed_nodes = failed_nodes;
             for i in 0..explorer.sequence.len() {
                 let cmd_bytes = &sequence_bytes[i][..sequence_len[i]];
-                match executor.exec(i2c, addr, cmd_bytes, &mut serial_logger) {
+                match execute_and_log_command(i2c, executor, &mut serial_logger, addr, cmd_bytes, i)
+                {
                     Ok(_) => {}
-                    Err(e) => {
-                        serial_logger.log_error_fmt(|buf| {
-                            writeln!(buf, "[error] exec failed for addr 0x{addr:02X}: {e:?}")?;
-                            Ok(())
-                        });
+                    Err(_) => {
+                        // The helper already logs the error and converts it
                         current_failed_nodes[i] = true;
                         all_ok = false;
                         break;
@@ -223,26 +255,14 @@ where
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, heapless::Vec::new());
 
     for i in 0..sequence_len {
-        serial_logger.log_info_fmt(|buf| {
-            writeln!(
-                buf,
-                "[explorer] Sending node {} bytes: {:02X?} ...",
-                i, single_sequence.0[i]
-            )?;
-            Ok(())
-        });
-        match executor.exec(i2c, target_addr, &single_sequence.0[i], &mut serial_logger) {
-            Ok(_) => {
-                serial_logger.log_info_fmt(|buf| {
-                    writeln!(buf, "OK")?;
-                    Ok(())
-                });
-            }
-            Err(e) => {
-                explorer_log_error(&mut serial_logger, |buf| writeln!(buf, "FAILED: {e:?}"));
-                return Err(e.into()); // Convert ExecutorError to ExplorerError and return
-            }
-        };
+        execute_and_log_command(
+            i2c,
+            &mut executor,
+            &mut serial_logger,
+            target_addr,
+            &single_sequence.0[i],
+            i,
+        )?; // Propagate error
     }
 
     serial_logger.log_info_fmt(|buf| {
