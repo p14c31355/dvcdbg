@@ -285,13 +285,11 @@ macro_rules! define_scanner {
         {
             if let $crate::logger::LogLevel::Verbose = log_level {
                 writeln!(serial, "[scan] Scanning I2C bus with init sequence:").ok();
-                for (i, b) in init_sequence.iter().enumerate() {
-                    if i % 16 == 0 {
-                        writeln!(serial).ok();
-                    }
-                    write!(serial, "{:02X} ", b).ok();
+                for chunk in init_sequence.chunks(16) {
+                    write!(serial, " ").ok();
+                    $crate::compat::ascii::write_bytes_hex_fmt(serial, chunk).ok();
+                    writeln!(serial).ok();
                 }
-                writeln!(serial).ok();
             }
             let initial_found_addrs =
                 crate::scanner::scan_i2c(i2c, serial, &[ctrl_byte], log_level)?;
