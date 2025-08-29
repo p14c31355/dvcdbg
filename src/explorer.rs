@@ -176,9 +176,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
     pub fn get_one_topological_sort_buf<const MAX_CMD_LEN: usize>(
         &self,
         serial: &mut impl core::fmt::Write,
+        failed_nodes: &[bool; N],
     ) -> Result<([[u8; MAX_CMD_LEN]; N], [usize; N]), ExplorerError> {
         let len = self.sequence.len();
-
         let mut in_degree: [usize; N] = [0; N];
         let mut adj_list_rev: [[usize; N]; N] = [[0; N]; N];
         let mut adj_list_len: [usize; N] = [0; N];
@@ -188,6 +188,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut result_len = 0;
 
         for (i, node) in self.sequence.iter().enumerate() {
+            if failed_nodes[i] {
+                continue;
+            }
             in_degree[i] = node.deps.len();
             writeln!(
                 serial,
@@ -215,7 +218,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut head = 0;
         let mut tail = 0;
         for (i, &degree) in in_degree.iter().enumerate().take(len) {
-            if degree == 0 {
+            if !failed_nodes[i] && degree == 0 {
                 q[tail] = i;
                 tail += 1;
             }
@@ -233,10 +236,12 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
             for i in 0..adj_list_len[u] {
                 let v = adj_list_rev[u][i];
-                in_degree[v] -= 1;
-                if in_degree[v] == 0 {
-                    q[tail] = v;
-                    tail += 1;
+                if !failed_nodes[v] {
+                    in_degree[v] -= 1;
+                    if in_degree[v] == 0 {
+                        q[tail] = v;
+                        tail += 1;
+                    }
                 }
             }
         }
@@ -260,7 +265,6 @@ impl<'a, const N: usize> Explorer<'a, N> {
     }
 }
 
-/// An iterator that generates all valid topological permutations of the command sequence.
 pub struct PermutationIter<'a, const N: usize> {
     sequence: &'a [CmdNode],
     total_nodes: usize,
