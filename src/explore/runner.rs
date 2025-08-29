@@ -6,7 +6,7 @@ use crate::error::ExplorerError;
 
 use core::fmt::Write;
 
-use crate::scanner::I2C_BUFFER_SIZE;
+use crate::scanner::{I2C_BUFFER_SIZE, I2C_MAX_DEVICES};
 
 // Helper for logging info with the [explorer] prefix
 pub fn explorer_log_info<S, F, const BUF_CAP: usize>(logger: &mut SerialLogger<S, BUF_CAP>, f: F)
