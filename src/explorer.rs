@@ -106,10 +106,6 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut found_addresses: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
         let mut solved_addrs: [bool; I2C_ADDRESS_COUNT] = [false; I2C_ADDRESS_COUNT];
         let mut permutation_count = 0;
-        let mut visited_nodes: Vec<bool, N> = Vec::new();
-        visited_nodes
-            .resize(self.sequence.len(), false)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
         let iter = PermutationIter::new(self)?;
         logger.log_info("[explorer] Starting permutation exploration...");
         for sequence in iter {
