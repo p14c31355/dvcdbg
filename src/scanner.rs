@@ -145,6 +145,7 @@ macro_rules! define_scanner {
 
             for &seq_cmd in init_sequence.iter() {
                 match $crate::scanner::internal_scan(i2c, serial, &[ctrl_byte, seq_cmd], log_level)
+                {
                     Ok(responded_addrs_for_cmd) => {
                         let mut cmd_responded_by_initial_device = false;
                         for &addr in responded_addrs_for_cmd.iter() {

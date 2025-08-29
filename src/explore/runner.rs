@@ -125,7 +125,6 @@ where
         return Err(ExplorerError::NoValidAddressesFound);
     }
     let mut failed_nodes = [false; N];
-    let mut commands_found = 0;
     loop {
         let (sequence_bytes, sequence_len) = match explorer
             .get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes)
@@ -163,7 +162,6 @@ where
             }
             if all_ok {
                 addrs_to_remove.push(addr_idx).ok();
-                commands_found += explorer.sequence.len();
             }
             failed_nodes = current_failed_nodes;
         }
@@ -221,10 +219,6 @@ where
         )?;
         Ok(())
     });
-
-    for node_idx in 0..explorer.sequence.len() {
-        writeln!(serial_logger, "Checking node {node_idx}").ok();
-    }
 
     let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, heapless::Vec::new());
 
