@@ -144,8 +144,7 @@ macro_rules! define_scanner {
             let mut last_error: Option<$crate::error::ErrorKind> = None;
 
             for &seq_cmd in init_sequence.iter() {
-                match $crate::scanner::internal_scan(i2c, serial, &[seq_cmd, ctrl_byte], log_level)
-                {
+                match $crate::scanner::internal_scan(i2c, serial, &[ctrl_byte, seq_cmd], log_level)
                     Ok(responded_addrs_for_cmd) => {
                         let mut cmd_responded_by_initial_device = false;
                         for &addr in responded_addrs_for_cmd.iter() {
