@@ -1,5 +1,7 @@
 //! Defines the logging level for scanner functions.
 
+use core::fmt; // Add this line
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogLevel {
     Verbose,
@@ -105,4 +107,40 @@ impl<const B: usize> Logger<B> for NullLogger {
         F: FnOnce(&mut heapless::String<B>) -> Result<(), core::fmt::Error>,
     {
     }
+}
+
+/// Writes a slice of bytes as a hexadecimal string using an internal buffer.
+///
+/// This function is useful when you need to format bytes within a larger `writeln!` macro
+/// and want to avoid intermediate string allocations.
+///
+/// # Arguments
+/// * `serial` - A mutable reference to a type that implements `core::fmt::Write`.
+/// * `bytes` - The slice of bytes to format.
+///
+/// # Example
+/// ```
+/// use heapless::String;
+/// use core::fmt::Write;
+/// use dvcdbg::compat::logger::write_bytes_hex_buffered; // Renamed function
+///
+/// let mut s: String<64> = String::new();
+/// let bytes = [0xDE, 0xAD, 0xBE, 0xEF];
+///
+/// writeln!(s, "Data: ").unwrap();
+/// write_bytes_hex_buffered(&mut s, &bytes).unwrap(); // Renamed function
+/// assert_eq!(s.as_str(), "Data: DEADBEFF");
+/// ```
+pub fn write_bytes_hex_buffered<S, const BUF_CAP: usize>(
+    serial: &mut S,
+    bytes: &[u8],
+) -> Result<(), core::fmt::Error>
+where
+    S: core::fmt::Write,
+{
+    let mut temp_string: heapless::String<BUF_CAP> = heapless::String::new();
+    for byte in bytes {
+        fmt::Write::write_fmt(&mut temp_string, core::format_args!("{:02X}", byte))?;
+    }
+    write!(serial, "{}", temp_string)
 }
