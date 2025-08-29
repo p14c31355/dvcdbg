@@ -109,7 +109,7 @@ pub enum ExplorerError {
     /// No valid I2C addresses were found for any command sequence.
     NoValidAddressesFound,
     /// An I2C command execution failed.
-    ExecutionFailed,
+    ExecutionFailed(crate::error::ErrorKind),
     /// An internal buffer overflowed.
     BufferOverflow,
     /// A dependency index is out of bounds.
