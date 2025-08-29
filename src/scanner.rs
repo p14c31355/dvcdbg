@@ -11,6 +11,7 @@ use heapless::Vec;
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
 
+pub const I2C_MAX_DEVICES: usize = 128;
 pub const I2C_BUFFER_SIZE: usize = 512;
 
 fn internal_scan<I2C, S>(
