@@ -239,6 +239,7 @@ macro_rules! define_scanner {
                             writeln!(serial).ok();
                         }
                         $crate::logger::LogLevel::Normal => {
+                            writeln!(serial, "[ok] Found devices at:").ok();
                             for addr in found_addrs {
                                 write!(serial, " ").ok();
                                 $crate::compat::ascii::write_bytes_hex_fmt(serial, &[*addr]).ok();
