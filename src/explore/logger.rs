@@ -64,6 +64,12 @@ impl<'a, S: core::fmt::Write> Logger for SerialLogger<'a, S> {
     }
 }
 
+impl<'a, S: core::fmt::Write> core::fmt::Write for SerialLogger<'a, S> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.writer.write_str(s)
+    }
+}
+
 /// A trait for platforms without console output.
 pub struct NullLogger;
 
