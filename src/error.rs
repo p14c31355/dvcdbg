@@ -132,8 +132,8 @@ pub enum ExecutorError {
 impl From<ExecutorError> for ExplorerError {
     fn from(error: ExecutorError) -> Self {
         match error {
-            ExecutorError::I2cError(_) => ExplorerError::ExecutionFailed,
-            ExecutorError::ExecFailed => ExplorerError::ExecutionFailed,
+            ExecutorError::I2cError(kind) => ExplorerError::ExecutionFailed(kind),
+            ExecutorError::ExecFailed => ExplorerError::ExecutionFailed(crate::error::ErrorKind::Unknown),
             ExecutorError::BufferOverflow => ExplorerError::BufferOverflow,
         }
     }
