@@ -2,7 +2,6 @@
 
 //! Defines the logging level for scanner functions.
 
-use core::fmt;
 use heapless::String;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

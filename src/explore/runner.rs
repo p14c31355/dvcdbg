@@ -46,12 +46,13 @@ where
     });
 }
 
-pub fn run_explorer<I2C, S, const N: usize>(
+pub fn run_explorer<I2C, S, E, const N: usize>(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
-    init_sequence: &[u8],
+    target_addr: u8,
     prefix: u8,
+    init_sequence: &[u8; N],
     log_level: LogLevel,
 ) -> Result<(), ExplorerError>
 where
@@ -60,25 +61,22 @@ where
     S: core::fmt::Write,
 {
     let mut serial_logger = SerialLogger::new(serial, log_level);
-
-    serial_logger.log_info_fmt(|buf| writeln!(buf, "[log] Initial I2C bus scan..."));
+    runner_log_info(&mut serial_logger, |buf| {
+        writeln!(buf, "Running full exploration...")
+    });
 
     let successful_seq = match crate::scanner::scan_init_sequence(
         i2c,
         &mut serial_logger,
-        prefix,
         init_sequence,
         log_level,
     ) {
         Ok(seq) => seq,
         Err(e) => {
-            serial_logger.log_error_fmt(|buf| {
-                writeln!(
-                    buf,
-                    "[error] Initial sequence scan failed: {e:?}. Aborting explorer."
-                )
+            runner_log_error(&mut serial_logger, |buf| {
+                writeln!(buf, "Failed to scan init sequence: {:?}", e)
             });
-            return Err(ExplorerError::ExecutionFailed(e));
+            return Err(ExplorerError::DeviceNotFound(e));
         }
     };
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));

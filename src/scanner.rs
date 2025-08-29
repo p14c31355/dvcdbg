@@ -121,16 +121,18 @@ macro_rules! define_scanner {
         ///
         /// A `heapless::Vec<u8, 64>` containing the bytes from `init_sequence` that elicited a response.
         pub fn scan_init_sequence<I2C, S, const N: usize>(
-            i2c: &mut I2C,
-            serial: &mut S,
-            init_sequence: &[u8; N], // Change to fixed-size array
-            log_level: crate::explore::logger::LogLevel,
-        ) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
-        where
-            I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: $crate::compat::HalErrorExt,
-            S: $write_trait,
-        {
+    i2c: &mut I2C,
+    serial: &mut S,
+    init_sequence: &[u8; N],
+    log_level: crate::explore::logger::LogLevel,
+) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
+where
+    I2C: crate::compat::I2cCompat,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+    S: core::fmt::Write + crate::explore::logger::Logger<I2C_BUFFER_SIZE>,
+{
+    let mut detected_cmds = heapless::Vec::<u8, N>::new();
+    let mut last_error: Option<crate::error::ErrorKind> = None;
             if let $crate::explore::logger::LogLevel::Verbose = log_level {
                 writeln!(serial, "[scan] Scanning I2C bus with init sequence:").ok();
                 for chunk in init_sequence.chunks(16) {
