@@ -461,7 +461,7 @@ where
     let mut serial_logger = crate::logger::SerialLogger::new(serial, log_level);
     let mut found_addrs = match crate::scanner::scan_i2c(i2c, &mut serial_logger, &[prefix], log_level) {
         Ok(addrs) => addrs,
-        Err(e) => return Err(crate::explorer::ExplorerError::DeviceNoFound(e)),
+        Err(e) => return Err(crate::explorer::ExplorerError::DeviceNotFound(e)),
     };
     if found_addrs.is_empty() {
         return Err(crate::explorer::ExplorerError::NoValidAddressesFound);
