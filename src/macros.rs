@@ -75,7 +75,7 @@ macro_rules! adapt_serial {
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 self.0.write(s.as_bytes()).map_err(|_| core::fmt::Error)?;
-                // self.0.flush().map_err(|_| core::fmt::Error)?;
+                self.0.flush().map_err(|_| core::fmt::Error)?;
                 Ok(())
             }
         }
