@@ -219,10 +219,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 logger.log_info_fmt(|buf| {
                     writeln!(
                         buf,
-                        "[explorer] Trying sequence on 0x{:02X} (permutation {}/{})",
+                        "[explorer] Trying sequence on 0x{:02X} (permutation {})",
                         addr,
-                        permutations_tested,
-                        self.sequence.len()
+                        permutations_tested
                     )
                 });
 
