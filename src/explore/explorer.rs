@@ -3,8 +3,8 @@ use crate::compat::err_compat::HalErrorExt;
 use crate::error::{ExecutorError, ExplorerError};
 use core::fmt::Write;
 
-use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START, I2C_BUFFER_SIZE};
-use heapless::Vec;
+use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
+use heapless::{Vec, String};
 const I2C_ADDRESS_COUNT: usize = 128;
 
 #[derive(Copy, Clone)]
@@ -26,15 +26,15 @@ pub trait CmdExecutor<I2C, const BUF_CAP: usize> {
 }
 
 /// A command executor that prepends a prefix to each command.
-pub struct PrefixExecutor<const BUF_CAP: usize> {
+pub struct PrefixExecutor<const BUF_CAP: usize, const INIT_SEQ_SIZE: usize> {
     prefix: u8,
-    init_sequence: heapless::Vec<u8, I2C_BUFFER_SIZE>,
+    init_sequence: heapless::Vec<u8, INIT_SEQ_SIZE>,
     initialized_addrs: [bool; 128],
     buffer: heapless::Vec<u8, BUF_CAP>,
 }
 
-impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
-    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, I2C_BUFFER_SIZE>) -> Self {
+impl<const BUF_CAP: usize, const INIT_SEQ_SIZE: usize> PrefixExecutor<BUF_CAP, INIT_SEQ_SIZE> {
+    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, INIT_SEQ_SIZE>) -> Self {
         Self {
             prefix,
             init_sequence,
@@ -115,7 +115,7 @@ where
     }
 }
 
-impl<I2C, const BUF_CAP: usize> CmdExecutor<I2C, BUF_CAP> for PrefixExecutor<BUF_CAP>
+impl<I2C, const BUF_CAP: usize, const INIT_SEQ_SIZE: usize> CmdExecutor<I2C, BUF_CAP> for PrefixExecutor<BUF_CAP, INIT_SEQ_SIZE>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,

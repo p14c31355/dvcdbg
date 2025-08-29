@@ -6,7 +6,7 @@ use crate::error::ExplorerError;
 
 use core::fmt::Write;
 
-use crate::scanner::{I2C_BUFFER_SIZE, I2C_MAX_DEVICES};
+use crate::scanner::{I2C_MAX_DEVICES};
 
 // Helper for logging info with the [explorer] prefix
 pub fn explorer_log_info<S, F, const BUF_CAP: usize>(logger: &mut SerialLogger<S, BUF_CAP>, f: F)
@@ -82,7 +82,7 @@ where
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[log] Start driver safe init"));
 
-    let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, successful_seq);
+    let mut executor = PrefixExecutor::<BUF_CAP, {successful_seq.len()}>::new(prefix, successful_seq);
 
     let exploration_result =
         explorer.explore::<_, _, _, BUF_CAP>(i2c, &mut executor, &mut serial_logger)?;
@@ -113,7 +113,6 @@ pub fn run_pruned_explorer<
     E,
     const N: usize,
     const BUF_CAP: usize,
-    const MAX_CMD_LEN: usize,
 >(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
@@ -128,6 +127,10 @@ where
     E: CmdExecutor<I2C, BUF_CAP>,
     S: core::fmt::Write + Logger<BUF_CAP>,
 {
+    const MAX_CMD_LEN: usize = {
+        let max_len = explorer.max_cmd_len();
+        max_len
+    };
     let mut serial_logger = SerialLogger::new(serial, log_level);
     let mut found_addrs =
         match crate::scanner::scan_i2c(i2c, &mut serial_logger, &[prefix], log_level) {
@@ -195,7 +198,6 @@ pub fn run_single_sequence_explorer<
     S,
     const N: usize,
     const BUF_CAP: usize,
-    const MAX_CMD_LEN: usize,
 >(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
@@ -209,6 +211,10 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
+    const MAX_CMD_LEN: usize = {
+        let max_len = explorer.max_cmd_len();
+        max_len
+    };
     let mut serial_logger = SerialLogger::new(serial, log_level);
     explorer_log_info(&mut serial_logger, |buf| {
         writeln!(buf, "Attempting to get one topological sort...")
@@ -227,7 +233,7 @@ where
         Ok(())
     });
 
-    let mut executor = PrefixExecutor::<BUF_CAP>::new(prefix, heapless::Vec::new());
+    let mut executor = PrefixExecutor::<BUF_CAP, {single_sequence.0.len()}>::new(prefix, heapless::Vec::new());
 
     for i in 0..sequence_len {
         execute_and_log_command(
