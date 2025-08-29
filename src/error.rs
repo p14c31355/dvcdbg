@@ -133,7 +133,9 @@ impl From<ExecutorError> for ExplorerError {
     fn from(error: ExecutorError) -> Self {
         match error {
             ExecutorError::I2cError(kind) => ExplorerError::ExecutionFailed(kind),
-            ExecutorError::ExecFailed => ExplorerError::ExecutionFailed(crate::error::ErrorKind::Unknown),
+            ExecutorError::ExecFailed => {
+                ExplorerError::ExecutionFailed(crate::error::ErrorKind::Unknown)
+            }
             ExecutorError::BufferOverflow => ExplorerError::BufferOverflow,
         }
     }

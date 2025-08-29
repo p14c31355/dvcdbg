@@ -11,6 +11,6 @@ pub mod scanner;
 pub mod macros;
 
 pub mod compat;
-pub mod explore;
 pub mod error;
+pub mod explore;
 pub mod prelude;

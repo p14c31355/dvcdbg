@@ -1,8 +1,8 @@
-use crate::explore::logger::*;
 use crate::explore::explorer::*;
+use crate::explore::logger::*;
 
-use crate::error::ExplorerError;
 use crate::compat::ascii;
+use crate::error::ExplorerError;
 
 use core::fmt::Write;
 
@@ -58,7 +58,14 @@ where
     Ok(())
 }
 
-pub fn run_pruned_explorer<I2C, S, E, const N: usize, const BUF_CAP: usize, const MAX_CMD_LEN: usize>(
+pub fn run_pruned_explorer<
+    I2C,
+    S,
+    E,
+    const N: usize,
+    const BUF_CAP: usize,
+    const MAX_CMD_LEN: usize,
+>(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     executor: &mut E,
@@ -73,26 +80,32 @@ where
     S: core::fmt::Write + Logger<BUF_CAP>,
 {
     let mut serial_logger = SerialLogger::new(serial, log_level);
-    let mut found_addrs = match crate::scanner::scan_i2c(i2c, &mut serial_logger, &[prefix], log_level) {
-        Ok(addrs) => addrs,
-        Err(e) => return Err(ExplorerError::DeviceNotFound(e)),
-    };
+    let mut found_addrs =
+        match crate::scanner::scan_i2c(i2c, &mut serial_logger, &[prefix], log_level) {
+            Ok(addrs) => addrs,
+            Err(e) => return Err(ExplorerError::DeviceNotFound(e)),
+        };
     if found_addrs.is_empty() {
         return Err(ExplorerError::NoValidAddressesFound);
     }
     let mut failed_nodes = [false; N];
     let mut commands_found = 0;
     loop {
-        let (sequence_bytes, sequence_len) =
-            match explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes) {
-                Ok(seq) => seq,
-                Err(e) => {
-                    serial_logger.log_error_fmt(|buf| {
-                        writeln!(buf, "[error] Failed to generate a new topological sort: {:?}. Aborting.", e)
-                    });
-                    return Err(e);
-                }
-            };
+        let (sequence_bytes, sequence_len) = match explorer
+            .get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes)
+        {
+            Ok(seq) => seq,
+            Err(e) => {
+                serial_logger.log_error_fmt(|buf| {
+                    writeln!(
+                        buf,
+                        "[error] Failed to generate a new topological sort: {:?}. Aborting.",
+                        e
+                    )
+                });
+                return Err(e);
+            }
+        };
         let mut addrs_to_remove: heapless::Vec<usize, 128> = heapless::Vec::new();
         for (addr_idx, &addr) in found_addrs.iter().enumerate() {
             let mut all_ok = true;
@@ -101,7 +114,11 @@ where
                 let cmd_bytes = &sequence_bytes[i][..sequence_len[i]];
                 match executor.exec(i2c, addr, cmd_bytes, &mut serial_logger) {
                     Ok(_) => {}
-                    Err(_) => {
+                    Err(e) => {
+                        serial_logger.log_error_fmt(|buf| {
+                            writeln!(buf, "[error] exec failed for addr 0x{addr:02X}: {e:?}")?;
+                            Ok(())
+                        });
                         current_failed_nodes[i] = true;
                         all_ok = false;
                         break;
@@ -128,7 +145,13 @@ where
     Ok(())
 }
 
-pub fn run_single_sequence_explorer<I2C, S, const N: usize, const BUF_CAP: usize, const MAX_CMD_LEN: usize>(
+pub fn run_single_sequence_explorer<
+    I2C,
+    S,
+    const N: usize,
+    const BUF_CAP: usize,
+    const MAX_CMD_LEN: usize,
+>(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -150,7 +173,8 @@ where
         Ok(())
     });
 
-    let single_sequence = explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &[false; N])?;
+    let single_sequence =
+        explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &[false; N])?;
     serial_logger.log_info_fmt(|buf| writeln!(buf, "Before sort:"));
     for (idx, node) in explorer.sequence.iter().enumerate() {
         serial_logger.log_info_fmt(|buf| writeln!(buf, "Node {idx} deps: {:?}", node.deps));

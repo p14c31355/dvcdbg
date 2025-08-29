@@ -1,6 +1,6 @@
 // explorer.rs
-use crate::error::{ExecutorError, ExplorerError};
 use crate::compat::err_compat::HalErrorExt;
+use crate::error::{ExecutorError, ExplorerError};
 use core::fmt::Write;
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
@@ -44,8 +44,7 @@ impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
     }
 }
 
-impl<I2C, const BUF_CAP: usize> CmdExecutor<I2C, BUF_CAP>
-    for PrefixExecutor<BUF_CAP>
+impl<I2C, const BUF_CAP: usize> CmdExecutor<I2C, BUF_CAP> for PrefixExecutor<BUF_CAP>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -69,12 +68,11 @@ where
         let addr_idx = addr as usize;
 
         if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
-            logger
-                .log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
+            logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
 
             for &c in self.init_sequence.iter() {
                 let command = [self.prefix, c];
-                                let mut ok = false;
+                let mut ok = false;
                 let mut last_error = None;
 
                 for _attempt in 0..10 {
@@ -95,9 +93,9 @@ where
                 }
 
                 if !ok {
-                    return Err(ExecutorError::I2cError(
-                        last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)),
-                    ));
+                    return Err(ExecutorError::I2cError(last_error.unwrap_or(
+                        crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
+                    )));
                 }
                 short_delay();
             }
@@ -114,7 +112,7 @@ where
             .extend_from_slice(cmd)
             .map_err(|_| ExecutorError::BufferOverflow)?;
 
-                let mut last_error = None;
+        let mut last_error = None;
         for _ in 0..10 {
             match i2c.write(addr, &self.buffer) {
                 Ok(_) => {
@@ -130,13 +128,18 @@ where
             }
         }
 
-        Err(ExecutorError::I2cError(
-            last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)),
-        ))
+        Err(ExecutorError::I2cError(last_error.unwrap_or(
+            crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
+        )))
     }
 }
 
-fn write_with_retry(i2c: &mut I2C, addr: u8, bytes: &[u8], logger: &mut S) -> Result<(), crate::error::ErrorKind> {
+fn write_with_retry(
+    i2c: &mut I2C,
+    addr: u8,
+    bytes: &[u8],
+    logger: &mut S,
+) -> Result<(), crate::error::ErrorKind> {
     let mut last_error = None;
     for _ in 0..10 {
         match i2c.write(addr, bytes) {
@@ -268,10 +271,18 @@ impl<'a, const N: usize> Explorer<'a, N> {
         &self,
         _serial: &mut impl core::fmt::Write,
         failed_nodes: &[bool; N],
-    ) -> Result<(heapless::Vec<heapless::Vec<u8, MAX_CMD_LEN>, N>, heapless::Vec<usize, N>), ExplorerError> {
+    ) -> Result<
+        (
+            heapless::Vec<heapless::Vec<u8, MAX_CMD_LEN>, N>,
+            heapless::Vec<usize, N>,
+        ),
+        ExplorerError,
+    > {
         let len = self.sequence.len();
         let mut in_degree: heapless::Vec<usize, N> = heapless::Vec::new();
-        in_degree.resize(len, 0).map_err(|_| ExplorerError::BufferOverflow)?;
+        in_degree
+            .resize(len, 0)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
         let mut adj_list_rev: heapless::Vec<heapless::Vec<usize, N>, N> = heapless::Vec::new();
         adj_list_rev
             .resize(len, heapless::Vec::new())
