@@ -154,7 +154,7 @@ where
                 return Err(e);
             }
         };
-        let mut addrs_to_remove: heapless::Vec<usize, I2C_BUFFER_SIZE> = heapless::Vec::new();
+        let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
         for (addr_idx, &addr) in found_addrs.iter().enumerate() {
             let mut all_ok = true;
             let mut current_failed_nodes = failed_nodes;
