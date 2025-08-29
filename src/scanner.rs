@@ -19,7 +19,7 @@ fn internal_scan<I2C, S>(
     serial: &mut S,
     data: &[u8],
     log_level: crate::explore::logger::LogLevel,
-) -> Result<heapless::Vec<u8, I2C_BUFFER_SIZE>, crate::error::ErrorKind>
+) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
