@@ -214,7 +214,7 @@ fn sequence_iterative_check<I2C, S>(
     ctrl_byte: u8,
     init_sequence: &[u8],
     log_level: crate::explore::logger::LogLevel,
-    initial_found_addrs: &heapless::Vec<u8, I2C_BUFFER_SIZE>,
+    initial_found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
 ) -> Result<heapless::Vec<u8, I2C_BUFFER_SIZE>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
