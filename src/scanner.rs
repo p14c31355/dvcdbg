@@ -11,18 +11,20 @@ use heapless::Vec;
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
 
+pub const I2C_BUFFER_SIZE: usize = 512;
+
 fn internal_scan<I2C, S>(
     i2c: &mut I2C,
     serial: &mut S,
     data: &[u8],
     log_level: crate::explore::logger::LogLevel,
-) -> Result<heapless::Vec<u8, 512>, crate::error::ErrorKind>
+) -> Result<heapless::Vec<u8, I2C_BUFFER_SIZE>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut found_addrs = heapless::Vec::<u8, 512>::new();
+    let mut found_addrs = heapless::Vec::<u8, I2C_BUFFER_SIZE>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
     for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
         if let crate::explore::logger::LogLevel::Verbose = log_level {
@@ -88,7 +90,7 @@ macro_rules! define_scanner {
             serial: &mut S,
             ctrl_byte: &[u8],
             log_level: $crate::explore::logger::LogLevel,
-        ) -> Result<heapless::Vec<u8, 512>, $crate::error::ErrorKind>
+        ) -> Result<heapless::Vec<u8, I2C_BUFFER_SIZE>, $crate::error::ErrorKind>
         where
             I2C: $i2c_trait,
             <I2C as $i2c_trait>::Error: $crate::compat::HalErrorExt,
@@ -123,7 +125,7 @@ macro_rules! define_scanner {
             ctrl_byte: u8,
             init_sequence: &[u8],
             log_level: $crate::explore::logger::LogLevel,
-        ) -> Result<heapless::Vec<u8, 512>, $crate::error::ErrorKind>
+        ) -> Result<heapless::Vec<u8, I2C_BUFFER_SIZE>, $crate::error::ErrorKind>
         where
             I2C: $i2c_trait,
             <I2C as $i2c_trait>::Error: $crate::compat::HalErrorExt,
@@ -160,9 +162,9 @@ macro_rules! define_scanner {
         fn log_differences<W: core::fmt::Write>(
             serial: &mut W,
             expected: &[u8],
-            detected: &heapless::Vec<u8, 512>,
+            detected: &heapless::Vec<u8, I2C_BUFFER_SIZE>,
         ) {
-            let mut missing_cmds = heapless::Vec::<u8, 512>::new();
+            let mut missing_cmds = heapless::Vec::<u8, I2C_BUFFER_SIZE>::new();
             let mut sorted_detected = detected.clone();
             sorted_detected.sort_unstable();
             for &b in expected {
@@ -211,14 +213,14 @@ fn sequence_iterative_check<I2C, S>(
     ctrl_byte: u8,
     init_sequence: &[u8],
     log_level: crate::explore::logger::LogLevel,
-    initial_found_addrs: &heapless::Vec<u8, 512>,
-) -> Result<heapless::Vec<u8, 512>, crate::error::ErrorKind>
+    initial_found_addrs: &heapless::Vec<u8, I2C_BUFFER_SIZE>,
+) -> Result<heapless::Vec<u8, I2C_BUFFER_SIZE>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut detected_cmds = heapless::Vec::<u8, 512>::new();
+    let mut detected_cmds = heapless::Vec::<u8, I2C_BUFFER_SIZE>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for &seq_cmd in init_sequence.iter() {

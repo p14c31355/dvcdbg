@@ -6,6 +6,8 @@ use crate::error::ExplorerError;
 
 use core::fmt::Write;
 
+use crate::scanner::I2C_BUFFER_SIZE;
+
 // Helper for logging info with the [explorer] prefix
 pub fn explorer_log_info<S, F, const BUF_CAP: usize>(logger: &mut SerialLogger<S, BUF_CAP>, f: F)
 where
@@ -152,7 +154,7 @@ where
                 return Err(e);
             }
         };
-        let mut addrs_to_remove: heapless::Vec<usize, 128> = heapless::Vec::new();
+        let mut addrs_to_remove: heapless::Vec<usize, I2C_BUFFER_SIZE> = heapless::Vec::new();
         for (addr_idx, &addr) in found_addrs.iter().enumerate() {
             let mut all_ok = true;
             let mut current_failed_nodes = failed_nodes;
