@@ -67,37 +67,46 @@ where
 
         let addr_idx = addr as usize;
 
+        let addr_idx = addr as usize;
+
+        // Helper function for I2C write with retry logic.
+        // This closure is defined within `exec` to make use of its parameters (i2c, logger)
+        // and the `short_delay` function available in `exec`'s scope.
+        let write_with_retry = |
+            i2c_ref: &mut I2C,
+            addr_inner: u8,
+            bytes_inner: &[u8],
+            logger_ref: &mut S,
+            delay_fn: fn(),
+        | -> Result<(), crate::error::ErrorKind> {
+            let mut last_error = None;
+            for _attempt in 0..10 {
+                match i2c_ref.write(addr_inner, bytes_inner) {
+                    Ok(_) => {
+                        delay_fn();
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        let compat_err = e.to_compat(Some(addr_inner));
+                        last_error = Some(compat_err);
+                        logger_ref.log_error_fmt(|buf| {
+                            writeln!(buf, "[I2C retry error] {compat_err:?}")
+                        });
+                        delay_fn();
+                    }
+                }
+            }
+            Err(last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)))
+        };
+
         if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
             logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
 
             for &c in self.init_sequence.iter() {
                 let command = [self.prefix, c];
-                let mut ok = false;
-                let mut last_error = None;
-
-                for _attempt in 0..10 {
-                    match i2c.write(addr, &command) {
-                        Ok(_) => {
-                            ok = true;
-                            break;
-                        }
-                        Err(e) => {
-                            let compat_err = e.to_compat(Some(addr));
-                            last_error = Some(compat_err);
-                            logger.log_error_fmt(|buf| {
-                                writeln!(buf, "[I2C retry error] {compat_err:?}")
-                            });
-                            short_delay();
-                        }
-                    }
-                }
-
-                if !ok {
-                    return Err(ExecutorError::I2cError(last_error.unwrap_or(
-                        crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
-                    )));
-                }
-                short_delay();
+                write_with_retry(i2c, addr, &command, logger, short_delay)
+                    .map_err(ExecutorError::I2cError)?;
+                short_delay(); // This delay is specific to the init sequence after each command
             }
 
             self.initialized_addrs[addr_idx] = true;
@@ -112,25 +121,8 @@ where
             .extend_from_slice(cmd)
             .map_err(|_| ExecutorError::BufferOverflow)?;
 
-        let mut last_error = None;
-        for _ in 0..10 {
-            match i2c.write(addr, &self.buffer) {
-                Ok(_) => {
-                    short_delay();
-                    return Ok(());
-                }
-                Err(e) => {
-                    let compat_err = e.to_compat(Some(addr));
-                    last_error = Some(compat_err);
-                    logger.log_error_fmt(|buf| writeln!(buf, "[I2C retry error] {compat_err:?}"));
-                    short_delay();
-                }
-            }
-        }
-
-        Err(ExecutorError::I2cError(last_error.unwrap_or(
-            crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
-        )))
+        write_with_retry(i2c, addr, &self.buffer, logger, short_delay)
+            .map_err(ExecutorError::I2cError)
     }
 }
 
