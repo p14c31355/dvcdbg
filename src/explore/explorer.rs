@@ -136,6 +136,24 @@ where
     }
 }
 
+fn write_with_retry(i2c: &mut I2C, addr: u8, bytes: &[u8], logger: &mut S) -> Result<(), crate::error::ErrorKind> {
+    let mut last_error = None;
+    for _ in 0..10 {
+        match i2c.write(addr, bytes) {
+            Ok(_) => {
+                short_delay();
+                return Ok(());
+            }
+            Err(e) => {
+                let compat_err = e.to_compat(Some(addr));
+                last_error = Some(compat_err);
+                logger.log_error_fmt(|buf| writeln!(buf, "[I2C retry error] {compat_err:?}"));
+                short_delay();
+            }
+        }
+    }
+    Err(last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)))
+}
 
 pub struct Explorer<'a, const N: usize> {
     pub sequence: &'a [CmdNode],
