@@ -74,7 +74,8 @@ where
 
             for &c in self.init_sequence.iter() {
                 let command = [self.prefix, c];
-                let mut ok = false;
+                                let mut ok = false;
+                let mut last_error = None;
 
                 for _attempt in 0..10 {
                     match i2c.write(addr, &command) {
@@ -84,6 +85,7 @@ where
                         }
                         Err(e) => {
                             let compat_err = e.to_compat(Some(addr));
+                            last_error = Some(compat_err);
                             logger.log_error_fmt(|buf| {
                                 writeln!(buf, "[I2C retry error] {compat_err:?}")
                             });
@@ -94,7 +96,7 @@ where
 
                 if !ok {
                     return Err(ExecutorError::I2cError(
-                        crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
+                        last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)),
                     ));
                 }
                 short_delay();
@@ -112,6 +114,7 @@ where
             .extend_from_slice(cmd)
             .map_err(|_| ExecutorError::BufferOverflow)?;
 
+                let mut last_error = None;
         for _ in 0..10 {
             match i2c.write(addr, &self.buffer) {
                 Ok(_) => {
@@ -120,6 +123,7 @@ where
                 }
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
+                    last_error = Some(compat_err);
                     logger.log_error_fmt(|buf| writeln!(buf, "[I2C retry error] {compat_err:?}"));
                     short_delay();
                 }
@@ -127,7 +131,7 @@ where
         }
 
         Err(ExecutorError::I2cError(
-            crate::error::ErrorKind::I2c(crate::error::I2cError::Nack),
+            last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)),
         ))
     }
 }

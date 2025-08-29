@@ -86,16 +86,11 @@ where
         let (sequence_bytes, sequence_len) =
             match explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes) {
                 Ok(seq) => seq,
-                Err(e) => {
-                    if commands_found == explorer.sequence.len() {
-                        serial_logger.log_info("[explorer] All commands successfully executed.");
-                        return Ok(());
-                    } else {
-                        serial_logger.log_error_fmt(|buf| {
-                            writeln!(buf, "[error] Failed to generate a new topological sort. Aborting.")
-                        });
-                        return Err(e);
-                    }
+                                Err(e) => {
+                    serial_logger.log_error_fmt(|buf| {
+                        writeln!(buf, "[error] Failed to generate a new topological sort: {:?}. Aborting.", e)
+                    });
+                    return Err(e);
                 }
             };
         let mut addrs_to_remove: heapless::Vec<usize, 128> = heapless::Vec::new();
