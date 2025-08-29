@@ -198,7 +198,7 @@ macro_rules! quick_diag {
         let _ = core::writeln!($serial, "=== Quick Diagnostic Complete ===");
     }};
     ($serial:expr, $i2c:expr) => {{
-        quick_diag!(@inner $serial, $i2c, &[0x00], $crate::logger::LogLevel::Verbose);
+        quick_diag!(@inner $serial, $i2c, &[0x00], $crate::explore::logger::LogLevel::Verbose);
         let _ = core::writeln!($serial, "=== Quick Diagnostic Complete ===");
     }};
     ($serial:expr, $i2c:expr, $log_level:expr) => {{
