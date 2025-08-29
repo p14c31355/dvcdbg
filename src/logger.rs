@@ -1,5 +1,4 @@
 //! Defines the logging level for scanner functions.
-use crate::explorer::LOG_BUFFER_CAPACITY;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogLevel {
@@ -8,35 +7,35 @@ pub enum LogLevel {
     Quiet,
 }
 
-impl<'a, S: core::fmt::Write> core::fmt::Write for SerialLogger<'a, S> {
+impl<'a, S: core::fmt::Write, const B: usize> core::fmt::Write for SerialLogger<'a, S, B> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         self.writer.write_str(s)
     }
 }
 
 /// Trait for logging progress and results.
-pub trait Logger {
+pub trait Logger<const B: usize> {
     fn log_info(&mut self, msg: &str);
     fn log_warning(&mut self, msg: &str);
     fn log_error(&mut self, msg: &str);
 
     fn log_info_fmt<F>(&mut self, fmt: F)
     where
-        F: FnOnce(&mut heapless::String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>;
+        F: FnOnce(&mut heapless::String<B>) -> Result<(), core::fmt::Error>;
 
     fn log_error_fmt<F>(&mut self, fmt: F)
     where
-        F: FnOnce(&mut heapless::String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>;
+        F: FnOnce(&mut heapless::String<B>) -> Result<(), core::fmt::Error>;
 }
 
 /// Immediate-write serial logger, writes directly to the underlying serial interface.
-pub struct SerialLogger<'a, S: core::fmt::Write> {
+pub struct SerialLogger<'a, S: core::fmt::Write, const B: usize> {
     writer: &'a mut S,
-    buffer: heapless::String<{ LOG_BUFFER_CAPACITY }>,
+    buffer: heapless::String<{ B }>,
     log_level: LogLevel,
 }
 
-impl<'a, S: core::fmt::Write> SerialLogger<'a, S> {
+impl<'a, S: core::fmt::Write, const B: usize> SerialLogger<'a, S, B> {
     pub fn new(writer: &'a mut S, log_level: LogLevel) -> Self {
         Self {
             writer,
@@ -46,7 +45,7 @@ impl<'a, S: core::fmt::Write> SerialLogger<'a, S> {
     }
 }
 
-impl<'a, S: core::fmt::Write> Logger for SerialLogger<'a, S> {
+impl<'a, S: core::fmt::Write, const B: usize> Logger<B> for SerialLogger<'a, S, B> {
     fn log_info(&mut self, msg: &str) {
         if self.log_level != LogLevel::Quiet {
             let _ = write!(self.writer, "[Info] {msg}\r\n");
@@ -67,7 +66,7 @@ impl<'a, S: core::fmt::Write> Logger for SerialLogger<'a, S> {
 
     fn log_info_fmt<F>(&mut self, fmt: F)
     where
-        F: FnOnce(&mut heapless::String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
+        F: FnOnce(&mut heapless::String<B>) -> Result<(), core::fmt::Error>,
     {
         if self.log_level != LogLevel::Quiet {
             self.buffer.clear();
@@ -79,29 +78,31 @@ impl<'a, S: core::fmt::Write> Logger for SerialLogger<'a, S> {
 
     fn log_error_fmt<F>(&mut self, fmt: F)
     where
-        F: FnOnce(&mut heapless::String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
+        F: FnOnce(&mut heapless::String<B>) -> Result<(), core::fmt::Error>,
     {
-        self.buffer.clear();
-        if fmt(&mut self.buffer).is_ok() {
-            let _ = self.writer.write_str(self.buffer.as_str());
+        if self.log_level != LogLevel::Quiet {
+            self.buffer.clear();
+            if fmt(&mut self.buffer).is_ok() {
+                let _ = self.writer.write_str(self.buffer.as_str());
+            }
         }
     }
 }
 
 /// A trait for platforms without console output.
 pub struct NullLogger;
-impl Logger for NullLogger {
+impl<const B: usize> Logger<B> for NullLogger {
     fn log_info(&mut self, _msg: &str) {}
     fn log_warning(&mut self, _msg: &str) {}
     fn log_error(&mut self, _msg: &str) {}
     fn log_info_fmt<F>(&mut self, _fmt: F)
     where
-        F: FnOnce(&mut heapless::String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
+        F: FnOnce(&mut heapless::String<B>) -> Result<(), core::fmt::Error>,
     {
     }
     fn log_error_fmt<F>(&mut self, _fmt: F)
     where
-        F: FnOnce(&mut heapless::String<LOG_BUFFER_CAPACITY>) -> Result<(), core::fmt::Error>,
+        F: FnOnce(&mut heapless::String<B>) -> Result<(), core::fmt::Error>,
     {
     }
 }
