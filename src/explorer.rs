@@ -20,7 +20,7 @@ pub enum ExplorerError {
     /// A dependency index is out of bounds.
     InvalidDependencyIndex,
     /// An I2C scan operation failed.
-    DeviceNoFound(crate::error::ErrorKind),
+    DeviceNotFound(crate::error::ErrorKind),
 }
 
 /// Errors that can occur during command execution.
