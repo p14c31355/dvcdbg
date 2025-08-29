@@ -91,7 +91,7 @@ macro_rules! define_scanner {
             serial: &mut S,
             ctrl_byte: &[u8],
             log_level: $crate::explore::logger::LogLevel,
-        ) -> Result<heapless::Vec<u8, I2C_BUFFER_SIZE>, $crate::error::ErrorKind>
+        ) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, $crate::error::ErrorKind>
         where
             I2C: $i2c_trait,
             <I2C as $i2c_trait>::Error: $crate::compat::HalErrorExt,
