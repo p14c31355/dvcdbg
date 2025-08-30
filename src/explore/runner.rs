@@ -1,6 +1,5 @@
 // runner.rs
 
-use crate::compat::util::calculate_cmd_buffer_size;
 use crate::explore::explorer::*;
 use crate::explore::logger::*;
 
@@ -52,7 +51,6 @@ pub fn run_explorer<I2C, S, const N: usize, const MAX_CMD_LEN: usize>(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
-    target_addr: u8,
     prefix: u8,
     init_sequence: &[u8; N],
     log_level: LogLevel,
@@ -72,7 +70,6 @@ where
         &mut serial_logger,
         prefix,
         init_sequence,
-        log_level,
     ) {
         Ok(seq) => seq,
         Err(e) => {
@@ -84,8 +81,6 @@ where
     };
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[log] Start driver safe init"));
-
-    let buf_cap: usize = calculate_cmd_buffer_size(1, explorer.max_cmd_len());
 
     let mut executor = PrefixExecutor::<N, MAX_CMD_LEN>::new(prefix, successful_seq);
 
@@ -125,10 +120,9 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let max_len = explorer.max_cmd_len();
     let mut serial_logger = SerialLogger::new(serial, log_level);
 
-    let mut found_addrs = match crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix, log_level)
+    let mut found_addrs = match crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix)
     {
         Ok(addrs) => addrs,
         Err(e) => return Err(ExplorerError::DeviceNotFound(e)),
@@ -142,7 +136,6 @@ where
         &mut serial_logger,
         prefix,
         init_sequence,
-        log_level,
     ) {
         Ok(seq) => seq,
         Err(e) => {
@@ -235,7 +228,6 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let max_len = explorer.max_cmd_len();
     let mut serial_logger = SerialLogger::new(serial, log_level);
     explorer_log_info(&mut serial_logger, |buf| {
         writeln!(buf, "Attempting to get one topological sort...")
@@ -254,7 +246,6 @@ where
         Ok(())
     });
 
-    let buf_cap: usize = calculate_cmd_buffer_size(1, explorer.max_cmd_len());
     let mut executor = PrefixExecutor::<N, MAX_CMD_LEN>::new(prefix, heapless::Vec::new());
 
     for i in 0..sequence_len {

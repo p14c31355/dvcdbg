@@ -55,7 +55,7 @@ where
             if f(&mut self.buffer).is_ok() {
                 let _ = self.writer.write_str("[I] ");
                 let _ = self.writer.write_str(&self.buffer);
-                let _ = self.writer.write_str("\r\n");
+                let _ = self.writer.write_str("\n");
             }
         }
     }
@@ -69,7 +69,7 @@ where
             if f(&mut self.buffer).is_ok() {
                 let _ = self.writer.write_str("[E] ");
                 let _ = self.writer.write_str(&self.buffer);
-                let _ = self.writer.write_str("\r\n");
+                let _ = self.writer.write_str("\n");
             }
         }
     }
