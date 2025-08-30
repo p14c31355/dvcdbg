@@ -93,12 +93,12 @@ where
 /// # Returns
 ///
 /// A `heapless::Vec<u8, N>` containing the bytes from `init_sequence` that elicited a response.
-pub fn scan_init_sequence<I2C, L, const N: usize>(
+pub fn scan_init_sequence<I2C, L, const MAX_CMD_LEN: usize>(
     i2c: &mut I2C,
     logger: &mut L,
     ctrl_byte: u8,
-    init_sequence: &[u8; N],
-) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
+    init_sequence: &[u8; MAX_CMD_LEN],
+) -> Result<heapless::Vec<u8, MAX_CMD_LEN>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -108,11 +108,12 @@ where
     logger.log_info_fmt(|buf| write!(buf, "Initializing scan with control byte 0x{:02x}", ctrl_byte));
 
     let initial_found_addrs = internal_scan(i2c, logger, &[ctrl_byte])?;
-
-    let mut detected_cmds = check_init_sequence(i2c, logger, ctrl_byte, init_sequence, &initial_found_addrs)?;
+    let mut detected_cmds =
+        check_init_sequence(i2c, logger, ctrl_byte, init_sequence, &initial_found_addrs)?;
 
     logger.log_info_fmt(|buf| write!(buf, "I2C scan with init sequence complete."));
     log_sequence_summary(logger, init_sequence, &mut detected_cmds);
+
     Ok(detected_cmds)
 }
 
