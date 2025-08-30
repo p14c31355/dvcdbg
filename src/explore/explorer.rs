@@ -367,7 +367,7 @@ pub struct PermutationIter<'a, const N: usize> {
     current_permutation: Vec<&'a [u8], N>,
     used: Vec<bool, N>,
     in_degree: Vec<usize, N>,
-    adj_list_rev: Vec<Vec<usize, N>, N>,
+    adj_list_rev: [heapless::Vec<usize, N>; N],
     path_stack: Vec<usize, N>, // Stores original indices of commands in current_permutation
     loop_start_indices: Vec<usize, N>, // Tracks the starting point for the next search at each level
     is_done: bool,
@@ -381,15 +381,12 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         }
 
         let mut in_degree: Vec<usize, N> = Vec::new();
-        let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
+        let mut adj_list_rev: [heapless::Vec<usize, N>; N] =
+            core::array::from_fn(|_| heapless::Vec::new());
 
         in_degree
             .resize(total_nodes, 0)
             .map_err(|_| ExplorerError::BufferOverflow)?;
-        adj_list_rev
-            .resize(total_nodes, Vec::new())
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-
         for (i, node) in explorer.sequence.iter().enumerate() {
             in_degree[i] = node.deps.len();
             for &dep in node.deps.iter() {

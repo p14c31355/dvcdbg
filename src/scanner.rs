@@ -184,9 +184,10 @@ where
                     .iter()
                     .any(|addr| initial_found_addrs.contains(addr))
                 {
-                    if let Err(_) = detected_cmds.push(seq_cmd) {
-                        writeln!(serial, "[WARN] Detected commands buffer overflow. Some commands may be truncated.").ok();
-                        break;
+                    if detected_cmds.push(seq_cmd).is_err() {
+                        return Err(crate::error::ErrorKind::Buffer(
+                            crate::error::BufferError::Overflow,
+                        ));
                     }
                 }
             }

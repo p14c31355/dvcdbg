@@ -180,8 +180,14 @@ where
             let mut current_failed_nodes = failed_nodes;
             for i in 0..explorer.sequence.len() {
                 let cmd_bytes = &sequence_bytes[i];
-                match execute_and_log_command(i2c, &mut executor, &mut serial_logger, addr, cmd_bytes, i)
-                {
+                match execute_and_log_command(
+                    i2c,
+                    &mut executor,
+                    &mut serial_logger,
+                    addr,
+                    cmd_bytes,
+                    i,
+                ) {
                     Ok(_) => {}
                     Err(_) => {
                         current_failed_nodes[i] = true;
