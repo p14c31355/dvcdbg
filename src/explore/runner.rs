@@ -2,15 +2,15 @@
 
 use crate::explore::explorer::*;
 use crate::explore::logger::*;
-use crate::compat::buffer::calculate_cmd_buffer_size;
+use crate::compat::util::calculate_cmd_buffer_size;
 
-use crate::compat::ascii;
+use crate::compat::util;
 use crate::error::ExplorerError;
 
 use core::fmt::Write;
 
 use crate::scanner::I2C_MAX_DEVICES;
-use crate::compat::buffer::ERROR_STRING_BUFFER_SIZE;
+use crate::compat::util::ERROR_STRING_BUFFER_SIZE;
 
 // Helper for logging info with the [explorer] prefix
 pub fn explorer_log_info<S, F>(logger: &mut SerialLogger<S>, f: F)
@@ -96,7 +96,7 @@ where
     for addr in exploration_result.found_addrs.iter() {
         serial_logger.log_info_fmt(|buf| {
             write!(buf, "[driver] Found device at ")?;
-            ascii::write_bytes_hex_fmt(buf, &[*addr])?;
+            util::write_bytes_hex_fmt(buf, &[*addr])?;
             writeln!(buf)
         });
     }
