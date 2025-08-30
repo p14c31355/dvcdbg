@@ -64,164 +64,144 @@ where
         Ok(found_addrs)
     }
 }
-
-/// Macro to define common I2C scanner functions.
-///
-/// This macro generates `scan_i2c`, `scan_i2c_with_ctrl`, and `scan_init_sequence`
-/// functions, which are used to discover I2C devices.
+/// Scans the I2C bus for devices by attempting to write a single byte (0x00) to each address.
 ///
 /// # Parameters
 ///
-/// - `$i2c_trait`: The trait that defines the I2C interface (e.g., `embedded_hal::i2c::I2c`).
-/// - `$error_trait`: The trait that defines the I2C error type (e.g., `embedded_hal::i2c::Error`).
-/// - `$write_trait`: The trait that defines the serial writer (e.g., `core::fmt::Write`).
-macro_rules! define_scanner {
-    ($i2c_trait:path, $error_trait:path, $write_trait:path) => {
-        /// Scans the I2C bus for devices by attempting to write a single byte (0x00) to each address.
-        ///
-        /// # Parameters
-        ///
-        /// - `i2c`: The I2C bus instance.
-        /// - `serial`: The serial writer for logging.
-        /// - `ctrl_byte`: The control byte
-        /// - `log_level`: The desired logging level.
-        pub fn scan_i2c<I2C, S>(
-            i2c: &mut I2C,
-            serial: &mut S,
-            ctrl_byte: &[u8],
-            log_level: $crate::explore::logger::LogLevel,
-        ) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, $crate::error::ErrorKind>
-        where
-            I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: $crate::compat::HalErrorExt,
-            S: $write_trait,
-        {
-            if let $crate::explore::logger::LogLevel::Verbose = log_level {
-                writeln!(serial, "[log] Scanning I2C bus...").ok();
-            }
-            let result = $crate::scanner::internal_scan(i2c, serial, ctrl_byte, log_level);
-            result
-        }
-
-        /// Scans the I2C bus for devices that respond to a given initialization sequence.
-        ///
-        /// This function iterates through each byte in `init_sequence` and attempts to write it
-        /// to all I2C addresses. It returns a `Vec` of the bytes from `init_sequence` that
-        /// received a response from at least one device.
-        ///
-        /// # Parameters
-        ///
-        /// - `i2c`: The I2C bus instance.
-        /// - `serial`: The serial writer for logging.
-        /// - `init_sequence`: The sequence of bytes to test.
-        /// - `log_level`: The desired logging level.
-        ///
-        /// # Returns
-        ///
-        /// A `heapless::Vec<u8, 64>` containing the bytes from `init_sequence` that elicited a response.
-        pub fn scan_init_sequence<I2C, S, const N: usize>(
-            i2c: &mut I2C,
-            serial: &mut S,
-            ctrl_byte: u8, // Added ctrl_byte here
-            init_sequence: &[u8; N],
-            log_level: crate::explore::logger::LogLevel,
-        ) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
-        where
-            I2C: crate::compat::I2cCompat,
-            <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-            S: core::fmt::Write + crate::explore::logger::Logger, // Removed <I2C_BUFFER_SIZE>
-        {
-            if let $crate::explore::logger::LogLevel::Verbose = log_level {
-                writeln!(serial, "[scan] Scanning I2C bus with init sequence:").ok();
-                for chunk in init_sequence.chunks(16) {
-                    write!(serial, " ").ok();
-                    $crate::compat::util::write_bytes_hex_fmt(serial, chunk).ok();
-                    writeln!(serial).ok();
-                }
-            }
-            let initial_found_addrs =
-                $crate::scanner::scan_i2c(i2c, serial, &[], log_level)?; // Used ctrl_byte here
-            let detected_cmds = $crate::scanner::sequence_iterative_check(
-                i2c,
-                serial,
-                ctrl_byte,
-                init_sequence,
-                log_level,
-                &initial_found_addrs,
-            )?;
-
-            if let $crate::explore::logger::LogLevel::Verbose = log_level {
-                writeln!(serial, "[info] I2C scan with init sequence complete.").ok();
-            }
-            $crate::scanner::log_differences(serial, init_sequence, &detected_cmds);
-            Ok(detected_cmds)
-        }
-
-        fn log_differences<W: core::fmt::Write, const N: usize>(
-            // Added const N: usize
-            serial: &mut W,
-            expected: &[u8; N],              // Changed to &[u8; N]
-            detected: &heapless::Vec<u8, N>, // Changed to N
-        ) {
-            let mut missing_cmds = heapless::Vec::<u8, N>::new(); // Changed to N
-            let mut sorted_detected = detected.clone();
-            sorted_detected.sort_unstable();
-            for &b in expected {
-                if sorted_detected.binary_search(&b).is_err() {
-                    if missing_cmds.push(b).is_err() {
-                        writeln!(
-                            serial,
-                            "[warn] Missing commands buffer is full, list is truncated."
-                        )
-                        .ok();
-                        break;
-                    }
-                }
-            }
-
-            writeln!(serial, "Expected sequence:").ok();
-            for b in expected {
-                write!(serial, " ").ok();
-                util::write_bytes_hex_fmt(serial, &[*b]).ok();
-                writeln!(serial).ok();
-            }
-            writeln!(serial).ok();
-
-            writeln!(serial, "Commands with response:").ok();
-            for b in detected {
-                write!(serial, " ").ok();
-                util::write_bytes_hex_fmt(serial, &[*b]).ok();
-                writeln!(serial).ok();
-            }
-            writeln!(serial).ok();
-
-            writeln!(serial, "Commands with no response:").ok();
-            for b in &missing_cmds {
-                write!(serial, " ").ok();
-                util::write_bytes_hex_fmt(serial, &[*b]).ok();
-                writeln!(serial).ok();
-            }
-            writeln!(serial).ok();
-        }
-    };
-}
-
-fn sequence_iterative_check<I2C, S, const N: usize>(
-    // Added const N: usize
+/// - `i2c`: The I2C bus instance.
+/// - `serial`: The serial writer for logging.
+/// - `ctrl_byte`: The control byte
+/// - `log_level`: The desired logging level.
+pub fn scan_i2c<I2C, S>(
     i2c: &mut I2C,
     serial: &mut S,
-    ctrl_byte: u8,
-    init_sequence: &[u8; N], // Changed to &[u8; N]
+    ctrl_byte: &[u8],
     log_level: crate::explore::logger::LogLevel,
-    initial_found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
-) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
-// Changed to N
+) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut detected_cmds = heapless::Vec::<u8, N>::new(); // Changed to N
+    if let crate::explore::logger::LogLevel::Verbose = log_level {
+        writeln!(serial, "[log] Scanning I2C bus...").ok();
+    }
+    let result = crate::scanner::internal_scan(i2c, serial, ctrl_byte, log_level);
+    result
+}
+/// Scans the I2C bus for devices that respond to a given initialization sequence.
+///
+/// This function iterates through each byte in `init_sequence` and attempts to write it
+/// to all I2C addresses. It returns a `Vec` of the bytes from `init_sequence` that
+/// received a response from at least one device.
+///
+/// # Parameters
+///
+/// - `i2c`: The I2C bus instance.
+/// - `serial`: The serial writer for logging.
+/// - `init_sequence`: The sequence of bytes to test.
+/// - `log_level`: The desired logging level.
+///
+/// # Returns
+///
+/// A `heapless::Vec<u8, 64>` containing the bytes from `init_sequence` that elicited a response.
+pub fn scan_init_sequence<I2C, S, const N: usize>(
+    i2c: &mut I2C,
+    serial: &mut S,
+    ctrl_byte: u8,
+    init_sequence: &[u8; N],
+    log_level: crate::explore::logger::LogLevel,
+) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
+where
+    I2C: crate::compat::I2cCompat,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+    S: core::fmt::Write,
+{
+    if let crate::explore::logger::LogLevel::Verbose = log_level {
+        writeln!(serial, "[scan] Scanning I2C bus with init sequence:").ok();
+        for chunk in init_sequence.chunks(16) {
+            write!(serial, " ").ok();
+            crate::compat::util::write_bytes_hex_fmt(serial, chunk).ok();
+            writeln!(serial).ok();
+        }
+    }
+    let initial_found_addrs = crate::scanner::internal_scan(i2c, serial, &[ctrl_byte], log_level)?;
+    let detected_cmds = crate::scanner::sequence_iterative_check(
+        i2c,
+        serial,
+        ctrl_byte,
+        init_sequence,
+        log_level,
+        &initial_found_addrs,
+    )?;
+
+    if let crate::explore::logger::LogLevel::Verbose = log_level {
+        writeln!(serial, "[info] I2C scan with init sequence complete.").ok();
+    }
+    log_differences(serial, init_sequence, &detected_cmds);
+    Ok(detected_cmds)
+}
+
+fn log_differences<W: core::fmt::Write, const N: usize>(
+    serial: &mut W,
+    expected: &[u8; N],
+    detected: &heapless::Vec<u8, N>,
+) {
+    let mut missing_cmds = heapless::Vec::<u8, N>::new();
+    let mut sorted_detected = detected.clone();
+    sorted_detected.sort_unstable();
+    for &b in expected {
+        if sorted_detected.binary_search(&b).is_err() {
+            if missing_cmds.push(b).is_err() {
+                writeln!(
+                    serial,
+                    "[warn] Missing commands buffer is full, list is truncated."
+                )
+                .ok();
+                break;
+            }
+        }
+    }
+
+    writeln!(serial, "Expected sequence:").ok();
+    for b in expected {
+        write!(serial, " ").ok();
+        util::write_bytes_hex_fmt(serial, &[*b]).ok();
+        writeln!(serial).ok();
+    }
+    writeln!(serial).ok();
+
+    writeln!(serial, "Commands with response:").ok();
+    for b in detected {
+        write!(serial, " ").ok();
+        util::write_bytes_hex_fmt(serial, &[*b]).ok();
+        writeln!(serial).ok();
+    }
+    writeln!(serial).ok();
+
+    writeln!(serial, "Commands with no response:").ok();
+    for b in &missing_cmds {
+        write!(serial, " ").ok();
+        util::write_bytes_hex_fmt(serial, &[*b]).ok();
+        writeln!(serial).ok();
+    }
+    writeln!(serial).ok();
+}
+
+fn sequence_iterative_check<I2C, S, const N: usize>(
+    i2c: &mut I2C,
+    serial: &mut S,
+    ctrl_byte: u8,
+    init_sequence: &[u8; N],
+    log_level: crate::explore::logger::LogLevel,
+    initial_found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
+) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
+where
+    I2C: crate::compat::I2cCompat,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+    S: core::fmt::Write,
+{
+    let mut detected_cmds = heapless::Vec::<u8, N>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for &seq_cmd in init_sequence.iter() {
@@ -263,9 +243,3 @@ where
         Ok(detected_cmds)
     }
 }
-
-define_scanner!(
-    crate::compat::I2cCompat,
-    crate::compat::HalErrorExt,
-    core::fmt::Write
-);
