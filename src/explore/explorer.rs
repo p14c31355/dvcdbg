@@ -152,14 +152,12 @@ where
         }
 
         self.buffer.clear();
-        let _ = self
-            .buffer
+        self.buffer
             .push(self.prefix)
-            .map_err(|_| ExecutorError::BufferOverflow);
-        let _ = self
-            .buffer
+            .map_err(|_| ExecutorError::BufferOverflow)?;
+        self.buffer
             .extend_from_slice(cmd)
-            .map_err(|_| ExecutorError::BufferOverflow);
+            .map_err(|_| ExecutorError::BufferOverflow)?;
 
         Self::write_with_retry(i2c, addr, &self.buffer, logger).map_err(ExecutorError::I2cError)
     }
