@@ -140,7 +140,7 @@ macro_rules! define_scanner {
                 }
             }
             let initial_found_addrs =
-                $crate::scanner::scan_i2c(i2c, serial, &[ctrl_byte], log_level)?; // Used ctrl_byte here
+                $crate::scanner::scan_i2c(i2c, serial, &[], log_level)?; // Used ctrl_byte here
             let detected_cmds = $crate::scanner::sequence_iterative_check(
                 i2c,
                 serial,
