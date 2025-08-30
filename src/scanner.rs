@@ -156,7 +156,7 @@ where
     if let crate::explore::logger::LogLevel::Verbose = log_level {
         writeln!(serial, "[INFO] I2C scan with init sequence complete.").ok();
     }
-    log_sequence_summary(serial, init_sequence, &mut detected_cmds); // detected_cmdsを可変参照に変更
+    log_sequence_summary(serial, init_sequence, &mut detected_cmds);
     Ok(detected_cmds)
 }
 
@@ -237,20 +237,20 @@ fn log_sequence_summary<W: core::fmt::Write, const N: usize>(
     writeln!(serial, "\n--- I2C Sequence Scan Summary ---").ok();
 
     writeln!(serial, "Expected Commands:").ok();
-    for cmd_ref in expected_sequence.iter() {
-        write!(serial, " 0x{:02x}", *cmd_ref).ok();
+    for &cmd in expected_sequence {
+        write!(serial, " 0x{:02x}", cmd).ok();
     }
     writeln!(serial, "\n").ok();
 
     writeln!(serial, "Commands That Responded:").ok();
-    for cmd_ref in detected_cmds.iter() {
-        write!(serial, " 0x{:02x}", *cmd_ref).ok();
+    for &cmd_val in detected_cmds.iter() {
+        write!(serial, " 0x{:02x}", cmd_val).ok();
     }
     writeln!(serial, "\n").ok();
 
     writeln!(serial, "Commands With No Response:").ok();
-    for cmd_ref in missing_cmds.iter() {
-        write!(serial, " 0x{:02x}", *cmd_ref).ok();
+    for &cmd_val in missing_cmds.iter() {
+        write!(serial, " 0x{:02x}", cmd_val).ok();
     }
     writeln!(serial, "\n--- End Summary ---").ok();
 }

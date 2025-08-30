@@ -49,7 +49,6 @@ where
 }
 
 pub fn run_explorer<I2C, S, const N: usize, const MAX_CMD_LEN: usize>(
-    // Added const MAX_CMD_LEN
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -88,10 +87,10 @@ where
 
     let buf_cap: usize = calculate_cmd_buffer_size(1, explorer.max_cmd_len());
 
-    let mut executor = PrefixExecutor::<N, MAX_CMD_LEN>::new(prefix, successful_seq); // Changed buf_cap to MAX_CMD_LEN
+    let mut executor = PrefixExecutor::<N, MAX_CMD_LEN>::new(prefix, successful_seq);
 
     let exploration_result =
-        explorer.explore::<_, _, _, MAX_CMD_LEN>(i2c, &mut executor, &mut serial_logger)?; // Changed BUF_CAP to MAX_CMD_LEN
+        explorer.explore::<_, _, _, MAX_CMD_LEN>(i2c, &mut executor, &mut serial_logger)?;
 
     for addr in exploration_result.found_addrs.iter() {
         serial_logger.log_info_fmt(|buf| {
@@ -114,7 +113,6 @@ where
 }
 
 pub fn run_pruned_explorer<I2C, S, const N: usize, const MAX_CMD_LEN: usize>(
-    // Added const MAX_CMD_LEN
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -162,7 +160,7 @@ where
     let mut failed_nodes = [false; N];
     loop {
         let (sequence_bytes, _sequence_len) = match explorer
-            .get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes) // Changed serial back to &mut serial_logger
+            .get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes)
         {
             Ok(seq) => seq,
             Err(e) => {
@@ -182,7 +180,7 @@ where
             let mut current_failed_nodes = failed_nodes;
             for i in 0..explorer.sequence.len() {
                 let cmd_bytes = &sequence_bytes[i];
-                match execute_and_log_command(i2c, &mut executor, &mut serial_logger, addr, cmd_bytes, i) // Changed serial back to &mut serial_logger
+                match execute_and_log_command(i2c, &mut executor, &mut serial_logger, addr, cmd_bytes, i)
                 {
                     Ok(_) => {}
                     Err(_) => {
@@ -212,7 +210,6 @@ where
 }
 
 pub fn run_single_sequence_explorer<I2C, S, const N: usize, const MAX_CMD_LEN: usize>(
-    // Added const MAX_CMD_LEN
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -232,7 +229,7 @@ where
     });
 
     let single_sequence =
-        explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &[false; N])?; // Changed serial back to &mut serial_logger
+        explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &[false; N])?;
 
     let sequence_len = explorer.sequence.len();
 
@@ -245,15 +242,15 @@ where
     });
 
     let buf_cap: usize = calculate_cmd_buffer_size(1, explorer.max_cmd_len());
-    let mut executor = PrefixExecutor::<N, MAX_CMD_LEN>::new(prefix, heapless::Vec::new()); // Changed buf_cap to MAX_CMD_LEN
+    let mut executor = PrefixExecutor::<N, MAX_CMD_LEN>::new(prefix, heapless::Vec::new());
 
     for i in 0..sequence_len {
         execute_and_log_command(
             i2c,
             &mut executor,
-            &mut serial_logger, // Changed serial back to &mut serial_logger
+            &mut serial_logger,
             target_addr,
-            &single_sequence.0[i], // Added .0 back
+            &single_sequence.0[i],
             i,
         )?;
     }
