@@ -1,4 +1,5 @@
 // scanner.rs
+
 //! Scanner utilities for I2C bus device discovery and analysis.
 //!
 //! This module provides functions to scan the I2C bus for connected devices,
@@ -6,23 +7,24 @@
 
 use crate::compat::{HalErrorExt, ascii};
 use core::fmt::Write;
-use heapless::Vec;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
+
+pub const I2C_MAX_DEVICES: usize = 128;
 
 fn internal_scan<I2C, S>(
     i2c: &mut I2C,
     serial: &mut S,
     data: &[u8],
     log_level: crate::explore::logger::LogLevel,
-) -> Result<heapless::Vec<u8, 128>, crate::error::ErrorKind>
+) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut found_addrs = heapless::Vec::<u8, 128>::new();
+    let mut found_addrs = heapless::Vec::<u8, I2C_MAX_DEVICES>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
     for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
         if let crate::explore::logger::LogLevel::Verbose = log_level {
@@ -88,7 +90,7 @@ macro_rules! define_scanner {
             serial: &mut S,
             ctrl_byte: &[u8],
             log_level: $crate::explore::logger::LogLevel,
-        ) -> Result<heapless::Vec<u8, 128>, $crate::error::ErrorKind>
+        ) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, $crate::error::ErrorKind>
         where
             I2C: $i2c_trait,
             <I2C as $i2c_trait>::Error: $crate::compat::HalErrorExt,
@@ -117,17 +119,17 @@ macro_rules! define_scanner {
         /// # Returns
         ///
         /// A `heapless::Vec<u8, 64>` containing the bytes from `init_sequence` that elicited a response.
-        pub fn scan_init_sequence<I2C, S>(
+        pub fn scan_init_sequence<I2C, S, const N: usize>(
             i2c: &mut I2C,
             serial: &mut S,
-            ctrl_byte: u8,
-            init_sequence: &[u8],
-            log_level: $crate::explore::logger::LogLevel,
-        ) -> Result<heapless::Vec<u8, 64>, $crate::error::ErrorKind>
+            ctrl_byte: u8, // Added ctrl_byte here
+            init_sequence: &[u8; N],
+            log_level: crate::explore::logger::LogLevel,
+        ) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
         where
-            I2C: $i2c_trait,
-            <I2C as $i2c_trait>::Error: $crate::compat::HalErrorExt,
-            S: $write_trait,
+            I2C: crate::compat::I2cCompat,
+            <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+            S: core::fmt::Write + crate::explore::logger::Logger, // Removed <I2C_BUFFER_SIZE>
         {
             if let $crate::explore::logger::LogLevel::Verbose = log_level {
                 writeln!(serial, "[scan] Scanning I2C bus with init sequence:").ok();
@@ -138,9 +140,7 @@ macro_rules! define_scanner {
                 }
             }
             let initial_found_addrs =
-                $crate::scanner::scan_i2c(i2c, serial, &[ctrl_byte], log_level)?;
-
-            // Call the extracted helper function
+                $crate::scanner::scan_i2c(i2c, serial, &[ctrl_byte], log_level)?; // Used ctrl_byte here
             let detected_cmds = $crate::scanner::sequence_iterative_check(
                 i2c,
                 serial,
@@ -157,12 +157,12 @@ macro_rules! define_scanner {
             Ok(detected_cmds)
         }
 
-        fn log_differences<W: core::fmt::Write>(
+        fn log_differences<W: core::fmt::Write, const N: usize>( // Added const N: usize
             serial: &mut W,
-            expected: &[u8],
-            detected: &heapless::Vec<u8, 64>,
+            expected: &[u8; N], // Changed to &[u8; N]
+            detected: &heapless::Vec<u8, N>, // Changed to N
         ) {
-            let mut missing_cmds = heapless::Vec::<u8, 64>::new();
+            let mut missing_cmds = heapless::Vec::<u8, N>::new(); // Changed to N
             let mut sorted_detected = detected.clone();
             sorted_detected.sort_unstable();
             for &b in expected {
@@ -205,20 +205,20 @@ macro_rules! define_scanner {
     };
 }
 
-fn sequence_iterative_check<I2C, S>(
+fn sequence_iterative_check<I2C, S, const N: usize>( // Added const N: usize
     i2c: &mut I2C,
     serial: &mut S,
     ctrl_byte: u8,
-    init_sequence: &[u8],
+    init_sequence: &[u8; N], // Changed to &[u8; N]
     log_level: crate::explore::logger::LogLevel,
-    initial_found_addrs: &heapless::Vec<u8, 128>,
-) -> Result<heapless::Vec<u8, 64>, crate::error::ErrorKind>
+    initial_found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
+) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind> // Changed to N
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut detected_cmds = heapless::Vec::<u8, 64>::new();
+    let mut detected_cmds = heapless::Vec::<u8, N>::new(); // Changed to N
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for &seq_cmd in init_sequence.iter() {

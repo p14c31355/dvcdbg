@@ -140,3 +140,19 @@ impl From<ExecutorError> for ExplorerError {
         }
     }
 }
+
+impl fmt::Display for ExplorerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExplorerError::TooManyCommands => f.write_str("TooManyCommands"),
+            ExplorerError::DependencyCycle => f.write_str("DependencyCycle"),
+            ExplorerError::NoValidAddressesFound => f.write_str("NoValidAddressesFound"),
+            ExplorerError::ExecutionFailed(kind) => {
+                write!(f, "ExecutionFailed: {}", kind)
+            }
+            ExplorerError::BufferOverflow => f.write_str("BufferOverflow"),
+            ExplorerError::InvalidDependencyIndex => f.write_str("InvalidDependencyIndex"),
+            ExplorerError::DeviceNotFound(kind) => write!(f, "DeviceNotFound: {}", kind),
+        }
+    }
+}

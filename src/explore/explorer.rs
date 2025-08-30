@@ -1,4 +1,5 @@
 // explorer.rs
+
 use crate::compat::err_compat::HalErrorExt;
 use crate::error::{ExecutorError, ExplorerError};
 use core::fmt::Write;
@@ -22,19 +23,19 @@ pub trait CmdExecutor<I2C, const BUF_CAP: usize> {
         logger: &mut S,
     ) -> Result<(), ExecutorError>
     where
-        S: core::fmt::Write + crate::explore::logger::Logger<BUF_CAP>;
+        S: core::fmt::Write + crate::explore::logger::Logger;
 }
 
 /// A command executor that prepends a prefix to each command.
-pub struct PrefixExecutor<const BUF_CAP: usize> {
+pub struct PrefixExecutor<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> {
     prefix: u8,
-    init_sequence: heapless::Vec<u8, 64>,
+    init_sequence: heapless::Vec<u8, INIT_SEQ_SIZE>,
     initialized_addrs: [bool; 128],
     buffer: heapless::Vec<u8, BUF_CAP>,
 }
 
-impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
-    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, 64>) -> Self {
+impl<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQ_SIZE, BUF_CAP> {
+    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, INIT_SEQ_SIZE>) -> Self {
         Self {
             prefix,
             init_sequence,
@@ -60,20 +61,20 @@ impl<const BUF_CAP: usize> PrefixExecutor<BUF_CAP> {
     where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-        S: core::fmt::Write + crate::explore::logger::Logger<BUF_CAP>,
+        S: core::fmt::Write + crate::explore::logger::Logger,
     {
         let mut last_error = None;
         for _attempt in 0..10 {
             match i2c.write(addr, bytes) {
                 Ok(_) => {
-                    Self::short_delay(); // Use the private associated function
+                    Self::short_delay();
                     return Ok(());
                 }
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
                     last_error = Some(compat_err);
                     logger.log_error_fmt(|buf| writeln!(buf, "[I2C retry error] {compat_err:?}"));
-                    Self::short_delay(); // Use the private associated function
+                    Self::short_delay();
                 }
             }
         }
@@ -93,7 +94,7 @@ where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     E: CmdExecutor<I2C, BUF_CAP>,
-    L: crate::explore::logger::Logger<BUF_CAP> + core::fmt::Write,
+    L: crate::explore::logger::Logger + core::fmt::Write,
 {
     logger.log_info_fmt(|buf| {
         writeln!(
@@ -115,7 +116,8 @@ where
     }
 }
 
-impl<I2C, const BUF_CAP: usize> CmdExecutor<I2C, BUF_CAP> for PrefixExecutor<BUF_CAP>
+impl<I2C, const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> CmdExecutor<I2C, BUF_CAP>
+    for PrefixExecutor<INIT_SEQ_SIZE, BUF_CAP>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -128,7 +130,7 @@ where
         logger: &mut S,
     ) -> Result<(), ExecutorError>
     where
-        S: core::fmt::Write + crate::explore::logger::Logger<BUF_CAP>,
+        S: core::fmt::Write + crate::explore::logger::Logger,
     {
         let addr_idx = addr as usize;
 
@@ -194,7 +196,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
         E: CmdExecutor<I2C, BUF_CAP>,
-        L: crate::explore::logger::Logger<BUF_CAP> + core::fmt::Write,
+        L: crate::explore::logger::Logger + core::fmt::Write,
     {
         if self.sequence.is_empty() {
             logger.log_info_fmt(|buf| writeln!(buf, "[explorer] No commands provided."));
@@ -208,8 +210,6 @@ impl<'a, const N: usize> Explorer<'a, N> {
         logger.log_info_fmt(|buf| writeln!(buf, "[explorer] Starting permutation exploration..."));
         for sequence in iter {
             permutations_tested += 1;
-            // Inside impl<'a, const N: usize> Explorer<'a, N> for the explore method
-            // ...
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 let addr = addr_val;
                 if solved_addrs[addr as usize] {
@@ -219,10 +219,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 logger.log_info_fmt(|buf| {
                     writeln!(
                         buf,
-                        "[explorer] Trying sequence on 0x{:02X} (permutation {}/{})",
-                        addr,
-                        permutations_tested,
-                        self.sequence.len()
+                        "[explorer] Trying sequence on 0x{:02X} (permutation {})",
+                        addr, permutations_tested
                     )
                 });
 
@@ -502,17 +500,16 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 self.current_permutation
                     .push(self.sequence[idx].bytes)
                     .unwrap();
-                self.used[idx] = true; // Mark as used
+                self.used[idx] = true;
 
                 // Decrement in-degrees for all nodes that depend on this one
                 for &dependent_idx in self.adj_list_rev[idx].iter() {
                     self.in_degree[dependent_idx] -= 1;
                 }
 
-                self.path_stack.push(idx).unwrap(); // Push the original index of the command
-                // Store the next starting point for this level (for backtracking to this level)
+                self.path_stack.push(idx).unwrap();
                 self.loop_start_indices.push(idx + 1).unwrap();
-                return true; // Successfully extended
+                return true;
             }
         }
         false // No node found to extend the current permutation
