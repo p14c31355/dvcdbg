@@ -129,8 +129,7 @@ where
 {
     let max_len = explorer.max_cmd_len();
     let mut serial_logger = SerialLogger::new(serial, log_level);
-    let probe = [prefix, init_sequence[0]];
-    let mut found_addrs = match crate::scanner::scan_i2c(i2c, &mut serial_logger, &probe, log_level)
+    let mut found_addrs = match crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix, log_level)
     {
         Ok(addrs) => addrs,
         Err(e) => return Err(ExplorerError::DeviceNotFound(e)),
