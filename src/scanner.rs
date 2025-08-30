@@ -5,7 +5,7 @@
 //! This module provides functions to scan the I2C bus for connected devices,
 //! optionally testing with control bytes or initialization command sequences.
 
-use crate::compat::{HalErrorExt, ascii};
+use crate::compat::{HalErrorExt, util};
 use core::fmt::Write;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
@@ -29,7 +29,7 @@ where
     for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
         if let crate::explore::logger::LogLevel::Verbose = log_level {
             write!(serial, "[log] Scanning 0x").ok();
-            crate::compat::ascii::write_bytes_hex_fmt(serial, &[addr]).ok();
+            crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
             write!(serial, "...").ok();
         }
         match i2c.write(addr, data) {
@@ -51,7 +51,7 @@ where
                 }
                 if let crate::explore::logger::LogLevel::Verbose = log_level {
                     write!(serial, "[error] write failed at ").ok();
-                    crate::compat::ascii::write_bytes_hex_fmt(serial, &[addr]).ok();
+                    crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
                     writeln!(serial, ": {}", e_kind).ok();
                 }
                 last_error = Some(e_kind);
@@ -135,7 +135,7 @@ macro_rules! define_scanner {
                 writeln!(serial, "[scan] Scanning I2C bus with init sequence:").ok();
                 for chunk in init_sequence.chunks(16) {
                     write!(serial, " ").ok();
-                    $crate::compat::ascii::write_bytes_hex_fmt(serial, chunk).ok();
+                    $crate::compat::util::write_bytes_hex_fmt(serial, chunk).ok();
                     writeln!(serial).ok();
                 }
             }
@@ -181,7 +181,7 @@ macro_rules! define_scanner {
             writeln!(serial, "Expected sequence:").ok();
             for b in expected {
                 write!(serial, " ").ok();
-                ascii::write_bytes_hex_fmt(serial, &[*b]).ok();
+                util::write_bytes_hex_fmt(serial, &[*b]).ok();
                 writeln!(serial).ok();
             }
             writeln!(serial).ok();
@@ -189,7 +189,7 @@ macro_rules! define_scanner {
             writeln!(serial, "Commands with response:").ok();
             for b in detected {
                 write!(serial, " ").ok();
-                ascii::write_bytes_hex_fmt(serial, &[*b]).ok();
+                util::write_bytes_hex_fmt(serial, &[*b]).ok();
                 writeln!(serial).ok();
             }
             writeln!(serial).ok();
@@ -197,7 +197,7 @@ macro_rules! define_scanner {
             writeln!(serial, "Commands with no response:").ok();
             for b in &missing_cmds {
                 write!(serial, " ").ok();
-                ascii::write_bytes_hex_fmt(serial, &[*b]).ok();
+                util::write_bytes_hex_fmt(serial, &[*b]).ok();
                 writeln!(serial).ok();
             }
             writeln!(serial).ok();
@@ -229,9 +229,9 @@ where
                     if initial_found_addrs.contains(&addr) {
                         if let crate::explore::logger::LogLevel::Verbose = log_level {
                             write!(serial, "[ok] Found device at ").ok();
-                            crate::compat::ascii::write_bytes_hex_fmt(serial, &[addr]).ok();
+                            crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
                             writeln!(serial, " responded to 0x").ok();
-                            crate::compat::ascii::write_bytes_hex_fmt(serial, &[seq_cmd]).ok();
+                            crate::compat::util::write_bytes_hex_fmt(serial, &[seq_cmd]).ok();
                             writeln!(serial).ok();
                         }
                         cmd_responded_by_initial_device = true;
@@ -246,7 +246,7 @@ where
             Err(e) => {
                 if let crate::explore::logger::LogLevel::Verbose = log_level {
                     write!(serial, "[error] scan failed for command 0x").ok();
-                    crate::compat::ascii::write_bytes_hex_fmt(serial, &[seq_cmd]).ok();
+                    crate::compat::util::write_bytes_hex_fmt(serial, &[seq_cmd]).ok();
                     writeln!(serial, ": {:?}", e).ok();
                 }
                 last_error = Some(e);

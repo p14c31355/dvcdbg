@@ -2,15 +2,15 @@
 
 use crate::explore::explorer::*;
 use crate::explore::logger::*;
-use crate::compat::buffer::calculate_cmd_buffer_size;
+use crate::compat::util::calculate_cmd_buffer_size;
 
-use crate::compat::ascii;
+use crate::compat::util;
 use crate::error::ExplorerError;
 
 use core::fmt::Write;
 
 use crate::scanner::I2C_MAX_DEVICES;
-use crate::compat::buffer::ERROR_STRING_BUFFER_SIZE;
+use crate::compat::util::ERROR_STRING_BUFFER_SIZE;
 
 // Helper for logging info with the [explorer] prefix
 pub fn explorer_log_info<S, F>(logger: &mut SerialLogger<S>, f: F)
@@ -96,7 +96,7 @@ where
     for addr in exploration_result.found_addrs.iter() {
         serial_logger.log_info_fmt(|buf| {
             write!(buf, "[driver] Found device at ")?;
-            ascii::write_bytes_hex_fmt(buf, &[*addr])?;
+            util::write_bytes_hex_fmt(buf, &[*addr])?;
             writeln!(buf)
         });
     }
@@ -113,21 +113,17 @@ where
     Ok(())
 }
 
-pub fn run_pruned_explorer<I2C, S, E, const N: usize, const MAX_CMD_LEN: usize>( // Added const MAX_CMD_LEN
+pub fn run_pruned_explorer<I2C, S, const N: usize, const MAX_CMD_LEN: usize>( // Added const MAX_CMD_LEN
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
-    executor: &mut E,
     serial: &mut S,
     prefix: u8,
+    init_sequence: &[u8; MAX_CMD_LEN],
     log_level: LogLevel,
 ) -> Result<(), ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    E: CmdExecutor<
-            I2C,
-            MAX_CMD_LEN, // Changed to MAX_CMD_LEN
-        >,
     S: core::fmt::Write + Logger,
 {
     let max_len = explorer.max_cmd_len();
@@ -140,9 +136,33 @@ where
     if found_addrs.is_empty() {
         return Err(ExplorerError::NoValidAddressesFound);
     }
+    let successful_seq = match crate::scanner::scan_init_sequence(
+        i2c,
+        &mut serial_logger,
+        prefix,
+        init_sequence,
+        log_level,
+    ) {
+        Ok(seq) => seq,
+        Err(e) => {
+            runner_log_error(&mut serial_logger, |buf| {
+                writeln!(buf, "Failed to scan init sequence: {:?}", e)
+            });
+            return Err(ExplorerError::DeviceNotFound(e));
+        }
+    };
+    serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
+    serial_logger.log_info_fmt(|buf| writeln!(buf, "[log] Start driver safe init"));
+    let mut executor =
+        crate::explore::explorer::PrefixExecutor::<MAX_CMD_LEN, MAX_CMD_LEN>::new(
+            prefix,
+            successful_seq,
+        );
+    
+    
     let mut failed_nodes = [false; N];
     loop {
-        let (sequence_bytes, sequence_len) = match explorer
+        let (sequence_bytes, _sequence_len) = match explorer
             .get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes) // Changed serial back to &mut serial_logger
         {
             Ok(seq) => seq,
@@ -163,7 +183,7 @@ where
             let mut current_failed_nodes = failed_nodes;
             for i in 0..explorer.sequence.len() {
                 let cmd_bytes = &sequence_bytes[i];
-                match execute_and_log_command(i2c, executor, &mut serial_logger, addr, cmd_bytes, i) // Changed serial back to &mut serial_logger
+                match execute_and_log_command(i2c, &mut executor, &mut serial_logger, addr, cmd_bytes, i) // Changed serial back to &mut serial_logger
                 {
                     Ok(_) => {}
                     Err(_) => {

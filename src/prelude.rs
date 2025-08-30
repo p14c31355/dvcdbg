@@ -8,7 +8,7 @@ pub use crate::{
 };
 
 pub use crate::compat::adapt::FmtWriteAdapter;
-pub use crate::compat::ascii::{write_byte_hex, write_bytes_hex, write_bytes_hex_prefixed};
+pub use crate::compat::util::{write_byte_hex, write_bytes_hex, write_bytes_hex_prefixed};
 pub use crate::compat::{HalErrorExt, I2cCompat, SerialCompat, SerialEio, UartLike};
 pub use crate::error::ExecutorError;
 pub use crate::explore::explorer::{CmdExecutor, CmdNode, Explorer};
