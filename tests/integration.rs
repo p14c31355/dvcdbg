@@ -64,7 +64,7 @@ fn test_full_stack() {
         scan_i2c(
             &mut i2c,
             &mut serial,
-            &[0x00],
+            0x00,
             dvcdbg::explore::logger::LogLevel::Verbose
         )
         .is_ok()
