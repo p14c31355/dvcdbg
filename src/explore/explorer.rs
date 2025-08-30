@@ -73,7 +73,8 @@ impl<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQ_S
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
                     last_error = Some(compat_err);
-                    logger.log_error_fmt(|buf| writeln!(buf, "[I2C retry error] {compat_err:?}"));
+                    let _ = logger
+                        .log_error_fmt(|buf| writeln!(buf, "[I2C retry error] {compat_err:?}"));
                     Self::short_delay();
                 }
             }
@@ -96,7 +97,7 @@ where
     E: CmdExecutor<I2C, BUF_CAP>,
     L: crate::explore::logger::Logger + core::fmt::Write,
 {
-    logger.log_info_fmt(|buf| {
+    let _ = logger.log_info_fmt(|buf| {
         writeln!(
             buf,
             "[explorer] Sending node {} bytes: {:02X?} ...",
@@ -106,11 +107,11 @@ where
 
     match executor.exec(i2c, addr, cmd_bytes, logger) {
         Ok(_) => {
-            logger.log_info_fmt(|buf| writeln!(buf, "[explorer] OK"));
+            let _ = logger.log_info_fmt(|buf| writeln!(buf, "[explorer] OK"));
             Ok(())
         }
         Err(e) => {
-            logger.log_error_fmt(|buf| writeln!(buf, "[explorer] FAILED: {:?}", e));
+            let _ = logger.log_error_fmt(|buf| writeln!(buf, "[explorer] FAILED: {:?}", e));
             Err(e.into())
         }
     }
@@ -135,29 +136,32 @@ where
         let addr_idx = addr as usize;
 
         if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
-            logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
+            let _ = logger
+                .log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
 
             for &c in self.init_sequence.iter() {
                 let command = [self.prefix, c];
-                Self::write_with_retry(i2c, addr, &command, logger) // Call the private method
+                Self::write_with_retry(i2c, addr, &command, logger)
                     .map_err(ExecutorError::I2cError)?;
-                Self::short_delay(); // Call the private associated function
+                Self::short_delay();
             }
 
             self.initialized_addrs[addr_idx] = true;
-            logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initialized for 0x{addr:02X}"));
+            let _ =
+                logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initialized for 0x{addr:02X}"));
         }
 
         self.buffer.clear();
-        self.buffer
+        let _ = self
+            .buffer
             .push(self.prefix)
-            .map_err(|_| ExecutorError::BufferOverflow)?;
-        self.buffer
+            .map_err(|_| ExecutorError::BufferOverflow);
+        let _ = self
+            .buffer
             .extend_from_slice(cmd)
-            .map_err(|_| ExecutorError::BufferOverflow)?;
+            .map_err(|_| ExecutorError::BufferOverflow);
 
-        Self::write_with_retry(i2c, addr, &self.buffer, logger) // Call the private method
-            .map_err(ExecutorError::I2cError)
+        Self::write_with_retry(i2c, addr, &self.buffer, logger).map_err(ExecutorError::I2cError)
     }
 }
 
@@ -181,11 +185,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
             }
             i += 1;
         }
-        max_len + 1 // prefix add
+        max_len + 1
     }
-}
 
-impl<'a, const N: usize> Explorer<'a, N> {
     pub fn explore<I2C, E, L, const BUF_CAP: usize>(
         &self,
         i2c: &mut I2C,
@@ -199,7 +201,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         L: crate::explore::logger::Logger + core::fmt::Write,
     {
         if self.sequence.is_empty() {
-            logger.log_info_fmt(|buf| writeln!(buf, "[explorer] No commands provided."));
+            let _ = logger.log_info_fmt(|buf| writeln!(buf, "[explorer] No commands provided."));
             return Err(ExplorerError::NoValidAddressesFound);
         }
 
@@ -207,7 +209,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut solved_addrs: [bool; I2C_ADDRESS_COUNT] = [false; I2C_ADDRESS_COUNT];
         let mut permutations_tested = 0;
         let iter = PermutationIter::new(self)?;
-        logger.log_info_fmt(|buf| writeln!(buf, "[explorer] Starting permutation exploration..."));
+        let _ = logger
+            .log_info_fmt(|buf| writeln!(buf, "[explorer] Starting permutation exploration..."));
         for sequence in iter {
             permutations_tested += 1;
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
@@ -216,7 +219,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     continue;
                 }
 
-                logger.log_info_fmt(|buf| {
+                let _ = logger.log_info_fmt(|buf| {
                     writeln!(
                         buf,
                         "[explorer] Trying sequence on 0x{:02X} (permutation {})",
@@ -227,17 +230,14 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 let mut all_ok = true;
                 for i in 0..self.sequence.len() {
                     let cmd_bytes = sequence[i];
-                    match execute_and_log_command(i2c, executor, logger, addr, cmd_bytes, i) {
-                        Ok(_) => {}
-                        Err(_) => {
-                            all_ok = false;
-                            break;
-                        }
+                    if execute_and_log_command(i2c, executor, logger, addr, cmd_bytes, i).is_err() {
+                        all_ok = false;
+                        break;
                     }
                 }
 
                 if all_ok {
-                    logger.log_info_fmt(|buf| {
+                    let _ = logger.log_info_fmt(|buf| {
                         writeln!(
                             buf,
                             "[explorer] Successfully executed sequence on 0x{:02X}",
@@ -245,14 +245,14 @@ impl<'a, const N: usize> Explorer<'a, N> {
                         )
                     });
                     if found_addrs.push(addr).is_err() {
-                        logger.log_error_fmt(|buf| {
+                        let _ = logger.log_error_fmt(|buf| {
                             writeln!(buf, "[error] Buffer overflow in found_addrs")
                         });
                         return Err(ExplorerError::BufferOverflow);
                     }
                     solved_addrs[addr as usize] = true;
                 } else {
-                    logger.log_info_fmt(|buf| {
+                    let _ = logger.log_info_fmt(|buf| {
                         writeln!(
                             buf,
                             "[explorer] Failed to execute sequence on 0x{:02X}",
@@ -261,7 +261,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     });
                 }
             }
-            // After the inner loop over addresses
+
             if found_addrs.len() == (I2C_SCAN_ADDR_END - I2C_SCAN_ADDR_START + 1) as usize {
                 break;
             }
@@ -271,12 +271,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
             permutations_tested,
         })
     }
-    /// Generates a single valid topological sort of the command sequence.
-    /// This is useful when only one valid ordering is needed, and avoids
-    /// the computational cost of generating all permutations.
-    ///
-    /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
-    /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
+
     pub fn get_one_topological_sort_buf<const MAX_CMD_LEN: usize>(
         &self,
         _serial: &mut impl core::fmt::Write,
@@ -368,8 +363,8 @@ pub struct PermutationIter<'a, const N: usize> {
     used: Vec<bool, N>,
     in_degree: Vec<usize, N>,
     adj_list_rev: [heapless::Vec<usize, N>; N],
-    path_stack: Vec<usize, N>, // Stores original indices of commands in current_permutation
-    loop_start_indices: Vec<usize, N>, // Tracks the starting point for the next search at each level
+    path_stack: Vec<usize, N>,
+    loop_start_indices: Vec<usize, N>,
     is_done: bool,
 }
 
@@ -444,43 +439,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             is_done: false,
         })
     }
-}
 
-impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
-    type Item = Vec<&'a [u8], N>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.is_done {
-            return None;
-        }
-
-        loop {
-            // If we have a complete permutation, return it and prepare for the next one.
-            if self.current_permutation.len() == self.total_nodes {
-                let full_sequence = self.current_permutation.clone();
-                // Backtrack to find the next permutation
-                if !self.backtrack() {
-                    self.is_done = true;
-                }
-                return Some(full_sequence);
-            }
-
-            // Try to extend the current partial permutation
-            if self.try_extend() {
-                // Successfully extended, continue building the permutation
-                continue;
-            } else {
-                // Could not extend, backtrack
-                if !self.backtrack() {
-                    self.is_done = true;
-                    return None; // No more permutations
-                }
-            }
-        }
-    }
-}
-
-impl<'a, const N: usize> PermutationIter<'a, N> {
     fn try_extend(&mut self) -> bool {
         // The `loop_start_indices` tracks the starting point for the search at the current depth.
         // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
@@ -540,6 +499,35 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             // Already at the root and no more options
             self.is_done = true;
             false
+        }
+    }
+}
+
+impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
+    type Item = Vec<&'a [u8], N>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_done {
+            return None;
+        }
+
+        loop {
+            if self.current_permutation.len() == self.total_nodes {
+                let full_sequence = self.current_permutation.clone();
+                if !self.backtrack() {
+                    self.is_done = true;
+                }
+                return Some(full_sequence);
+            }
+
+            if self.try_extend() {
+                continue;
+            } else {
+                if !self.backtrack() {
+                    self.is_done = true;
+                    return None;
+                }
+            }
         }
     }
 }
