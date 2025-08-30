@@ -1,7 +1,6 @@
 //! compat/mod.rs
 pub mod adapt;
-pub mod ascii;
-pub mod buffer;
+pub mod util;
 pub mod err_compat;
 pub mod i2c_compat;
 pub mod serial_compat;
