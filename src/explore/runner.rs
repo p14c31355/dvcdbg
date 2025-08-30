@@ -113,10 +113,9 @@ where
     Ok(())
 }
 
-pub fn run_pruned_explorer<I2C, S, E, const N: usize, const MAX_CMD_LEN: usize>( // Added const MAX_CMD_LEN
+pub fn run_pruned_explorer<I2C, S, const N: usize, const MAX_CMD_LEN: usize>( // Added const MAX_CMD_LEN
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
-    executor: &mut E,
     serial: &mut S,
     prefix: u8,
     init_sequence: &[u8; MAX_CMD_LEN],
@@ -125,14 +124,18 @@ pub fn run_pruned_explorer<I2C, S, E, const N: usize, const MAX_CMD_LEN: usize>(
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    E: CmdExecutor<
-            I2C,
-            MAX_CMD_LEN, // Changed to MAX_CMD_LEN
-        >,
     S: core::fmt::Write + Logger,
 {
     let max_len = explorer.max_cmd_len();
     let mut serial_logger = SerialLogger::new(serial, log_level);
+    let mut found_addrs =
+        match crate::scanner::scan_i2c(i2c, &mut serial_logger, &[prefix], log_level) { // Changed serial back to &mut serial_logger
+            Ok(addrs) => addrs,
+            Err(e) => return Err(ExplorerError::DeviceNotFound(e)),
+        };
+    if found_addrs.is_empty() {
+        return Err(ExplorerError::NoValidAddressesFound);
+    }
     let successful_seq = match crate::scanner::scan_init_sequence(
         i2c,
         &mut serial_logger,
@@ -156,17 +159,10 @@ where
             successful_seq,
         );
     
-    let mut found_addrs =
-        match crate::scanner::scan_i2c(i2c, &mut serial_logger, &[prefix], log_level) { // Changed serial back to &mut serial_logger
-            Ok(addrs) => addrs,
-            Err(e) => return Err(ExplorerError::DeviceNotFound(e)),
-        };
-    if found_addrs.is_empty() {
-        return Err(ExplorerError::NoValidAddressesFound);
-    }
+    
     let mut failed_nodes = [false; N];
     loop {
-        let (sequence_bytes, sequence_len) = match explorer
+        let (sequence_bytes, _sequence_len) = match explorer
             .get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes) // Changed serial back to &mut serial_logger
         {
             Ok(seq) => seq,

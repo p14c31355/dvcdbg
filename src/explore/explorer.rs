@@ -302,15 +302,18 @@ impl<'a, const N: usize> Explorer<'a, N> {
             if failed_nodes[i] {
                 continue;
             }
-            in_degree[i] = node.deps.len();
-            for &dep_idx in node.deps.iter() {
-                if dep_idx >= len {
-                    return Err(ExplorerError::InvalidDependencyIndex);
-                }
-                adj_list_rev[dep_idx]
-                    .push(i)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
-            }
+            in_degree[i] = 0;
+for &dep_idx in node.deps.iter() {
+    if dep_idx >= len {
+        return Err(ExplorerError::InvalidDependencyIndex);
+    }
+    if !failed_nodes[dep_idx] {
+        in_degree[i] += 1;
+        adj_list_rev[dep_idx].push(i)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
+    }
+}
+
         }
 
         let mut q: heapless::Vec<usize, N> = heapless::Vec::new();
