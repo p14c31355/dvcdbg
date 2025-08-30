@@ -52,12 +52,7 @@ where
                     continue;
                 }
                 if let crate::explore::logger::LogLevel::Verbose = log_level {
-                    writeln!(
-                        serial,
-                        "[ERROR] Write failed at 0x{:02x}: {}",
-                        addr, error_kind
-                    )
-                    .ok();
+                    writeln!(serial, "[ERROR] Write failed at 0x{:02x}: {}", addr, error_kind).ok();
                 }
                 last_error = Some(error_kind);
             }
@@ -91,11 +86,7 @@ where
     S: core::fmt::Write,
 {
     if let crate::explore::logger::LogLevel::Verbose = log_level {
-        writeln!(
-            serial,
-            "[LOG] Scanning I2C bus with a single control byte..."
-        )
-        .ok();
+        writeln!(serial, "[LOG] Scanning I2C bus with a single control byte...").ok();
     }
     internal_scan(i2c, serial, &[ctrl_byte], log_level)
 }
@@ -130,33 +121,17 @@ where
     S: core::fmt::Write,
 {
     if let crate::explore::logger::LogLevel::Verbose = log_level {
-        writeln!(
-            serial,
-            "[LOG] Starting I2C bus scan with initialization sequence..."
-        )
-        .ok();
-        writeln!(
-            serial,
-            "[INFO] Initializing scan with control byte 0x{:02x}",
-            ctrl_byte
-        )
-        .ok();
+        writeln!(serial, "[LOG] Starting I2C bus scan with initialization sequence...").ok();
+        writeln!(serial, "[INFO] Initializing scan with control byte 0x{:02x}", ctrl_byte).ok();
     }
 
     let initial_found_addrs = internal_scan(i2c, serial, &[ctrl_byte], log_level)?;
-    let detected_cmds = check_init_sequence(
-        i2c,
-        serial,
-        ctrl_byte,
-        init_sequence,
-        log_level,
-        &initial_found_addrs,
-    )?;
+    let mut detected_cmds = check_init_sequence(i2c, serial, ctrl_byte, init_sequence, log_level, &initial_found_addrs)?;
 
     if let crate::explore::logger::LogLevel::Verbose = log_level {
         writeln!(serial, "[INFO] I2C scan with init sequence complete.").ok();
     }
-    log_sequence_summary(serial, init_sequence, &detected_cmds);
+    log_sequence_summary(serial, init_sequence, &mut detected_cmds); // detected_cmdsを可変参照に変更
     Ok(detected_cmds)
 }
 
@@ -180,10 +155,7 @@ where
     for &seq_cmd in init_sequence.iter() {
         match internal_scan(i2c, serial, &[ctrl_byte, seq_cmd], log_level) {
             Ok(responded_addrs) => {
-                if responded_addrs
-                    .iter()
-                    .any(|addr| initial_found_addrs.contains(addr))
-                {
+                if responded_addrs.iter().any(|addr| initial_found_addrs.contains(addr)) {
                     if let Err(_) = detected_cmds.push(seq_cmd) {
                         writeln!(serial, "[WARN] Detected commands buffer overflow. Some commands may be truncated.").ok();
                         break;
@@ -192,12 +164,7 @@ where
             }
             Err(e) => {
                 if let crate::explore::logger::LogLevel::Verbose = log_level {
-                    writeln!(
-                        serial,
-                        "[ERROR] Scan failed for command 0x{:02x}: {:?}",
-                        seq_cmd, e
-                    )
-                    .ok();
+                    writeln!(serial, "[ERROR] Scan failed for command 0x{:02x}: {:?}", seq_cmd, e).ok();
                 }
                 last_error = Some(e);
             }
@@ -215,42 +182,38 @@ where
 fn log_sequence_summary<W: core::fmt::Write, const N: usize>(
     serial: &mut W,
     expected_sequence: &[u8; N],
-    detected_cmds: &heapless::Vec<u8, N>,
+    detected_cmds: &mut heapless::Vec<u8, N>,
 ) {
     let mut missing_cmds = heapless::Vec::<u8, N>::new();
-    let mut sorted_detected = detected_cmds.clone();
-    sorted_detected.sort_unstable();
+
+    detected_cmds.sort_unstable();
 
     for &cmd in expected_sequence.iter() {
-        if sorted_detected.binary_search(&cmd).is_err() {
+        if detected_cmds.binary_search(&cmd).is_err() {
             if missing_cmds.push(cmd).is_err() {
-                writeln!(
-                    serial,
-                    "[WARN] Missing commands buffer is full, list is truncated."
-                )
-                .ok();
+                writeln!(serial, "[WARN] Missing commands buffer is full, list is truncated.").ok();
                 break;
             }
         }
     }
 
     writeln!(serial, "\n--- I2C Sequence Scan Summary ---").ok();
-
+    
     writeln!(serial, "Expected Commands:").ok();
-    for &cmd in expected_sequence {
-        write!(serial, " 0x{:02x}", cmd).ok();
+    for cmd_ref in expected_sequence.iter() {
+        write!(serial, " 0x{:02x}", *cmd_ref).ok();
     }
     writeln!(serial, "\n").ok();
 
     writeln!(serial, "Commands That Responded:").ok();
-    for &cmd_val in detected_cmds.iter() {
-        write!(serial, " 0x{:02x}", cmd_val).ok();
+    for cmd_ref in detected_cmds.iter() {
+        write!(serial, " 0x{:02x}", *cmd_ref).ok();
     }
     writeln!(serial, "\n").ok();
 
     writeln!(serial, "Commands With No Response:").ok();
-    for &cmd_val in missing_cmds.iter() {
-        write!(serial, " 0x{:02x}", cmd_val).ok();
+    for cmd_ref in missing_cmds.iter() {
+        write!(serial, " 0x{:02x}", *cmd_ref).ok();
     }
     writeln!(serial, "\n--- End Summary ---").ok();
 }
