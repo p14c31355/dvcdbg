@@ -157,9 +157,10 @@ macro_rules! define_scanner {
             Ok(detected_cmds)
         }
 
-        fn log_differences<W: core::fmt::Write, const N: usize>( // Added const N: usize
+        fn log_differences<W: core::fmt::Write, const N: usize>(
+            // Added const N: usize
             serial: &mut W,
-            expected: &[u8; N], // Changed to &[u8; N]
+            expected: &[u8; N],              // Changed to &[u8; N]
             detected: &heapless::Vec<u8, N>, // Changed to N
         ) {
             let mut missing_cmds = heapless::Vec::<u8, N>::new(); // Changed to N
@@ -205,14 +206,16 @@ macro_rules! define_scanner {
     };
 }
 
-fn sequence_iterative_check<I2C, S, const N: usize>( // Added const N: usize
+fn sequence_iterative_check<I2C, S, const N: usize>(
+    // Added const N: usize
     i2c: &mut I2C,
     serial: &mut S,
     ctrl_byte: u8,
     init_sequence: &[u8; N], // Changed to &[u8; N]
     log_level: crate::explore::logger::LogLevel,
     initial_found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
-) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind> // Changed to N
+) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
+// Changed to N
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,

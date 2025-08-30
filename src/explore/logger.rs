@@ -2,8 +2,8 @@
 
 //! Defines the logging level for scanner functions.
 
-use heapless::String;
 use crate::compat::util::ERROR_STRING_BUFFER_SIZE;
+use heapless::String;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogLevel {

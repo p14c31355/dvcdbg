@@ -309,11 +309,11 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 }
                 if !failed_nodes[dep_idx] {
                     in_degree[i] += 1;
-                    adj_list_rev[dep_idx].push(i)
+                    adj_list_rev[dep_idx]
+                        .push(i)
                         .map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
-
         }
 
         let mut q: heapless::Vec<usize, N> = heapless::Vec::new();

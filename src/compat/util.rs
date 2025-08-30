@@ -6,7 +6,6 @@ pub const fn calculate_cmd_buffer_size(num_commands: usize, max_cmd_len: usize) 
 pub const ERROR_STRING_BUFFER_SIZE: usize = 768;
 
 /// AVR / no_std support ASCII utility
-
 use embedded_io::Write;
 
 pub fn write_byte_hex<W: Write>(w: &mut W, byte: u8) -> Result<(), W::Error> {
