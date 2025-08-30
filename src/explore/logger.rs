@@ -22,7 +22,7 @@ pub trait Logger {
         F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result;
 }
 
-/// Immediate-write serial logger, writes directly to the underlying serial interface.
+/// Immediate-write serial logger
 pub struct SerialLogger<'a, S: core::fmt::Write> {
     writer: &'a mut S,
     buffer: String<ERROR_STRING_BUFFER_SIZE>,
@@ -40,8 +40,13 @@ where
             buffer: String::new(),
         }
     }
+}
 
-    pub fn log_info_fmt<F>(&mut self, f: F)
+impl<'a, S> Logger for SerialLogger<'a, S>
+where
+    S: core::fmt::Write,
+{
+    fn log_info_fmt<F>(&mut self, f: F)
     where
         F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
     {
@@ -55,7 +60,7 @@ where
         }
     }
 
-    pub fn log_error_fmt<F>(&mut self, f: F)
+    fn log_error_fmt<F>(&mut self, f: F)
     where
         F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
     {
@@ -70,14 +75,13 @@ where
     }
 }
 
-
 impl<'a, S: core::fmt::Write> core::fmt::Write for SerialLogger<'a, S> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        self.writer.write_str(s)
+        self.writer.write_str(s)?;
+        Ok(())
     }
 }
 
-/// A trait for platforms without console output.
 pub struct NullLogger;
 
 impl Logger for NullLogger {

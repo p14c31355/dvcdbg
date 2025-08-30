@@ -60,7 +60,7 @@ pub fn run_explorer<I2C, S, const N: usize, const MAX_CMD_LEN: usize>(
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    S: core::fmt::Write,
+    S: core::fmt::Write + Logger,
 {
     let mut serial_logger = SerialLogger::new(serial, log_level);
     explorer_log_info(&mut serial_logger, |buf| {
@@ -226,7 +226,7 @@ pub fn run_single_sequence_explorer<I2C, S, const N: usize, const MAX_CMD_LEN: u
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    S: core::fmt::Write,
+    S: core::fmt::Write + Logger,
 {
     let max_len = explorer.max_cmd_len();
     let mut serial_logger = SerialLogger::new(serial, log_level);
