@@ -1,7 +1,7 @@
 use core::fmt::Write;
 use dvcdbg::compat::{I2cCompat, SerialCompat};
 use dvcdbg::prelude::*;
-use dvcdbg::explore::logger::{Logger, LogLevel};
+use dvcdbg::explore::logger::Logger;
 use dvcdbg::compat::util::ERROR_STRING_BUFFER_SIZE;
 use heapless::String;
 

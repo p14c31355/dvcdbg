@@ -108,6 +108,7 @@ where
     logger.log_info_fmt(|buf| write!(buf, "Initializing scan with control byte 0x{:02x}", ctrl_byte));
 
     let initial_found_addrs = internal_scan(i2c, logger, &[ctrl_byte])?;
+
     let mut detected_cmds = check_init_sequence(i2c, logger, ctrl_byte, init_sequence, &initial_found_addrs)?;
 
     logger.log_info_fmt(|buf| write!(buf, "I2C scan with init sequence complete."));
@@ -131,7 +132,7 @@ where
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for &seq_cmd in init_sequence.iter() {
-        match internal_scan(i2c, logger, &[ctrl_byte, seq_cmd]) {
+        match internal_scan(i2c, logger, &[seq_cmd]) {
             Ok(responded_addrs) => {
                 if responded_addrs.iter().any(|addr| initial_found_addrs.contains(addr)) {
                     detected_cmds.push(seq_cmd).map_err(|_| {

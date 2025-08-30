@@ -122,8 +122,7 @@ where
 {
     let mut serial_logger = SerialLogger::new(serial, log_level);
 
-    let mut found_addrs = match crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix)
-    {
+    let mut found_addrs = match crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix) {
         Ok(addrs) => addrs,
         Err(e) => return Err(ExplorerError::DeviceNotFound(e)),
     };
@@ -131,20 +130,16 @@ where
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
-    let successful_seq = match crate::scanner::scan_init_sequence(
-        i2c,
-        &mut serial_logger,
-        prefix,
-        init_sequence,
-    ) {
-        Ok(seq) => seq,
-        Err(e) => {
-            serial_logger.log_error_fmt(|buf| {
-                writeln!(buf, "Failed to scan init sequence: {:?}", e)
-            });
-            return Err(ExplorerError::DeviceNotFound(e));
-        }
-    };
+    let successful_seq: heapless::Vec<u8, MAX_CMD_LEN> =
+        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence) {
+            Ok(seq) => seq,
+            Err(e) => {
+                serial_logger.log_error_fmt(|buf| {
+                    writeln!(buf, "Failed to scan init sequence: {:?}", e)
+                });
+                return Err(ExplorerError::DeviceNotFound(e));
+            }
+        };
 
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[log] Start driver safe init"));
@@ -157,23 +152,23 @@ where
     let mut failed_nodes = [false; N];
 
     loop {
-        let (sequence_bytes, _sequence_len) = match explorer
-            .get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes)
-        {
-            Ok(seq) => seq,
-            Err(ExplorerError::DependencyCycle) => {
-                serial_logger.log_error_fmt(|buf| {
-                    writeln!(buf, "[error] Dependency cycle detected, stopping exploration")
-                });
-                break;
-            }
-            Err(e) => {
-                serial_logger.log_error_fmt(|buf| {
-                    writeln!(buf, "[error] Failed to generate topological sort: {:?}. Aborting.", e)
-                });
-                return Err(e);
-            }
-        };
+        let (sequence_bytes, _sequence_len) =
+            match explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes)
+            {
+                Ok(seq) => seq,
+                Err(ExplorerError::DependencyCycle) => {
+                    serial_logger.log_error_fmt(|buf| {
+                        writeln!(buf, "[error] Dependency cycle detected, stopping exploration")
+                    });
+                    break;
+                }
+                Err(e) => {
+                    serial_logger.log_error_fmt(|buf| {
+                        writeln!(buf, "[error] Failed to generate topological sort: {:?}. Aborting.", e)
+                    });
+                    return Err(e);
+                }
+            };
 
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
@@ -185,15 +180,8 @@ where
                     continue;
                 }
                 let cmd_bytes = &sequence_bytes[i];
-                if execute_and_log_command(
-                    i2c,
-                    &mut executor,
-                    &mut serial_logger,
-                    addr,
-                    cmd_bytes,
-                    i,
-                )
-                .is_err()
+                if execute_and_log_command(i2c, &mut executor, &mut serial_logger, addr, cmd_bytes, i)
+                    .is_err()
                 {
                     failed_nodes[i] = true;
                     all_ok = false;
