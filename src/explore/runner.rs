@@ -143,9 +143,8 @@ where
 
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
 
-    // Explorer 用 executor
     let mut executor =
-        crate::explore::explorer::PrefixExecutor::<MAX_CMD_LEN, MAX_CMD_LEN>::new(prefix, successful_seq);
+        crate::explore::explorer::PrefixExecutor::<MAX_CMD_LEN, MAX_CMD_LEN>::new(found_addrs[0], successful_seq);
 
     let mut failed_nodes = [false; N];
 
