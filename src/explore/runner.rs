@@ -10,12 +10,13 @@ use crate::error::ExplorerError;
 use core::fmt::Write;
 
 use crate::scanner::I2C_MAX_DEVICES;
+use crate::compat::buffer::ERROR_STRING_BUFFER_SIZE;
 
 // Helper for logging info with the [explorer] prefix
 pub fn explorer_log_info<S, F>(logger: &mut SerialLogger<S>, f: F)
 where
     S: core::fmt::Write,
-    F: FnOnce(&mut heapless::String<512>) -> core::fmt::Result,
+    F: FnOnce(&mut heapless::String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
 {
     logger.log_info_fmt(|buf| {
         write!(buf, "[explorer] ")?;
@@ -27,7 +28,7 @@ where
 pub fn explorer_log_error<S, F>(logger: &mut SerialLogger<S>, f: F)
 where
     S: core::fmt::Write,
-    F: FnOnce(&mut heapless::String<512>) -> core::fmt::Result,
+    F: FnOnce(&mut heapless::String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
 {
     logger.log_error_fmt(|buf| {
         write!(buf, "[explorer] ")?;
@@ -39,7 +40,7 @@ where
 pub fn runner_log_error<S, F>(logger: &mut SerialLogger<S>, f: F)
 where
     S: core::fmt::Write,
-    F: FnOnce(&mut heapless::String<512>) -> core::fmt::Result,
+    F: FnOnce(&mut heapless::String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
 {
     logger.log_error_fmt(|buf| {
         write!(buf, "[error] ")?;

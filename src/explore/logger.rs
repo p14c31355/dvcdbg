@@ -3,6 +3,7 @@
 //! Defines the logging level for scanner functions.
 
 use heapless::String;
+use crate::compat::buffer::ERROR_STRING_BUFFER_SIZE;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogLevel {
@@ -15,16 +16,16 @@ pub enum LogLevel {
 pub trait Logger {
     fn log_info_fmt<F>(&mut self, f: F)
     where
-        F: FnOnce(&mut String<512>) -> core::fmt::Result;
+        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result;
     fn log_error_fmt<F>(&mut self, f: F)
     where
-        F: FnOnce(&mut String<512>) -> core::fmt::Result;
+        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result;
 }
 
 /// Immediate-write serial logger, writes directly to the underlying serial interface.
 pub struct SerialLogger<'a, S: core::fmt::Write> {
     writer: &'a mut S,
-    buffer: String<512>,
+    buffer: String<ERROR_STRING_BUFFER_SIZE>,
     log_level: LogLevel,
 }
 
@@ -41,7 +42,7 @@ impl<'a, S: core::fmt::Write> SerialLogger<'a, S> {
 impl<'a, S: core::fmt::Write> Logger for SerialLogger<'a, S> {
     fn log_info_fmt<F>(&mut self, f: F)
     where
-        F: FnOnce(&mut String<512>) -> core::fmt::Result,
+        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
     {
         if self.log_level == LogLevel::Verbose || self.log_level == LogLevel::Normal {
             self.buffer.clear();
@@ -53,7 +54,7 @@ impl<'a, S: core::fmt::Write> Logger for SerialLogger<'a, S> {
 
     fn log_error_fmt<F>(&mut self, f: F)
     where
-        F: FnOnce(&mut String<512>) -> core::fmt::Result,
+        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
     {
         if self.log_level == LogLevel::Verbose || self.log_level == LogLevel::Normal {
             self.buffer.clear();
@@ -76,12 +77,12 @@ pub struct NullLogger;
 impl Logger for NullLogger {
     fn log_info_fmt<F>(&mut self, _fmt: F)
     where
-        F: FnOnce(&mut String<512>) -> Result<(), core::fmt::Error>,
+        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> Result<(), core::fmt::Error>,
     {
     }
     fn log_error_fmt<F>(&mut self, _fmt: F)
     where
-        F: FnOnce(&mut String<512>) -> Result<(), core::fmt::Error>,
+        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> Result<(), core::fmt::Error>,
     {
     }
 }
