@@ -122,52 +122,58 @@ where
 {
     let mut serial_logger = SerialLogger::new(serial, log_level);
 
-    let mut found_addrs =
-        crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix).map_err(ExplorerError::DeviceNotFound)?;
+    // I2C アドレススキャン
+    let mut found_addrs = crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix)
+        .map_err(ExplorerError::DeviceNotFound)?;
     if found_addrs.is_empty() {
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
+    // 初期化シーケンスを送信して ACK を確認
     let successful_seq: heapless::Vec<u8, MAX_CMD_LEN> =
-        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence) {
-            Ok(seq) => seq,
-            Err(e) => {
-                serial_logger.log_error_fmt(|buf| writeln!(buf, "Failed to scan init sequence: {:?}", e));
-                return Err(ExplorerError::DeviceNotFound(e));
-            }
-        };
+        crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence)
+            .map_err(|e| {
+                serial_logger.log_error_fmt(|buf| {
+                    writeln!(buf, "Failed to scan init sequence: {:?}", e)
+                });
+                ExplorerError::DeviceNotFound(e)
+            })?;
+
+    let successful_seq_len = successful_seq.len();
 
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
-    serial_logger.log_info_fmt(|buf| writeln!(buf, "[log] Start driver safe init"));
 
+    // Explorer 用 executor
     let mut executor =
         crate::explore::explorer::PrefixExecutor::<MAX_CMD_LEN, MAX_CMD_LEN>::new(prefix, successful_seq);
 
     let mut failed_nodes = [false; N];
 
     loop {
-        let (sequence_bytes, _sequence_len) = match explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(
-            &mut serial_logger,
-            &failed_nodes,
-        ) {
-            Ok(seq) => seq,
-            Err(ExplorerError::DependencyCycle) => {
-                serial_logger.log_error_fmt(|buf| {
-                    writeln!(buf, "[error] Dependency cycle detected, stopping exploration")
-                });
-                break;
-            }
-            Err(e) => {
-                serial_logger.log_error_fmt(|buf| {
-                    writeln!(buf, "[error] Failed to generate topological sort: {:?}. Aborting.", e)
-                });
-                return Err(e);
-            }
-        };
+        let (sequence_bytes, _sequence_len) =
+            match explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes) {
+                Ok(seq) => seq,
+                Err(ExplorerError::DependencyCycle) => {
+                    serial_logger.log_error_fmt(|buf| {
+                        writeln!(buf, "[error] Dependency cycle detected, stopping exploration")
+                    });
+                    break;
+                }
+                Err(e) => {
+                    serial_logger.log_error_fmt(|buf| {
+                        writeln!(buf, "[error] Failed to generate topological sort: {:?}. Aborting.", e)
+                    });
+                    return Err(e);
+                }
+            };
 
-        let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
+        let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> =
+            heapless::Vec::new();
 
         for (addr_idx, &addr) in found_addrs.iter().enumerate() {
+            let addr_7bit = addr & 0x7F;
+            serial_logger.log_info_fmt(|buf| write!(buf, "Sending commands to 0x{:02X}", addr_7bit));
+
             let mut all_ok = true;
 
             for i in 0..explorer.sequence.len() {
@@ -175,14 +181,18 @@ where
                     continue;
                 }
                 let cmd_bytes = &sequence_bytes[i];
-                if execute_and_log_command(i2c, &mut executor, &mut serial_logger, addr, cmd_bytes, i)
-                    .is_err()
+
+                if execute_and_log_command(i2c, &mut executor, &mut serial_logger, addr_7bit, cmd_bytes, i).is_err()
                 {
-                    failed_nodes[i] = true;
+                    serial_logger.log_info_fmt(|buf| write!(buf, "[warn] Command {} failed on 0x{:02X}", i, addr_7bit));
                     all_ok = false;
+                    if i >= successful_seq_len {
+                        failed_nodes[i] = true;
+                    }
                     break;
                 }
             }
+
             if all_ok {
                 addrs_to_remove.push(addr_idx).ok();
             }
@@ -197,8 +207,10 @@ where
         }
     }
 
+    serial_logger.log_info_fmt(|buf| writeln!(buf, "[I] Explorer finished"));
     Ok(())
 }
+
 
 pub fn run_single_sequence_explorer<I2C, S, const N: usize, const MAX_CMD_LEN: usize>(
     explorer: &Explorer<'_, N>,
