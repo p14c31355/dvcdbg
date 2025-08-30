@@ -220,10 +220,11 @@ fn log_sequence_summary<W: core::fmt::Write, const N: usize>(
 ) {
     let mut missing_cmds = heapless::Vec::<u8, N>::new();
 
-    detected_cmds.sort_unstable();
+    let mut sorted_detected_cmds = detected_cmds.clone();
+    sorted_detected_cmds.sort_unstable();
 
     for &cmd in expected_sequence.iter() {
-        if detected_cmds.binary_search(&cmd).is_err() {
+        if sorted_detected_cmds.binary_search(&cmd).is_err() {
             if missing_cmds.push(cmd).is_err() {
                 writeln!(
                     serial,
