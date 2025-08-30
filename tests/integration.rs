@@ -1,6 +1,9 @@
 use core::fmt::Write;
 use dvcdbg::compat::{I2cCompat, SerialCompat};
 use dvcdbg::prelude::*;
+use dvcdbg::explore::logger::{Logger, LogLevel};
+use dvcdbg::compat::util::ERROR_STRING_BUFFER_SIZE;
+use heapless::String;
 
 // -----------------------------
 // Dummy implementations
@@ -18,8 +21,36 @@ impl SerialCompat for DummySerial {
 }
 
 impl core::fmt::Write for DummySerial {
-    fn write_str(&mut self, _s: &str) -> core::fmt::Result {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        // For testing purposes, we can print to stdout to see what would be logged
+        print!("{}", s);
         Ok(())
+    }
+}
+
+impl Logger for DummySerial {
+    fn log_info_fmt<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
+    {
+        let mut buffer = String::new();
+        if f(&mut buffer).is_ok() {
+            let _ = self.write_str("[I] ");
+            let _ = self.write_str(&buffer);
+            let _ = self.write_str("\n");
+        }
+    }
+
+    fn log_error_fmt<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
+    {
+        let mut buffer = String::new();
+        if f(&mut buffer).is_ok() {
+            let _ = self.write_str("[E] ");
+            let _ = self.write_str(&buffer);
+            let _ = self.write_str("\n");
+        }
     }
 }
 
@@ -65,7 +96,6 @@ fn test_full_stack() {
             &mut i2c,
             &mut serial,
             0x00,
-            dvcdbg::explore::logger::LogLevel::Verbose
         )
         .is_ok()
     );
