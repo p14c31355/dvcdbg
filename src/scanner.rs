@@ -137,7 +137,7 @@ where
         Ok(addrs) => addrs,
         Err(e) => {
             logger.log_error_fmt(|buf| write!(buf, "Failed to scan I2C: {:?}\r\n", e));
-            loop {} 
+            return Err(e);
         }
     };
 
