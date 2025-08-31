@@ -362,7 +362,6 @@ pub struct PermutationIter<'a, const N: usize> {
     pub explorer: &'a Explorer<'a, N>,
     pub total_nodes: usize,
     pub current_permutation: Vec<&'a [u8], N>,
-    // pub used: Vec<bool, N>, // REMOVE THIS LINE
     pub used: Vec<bool, N>,
     pub in_degree: Vec<u8, N>,
     pub adj_list_rev: Vec<heapless::Vec<u8, N>, N>,
@@ -429,12 +428,15 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             return Err(ExplorerError::DependencyCycle);
         }
 
+        let mut used = Vec::new();
+        used.resize(total_nodes, false)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
+
         Ok(Self {
             explorer,
             total_nodes,
             current_permutation: Vec::new(),
-            // used: Vec::new(), // REMOVE THIS LINE
-            used_mask: 0, // ADD THIS LINE: Initialize the bitmask to 0
+            used,
             in_degree,
             adj_list_rev,
             path_stack: Vec::new(),
@@ -455,10 +457,10 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
 
         // Iterate through all possible nodes (0 to total_nodes-1)
         for i in start_idx..self.total_nodes {
-            // Check if node 'i' is NOT used (bit is 0) AND its in-degree is 0
-            if ((self.used_mask >> i) & 1) == 0 && self.in_degree[i] == 0 {
-                // Mark node 'i' as used (set its bit)
-                self.used_mask |= 1 << i;
+            // Check if node 'i' is NOT used AND its in-degree is 0
+            if !self.used[i] && self.in_degree[i] == 0 {
+                // Mark node 'i' as used
+                self.used[i] = true;
                 self.current_permutation
                     .push(self.explorer.sequence[i].bytes)
                     .ok();
@@ -478,8 +480,8 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         if let Some(last_added_idx_u8) = self.path_stack.pop() {
             let last_added_idx = last_added_idx_u8 as usize;
             self.current_permutation.pop();
-            // Unmark node 'last_added_idx' as used (clear its bit)
-            self.used_mask &= !(1 << last_added_idx);
+            // Unmark node 'last_added_idx' as used
+            self.used[last_added_idx] = false;
             self.loop_start_indices.pop();
 
             for &neighbor_u8 in self.adj_list_rev[last_added_idx].iter() {

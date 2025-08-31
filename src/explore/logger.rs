@@ -5,6 +5,8 @@
 use crate::compat::util::ERROR_STRING_BUFFER_SIZE;
 use heapless::String;
 
+static mut LOG_BUFFER: heapless::String<ERROR_STRING_BUFFER_SIZE> = heapless::String::new();
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogLevel {
     Verbose,
@@ -46,13 +48,15 @@ where
         F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
     {
         if matches!(self.log_level, LogLevel::Verbose | LogLevel::Normal) {
-            // Create a temporary buffer on the stack for formatting, if needed by 'f'
-            // This buffer is only alive for the duration of the 'f' call.
-            let mut temp_buffer = String::<ERROR_STRING_BUFFER_SIZE>::new();
-            if f(&mut temp_buffer).is_ok() {
-                let _ = self.writer.write_str("[I] ");
-                let _ = self.writer.write_str(&temp_buffer);
-                let _ = self.writer.write_str("\r\n");
+            unsafe {
+                let log_buffer_ptr: *mut String<ERROR_STRING_BUFFER_SIZE> = &raw mut LOG_BUFFER;
+                (*log_buffer_ptr).clear();
+
+                if f(&mut *log_buffer_ptr).is_ok() {
+                    let _ = self.writer.write_str("[I] ");
+                    let _ = self.writer.write_str(&*log_buffer_ptr);
+                    let _ = self.writer.write_str("\r\n");
+                }
             }
         }
     }
@@ -62,12 +66,14 @@ where
         F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
     {
         if matches!(self.log_level, LogLevel::Verbose | LogLevel::Normal) {
-            // Create a temporary buffer on the stack for formatting, if needed by 'f'
-            let mut temp_buffer = String::<ERROR_STRING_BUFFER_SIZE>::new();
-            if f(&mut temp_buffer).is_ok() {
-                let _ = self.writer.write_str("[E] ");
-                let _ = self.writer.write_str(&temp_buffer);
-                let _ = self.writer.write_str("\r\n");
+            unsafe {
+                let log_buffer_ptr: *mut String<ERROR_STRING_BUFFER_SIZE> = &raw mut LOG_BUFFER;
+                (*log_buffer_ptr).clear();
+                if f(&mut *log_buffer_ptr).is_ok() {
+                    let _ = self.writer.write_str("[E] ");
+                    let _ = self.writer.write_str(&*log_buffer_ptr);
+                    let _ = self.writer.write_str("\r\n");
+                }
             }
         }
     }
