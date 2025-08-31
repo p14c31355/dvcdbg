@@ -76,7 +76,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
                     last_error = Some(compat_err);
-                    writeln!(writer, "[I2C retry error] {compat_err:?}").ok();
+                    writeln!(writer, "[I2C retry error] {}", compat_err).ok();
                     Self::short_delay();
                 }
             }
@@ -111,7 +111,7 @@ where
             Ok(())
         }
         Err(e) => {
-            writeln!(writer, "[explorer] FAILED: {:?}", e).ok();
+            writeln!(writer, "[explorer] FAILED: {}", e).ok();
             Err(e.into())
         }
     }

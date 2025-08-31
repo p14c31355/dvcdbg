@@ -29,7 +29,7 @@ where
     let found_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addrs) => addrs,
         Err(e) => {
-            writeln!(serial, "[error] Failed to scan I2C: {:?}", e).ok();
+            writeln!(serial, "[error] Failed to scan I2C: {}", e).ok();
             return Err(ExplorerError::ExecutionFailed(e.into()));
         }
     };
@@ -46,7 +46,7 @@ where
     ) {
         Ok(seq) => seq,
         Err(e) => {
-            writeln!(serial, "[error] Failed to scan init sequence: {:?}", e).ok();
+            writeln!(serial, "[error] Failed to scan init sequence: {}", e).ok();
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
@@ -108,7 +108,7 @@ where
         match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(i2c, serial, prefix, init_sequence) { // Use INIT_SEQUENCE_LEN
             Ok(seq) => seq,
             Err(e) => {
-                writeln!(serial, "Failed to scan init sequence: {:?}", e).ok();
+                writeln!(serial, "Failed to scan init sequence: {}", e).ok();
                 return Err(ExplorerError::ExecutionFailed(e.into()));
             }
         };
@@ -141,7 +141,7 @@ where
                 Err(e) => {
                     writeln!(
                         serial,
-                        "[error] Failed to generate topological sort: {:?}. Aborting.",
+                        "[error] Failed to generate topological sort: {}. Aborting.",
                         e
                     ).ok();
                     return Err(e);
