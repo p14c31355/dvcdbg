@@ -251,8 +251,7 @@ array to exclude certain nodes and their dependencies from the sort.
 
 # Returns
 
-Returns `Ok((sequence_bytes, sequence_len_per_node))` on success, where `sequence_bytes`
-is a `Vec` of command byte `Vec`s representing one valid topological sort, and
+is a `Vec` of command byte slices representing one valid topological sort, and
 `sequence_len_per_node` is a `Vec` of the corresponding lengths.
 
 Returns `Err(ExplorerError)` if a cycle is detected, a buffer overflows, or a dependency index is invalid.
