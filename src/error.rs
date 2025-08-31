@@ -41,25 +41,6 @@ pub enum I2cError {
     Bus,
 }
 
-impl fmt::Display for I2cError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            I2cError::Nack => f.write_str("Nack"),
-            I2cError::ArbitrationLost => f.write_str("ArbitrationLost"),
-            I2cError::Bus => f.write_str("BusError"),
-        }
-    }
-}
-
-impl From<crate::error::ErrorKind> for ExplorerError {
-    fn from(error: crate::error::ErrorKind) -> Self {
-        match error {
-            crate::error::ErrorKind::I2c(i2c_err) => ExplorerError::DeviceNotFound(i2c_err),
-            _ => ExplorerError::ExecutionFailed,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpiError {
     ModeFault,
@@ -119,7 +100,7 @@ impl fmt::Display for ErrorKind {
 }
 
 /// Errors that can occur during exploration of command sequences.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ExplorerError {
     /// The provided sequence contained more commands than supported by the capacity N.
     TooManyCommands,
@@ -128,13 +109,13 @@ pub enum ExplorerError {
     /// No valid I2C addresses were found for any command sequence.
     NoValidAddressesFound,
     /// An I2C command execution failed.
-    ExecutionFailed,
+    ExecutionFailed(crate::error::ErrorKind),
     /// An internal buffer overflowed.
     BufferOverflow,
     /// A dependency index is out of bounds.
     InvalidDependencyIndex,
     /// An I2C scan operation failed.
-    DeviceNotFound(I2cError), // I2cError を直接受け取るように変更
+    DeviceNotFound(crate::error::ErrorKind),
 }
 
 /// Errors that can occur during command execution.
@@ -151,8 +132,10 @@ pub enum ExecutorError {
 impl From<ExecutorError> for ExplorerError {
     fn from(error: ExecutorError) -> Self {
         match error {
-            ExecutorError::I2cError(_) => ExplorerError::ExecutionFailed,
-            ExecutorError::ExecFailed => ExplorerError::ExecutionFailed,
+            ExecutorError::I2cError(kind) => ExplorerError::ExecutionFailed(kind),
+            ExecutorError::ExecFailed => {
+                ExplorerError::ExecutionFailed(crate::error::ErrorKind::Unknown)
+            }
             ExecutorError::BufferOverflow => ExplorerError::BufferOverflow,
         }
     }
@@ -164,10 +147,12 @@ impl fmt::Display for ExplorerError {
             ExplorerError::TooManyCommands => f.write_str("TooManyCommands"),
             ExplorerError::DependencyCycle => f.write_str("DependencyCycle"),
             ExplorerError::NoValidAddressesFound => f.write_str("NoValidAddressesFound"),
-            ExplorerError::ExecutionFailed => f.write_str("ExecutionFailed"),
+            ExplorerError::ExecutionFailed(kind) => {
+                write!(f, "ExecutionFailed: {}", kind)
+            }
             ExplorerError::BufferOverflow => f.write_str("BufferOverflow"),
             ExplorerError::InvalidDependencyIndex => f.write_str("InvalidDependencyIndex"),
-            ExplorerError::DeviceNotFound(e) => write!(f, "DeviceNotFound: {}", e), // 表示を更新
+            ExplorerError::DeviceNotFound(kind) => write!(f, "DeviceNotFound: {}", kind),
         }
     }
 }
