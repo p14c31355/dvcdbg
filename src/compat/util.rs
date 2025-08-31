@@ -101,7 +101,7 @@ impl<const N: usize, const S: usize> BitFlags<N, S> {
 const UART_CHUNK_SIZE: usize = 32;
 
 pub fn prevent_garbled<W: core::fmt::Write>(serial: &mut W, args: core::fmt::Arguments) {
-    let mut buffer = heapless::String::<64>::new(); // 適宜バッファサイズ調整
+    let mut buffer = heapless::String::<256>::new();
     core::fmt::Write::write_fmt(&mut buffer, args).ok();
 
     let mut start = 0;
