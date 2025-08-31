@@ -407,7 +407,7 @@ pub struct PermutationIter<'a, const N: usize> {
     pub total_nodes: usize,
     pub current_permutation: [&'a [u8]; N],
     pub current_permutation_len: u8,
-    pub used: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE>,
+    pub used: util::BitFlags<N>,
     pub in_degree: [u8; N],
     pub adj_list_rev: [u128; N],
     pub path_stack: [u8; N],
