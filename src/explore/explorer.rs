@@ -15,8 +15,10 @@ pub struct CmdNode {
     pub deps: &'static [u8],
 }
 
-pub trait CmdExecutor<I2C, const MAX_BYTES_PER_CMD: usize> {
-    fn exec<L: crate::explore::logger::Logger + core::fmt::Write>(
+pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> { // Use CMD_BUFFER_SIZE
+    fn exec<
+        L: crate::explore::logger::Logger + core::fmt::Write,
+    >(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
@@ -26,15 +28,15 @@ pub trait CmdExecutor<I2C, const MAX_BYTES_PER_CMD: usize> {
 }
 
 /// A command executor that prepends a prefix to each command.
-pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const BUF_CAP: usize> {
-    buffer: Vec<u8, BUF_CAP>,
+pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> { // Use INIT_SEQUENCE_LEN and CMD_BUFFER_SIZE
+    buffer: Vec<u8, CMD_BUFFER_SIZE>, // Use CMD_BUFFER_SIZE
     initialized_addrs: [bool; I2C_ADDRESS_COUNT],
     prefix: u8,
     init_sequence: heapless::Vec<u8, INIT_SEQUENCE_LEN>, // Capacity is the length of the init sequence
 }
 
-impl<const INIT_SEQUENCE_LEN: usize, const BUF_CAP: usize>
-    PrefixExecutor<INIT_SEQUENCE_LEN, BUF_CAP>
+impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
+    PrefixExecutor<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>
 {
     pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, INIT_SEQUENCE_LEN>) -> Self {
         Self {
@@ -118,8 +120,8 @@ where
     }
 }
 
-impl<I2C, const INIT_SEQ_SIZE: usize, const MAX_BYTES_PER_CMD: usize>
-    CmdExecutor<I2C, MAX_BYTES_PER_CMD> for PrefixExecutor<INIT_SEQ_SIZE, MAX_BYTES_PER_CMD>
+impl<I2C, const INIT_SEQ_SIZE: usize, const CMD_BUFFER_SIZE: usize> // Use CMD_BUFFER_SIZE
+    CmdExecutor<I2C, CMD_BUFFER_SIZE> for PrefixExecutor<INIT_SEQ_SIZE, CMD_BUFFER_SIZE> // Use CMD_BUFFER_SIZE
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -187,6 +189,7 @@ pub struct ExploreResult {
 }
 
 impl<'a, const N: usize> Explorer<'a, N> {
+    // This function calculates the max length of a single command's byte array
     pub const fn max_cmd_len(&self) -> usize {
         let mut max_len = 0;
         let mut i = 0;
@@ -200,7 +203,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         max_len
     }
 
-    pub fn explore<I2C, E, L, const MAX_BYTES_PER_CMD: usize>(
+    pub fn explore<I2C, E, L, const CMD_BUFFER_SIZE: usize>( // Use CMD_BUFFER_SIZE
         &self,
         i2c: &mut I2C,
         executor: &mut E,
@@ -209,7 +212,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
     where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-        E: CmdExecutor<I2C, MAX_BYTES_PER_CMD>,
+        E: CmdExecutor<I2C, CMD_BUFFER_SIZE>, // Use CMD_BUFFER_SIZE
         L: crate::explore::logger::Logger + core::fmt::Write,
     {
         if self.sequence.is_empty() {
