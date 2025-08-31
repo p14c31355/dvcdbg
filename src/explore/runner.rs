@@ -54,7 +54,7 @@ where
     writeln!(serial, "[log] Start driver safe init").ok();
 
     let mut executor =
-        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, successful_seq); // Use calculated size
+        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, &successful_seq); // Use calculated size
 
     let exploration_result =
         explorer.explore::<_, _, _, CMD_BUFFER_SIZE>(i2c, &mut executor, serial)?; // Use CMD_BUFFER_SIZE
@@ -121,7 +121,7 @@ where
         crate::explore::explorer::PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(
             // Use calculated size
             found_addrs[0],
-            successful_seq,
+            &successful_seq,
         );
 
     let mut failed_nodes = [false; N];
@@ -230,8 +230,9 @@ where
     util::write_bytes_hex_fmt(serial, &[target_addr]).ok();
     writeln!(serial, "...").ok();
 
+    let empty_seq: &[u8] = &[];
     let mut executor =
-        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, heapless::Vec::new()); // Use calculated size
+        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, empty_seq); // Use calculated size
 
     for i in 0..sequence_len {
         execute_and_log_command(
