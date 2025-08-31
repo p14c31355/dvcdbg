@@ -158,24 +158,32 @@ where
     let mut detected_cmds = heapless::Vec::<u8, N>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
-    for &seq_cmd in init_sequence.iter() {
-        match internal_scan(i2c, logger, &[ctrl_byte, seq_cmd]) {
-            Ok(responded_addrs) => {
-                if responded_addrs
-                    .iter()
-                    .any(|addr| initial_found_addrs.contains(addr))
-                {
-                    detected_cmds.push(seq_cmd).map_err(|_| {
+    let mut combined_sequence = heapless::Vec::<u8, I2C_MAX_DEVICES>::new();
+    combined_sequence.push(ctrl_byte).map_err(|_| {
+        crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+    })?;
+    combined_sequence.extend_from_slice(init_sequence).map_err(|_| {
+        crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+    })?;
+
+    match internal_scan(i2c, logger, &combined_sequence) {
+        Ok(responded_addrs) => {
+            if responded_addrs
+                .iter()
+                .any(|addr| initial_found_addrs.contains(addr))
+            {
+                if let Some(&first_byte) = init_sequence.first() {
+                    detected_cmds.push(first_byte).map_err(|_| {
                         crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
                     })?;
                 }
             }
-            Err(e) => {
-                logger.log_error_fmt(|buf| {
-                    write!(buf, "Scan failed for command 0x{:02x}: {:?}", seq_cmd, e)
-                });
-                last_error = Some(e);
-            }
+        }
+        Err(e) => {
+            logger.log_error_fmt(|buf| {
+                write!(buf, "Scan failed for init sequence: {:?}", e)
+            });
+            last_error = Some(e);
         }
     }
 
