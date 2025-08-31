@@ -63,7 +63,7 @@ pub struct BitFlags<const N: usize> {
     bytes: [u8; (N + 7) / 8],
 }
 
-impl<const N: usize, const S: usize> BitFlags<N, S> {
+impl<const N: usize> BitFlags<N> {
     pub fn new() -> Self {
         Self { bytes: [0u8; S] }
     }
