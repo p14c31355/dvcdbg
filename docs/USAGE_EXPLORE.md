@@ -251,7 +251,7 @@ array to exclude certain nodes and their dependencies from the sort.
 
 # Returns
 
-The first element of the returned tuple is a `Vec` of command byte slices representing one valid topological sort, and
-`sequence_len_per_node` is a `Vec` of the corresponding lengths.
+The first element of the returned tuple is a `heapless::Vec` of command byte slices representing one valid topological sort, and
+`sequence_len_per_node` is a `heapless::Vec` of the corresponding lengths.
 
 Returns `Err(ExplorerError)` if a cycle is detected, a buffer overflows, or a dependency index is invalid.
