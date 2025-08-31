@@ -3,7 +3,7 @@
 use crate::explore::explorer::*;
 use crate::explore::logger::*;
 
-use crate::compat::err_compat::HalErrorExt; // HalErrorExt をインポート
+ // HalErrorExt をインポート
 use crate::compat::util;
 use crate::error::ExplorerError;
 

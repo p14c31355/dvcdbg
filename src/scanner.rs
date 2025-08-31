@@ -1,7 +1,6 @@
 //! Scanner utilities for I2C bus device discovery and analysis.
 
 use crate::compat::HalErrorExt;
-use crate::error::ExplorerError;
 use crate::explore::logger::Logger;
 use core::fmt::Write;
 
