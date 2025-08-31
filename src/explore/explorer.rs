@@ -523,20 +523,29 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
         }
 
         loop {
+            // If we have a complete permutation, return it and prepare for the next one.
             if self.current_permutation.len() == self.total_nodes {
-                let full_sequence = self.current_permutation.clone();
+                // Optimize SRAM: Use core::mem::take to move the Vec out, avoiding a clone.
+                // This leaves an empty Vec in its place, which will be refilled by subsequent
+                // calls to try_extend or backtrack.
+                let full_sequence = core::mem::take(&mut self.current_permutation);
+
+                // Backtrack to find the next permutation
                 if !self.backtrack() {
                     self.is_done = true;
                 }
                 return Some(full_sequence);
             }
 
+            // Try to extend the current partial permutation
             if self.try_extend() {
+                // Successfully extended, continue building the permutation
                 continue;
             } else {
+                // Could not extend, backtrack
                 if !self.backtrack() {
                     self.is_done = true;
-                    return None;
+                    return None; // No more permutations
                 }
             }
         }
