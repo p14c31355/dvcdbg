@@ -141,6 +141,16 @@ impl From<ExecutorError> for ExplorerError {
     }
 }
 
+impl fmt::Display for ExecutorError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExecutorError::I2cError(kind) => write!(f, "I2cError: {}", kind),
+            ExecutorError::ExecFailed => f.write_str("ExecFailed"),
+            ExecutorError::BufferOverflow => f.write_str("BufferOverflow"),
+        }
+    }
+}
+
 impl fmt::Display for ExplorerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

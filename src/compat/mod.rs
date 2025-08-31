@@ -1,10 +1,9 @@
 //! compat/mod.rs
 pub mod adapt;
-pub mod ascii;
-pub mod buffer;
 pub mod err_compat;
 pub mod i2c_compat;
 pub mod serial_compat;
+pub mod util;
 
 pub use adapt::FmtWriteAdapter;
 pub use err_compat::HalErrorExt;

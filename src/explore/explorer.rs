@@ -1,6 +1,7 @@
 // explorer.rs
 
 use crate::compat::err_compat::HalErrorExt;
+use crate::compat::util;
 use crate::error::{ExecutorError, ExplorerError};
 use core::fmt::Write;
 
@@ -11,60 +12,62 @@ const I2C_ADDRESS_COUNT: usize = 128;
 #[derive(Copy, Clone)]
 pub struct CmdNode {
     pub bytes: &'static [u8],
-    pub deps: &'static [usize],
+    pub deps: &'static [u8],
 }
 
-pub trait CmdExecutor<I2C, const BUF_CAP: usize> {
-    fn exec<S>(
+pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
+    // Use CMD_BUFFER_SIZE
+    fn exec<W: core::fmt::Write>(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
         cmd: &[u8],
-        logger: &mut S,
-    ) -> Result<(), ExecutorError>
-    where
-        S: core::fmt::Write + crate::explore::logger::Logger;
+        writer: &mut W,
+    ) -> Result<(), ExecutorError>;
 }
 
 /// A command executor that prepends a prefix to each command.
-pub struct PrefixExecutor<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> {
+pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> {
+    // Use INIT_SEQUENCE_LEN and CMD_BUFFER_SIZE
+    buffer: Vec<u8, CMD_BUFFER_SIZE>, // Use CMD_BUFFER_SIZE
+    initialized_addrs: [bool; I2C_ADDRESS_COUNT],
     prefix: u8,
-    init_sequence: heapless::Vec<u8, INIT_SEQ_SIZE>,
-    initialized_addrs: [bool; 128],
-    buffer: heapless::Vec<u8, BUF_CAP>,
+    init_sequence: heapless::Vec<u8, INIT_SEQUENCE_LEN>, // Capacity is the length of the init sequence
 }
 
-impl<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQ_SIZE, BUF_CAP> {
-    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, INIT_SEQ_SIZE>) -> Self {
+impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
+    PrefixExecutor<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>
+{
+    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, INIT_SEQUENCE_LEN>) -> Self {
         Self {
+            buffer: Vec::new(),
+            initialized_addrs: [false; I2C_ADDRESS_COUNT],
             prefix,
             init_sequence,
-            initialized_addrs: [false; 128],
-            buffer: heapless::Vec::new(),
         }
     }
 
     // Private helper for short delay
     fn short_delay() {
-        for _ in 0..8_000 {
+        for _ in 0..1_000 {
             core::hint::spin_loop();
         }
     }
 
     // Private helper for write with retry
-    fn write_with_retry<I2C, S>(
+    fn write_with_retry<I2C, W>(
         i2c: &mut I2C,
         addr: u8,
         bytes: &[u8],
-        logger: &mut S,
+        writer: &mut W,
     ) -> Result<(), crate::error::ErrorKind>
     where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-        S: core::fmt::Write + crate::explore::logger::Logger,
+        W: core::fmt::Write,
     {
         let mut last_error = None;
-        for _attempt in 0..10 {
+        for _attempt in 0..2 {
             match i2c.write(addr, bytes) {
                 Ok(_) => {
                     Self::short_delay();
@@ -73,7 +76,7 @@ impl<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQ_S
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
                     last_error = Some(compat_err);
-                    logger.log_error_fmt(|buf| writeln!(buf, "[I2C retry error] {compat_err:?}"));
+                    writeln!(writer, "[I2C retry error] {}", compat_err).ok();
                     Self::short_delay();
                 }
             }
@@ -82,10 +85,10 @@ impl<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQ_S
     }
 }
 
-pub fn execute_and_log_command<I2C, E, L, const BUF_CAP: usize>(
+pub fn execute_and_log_command<I2C, E, W, const MAX_BYTES_PER_CMD: usize>(
     i2c: &mut I2C,
     executor: &mut E,
-    logger: &mut L,
+    writer: &mut W,
     addr: u8,
     cmd_bytes: &[u8],
     cmd_idx: usize,
@@ -93,71 +96,77 @@ pub fn execute_and_log_command<I2C, E, L, const BUF_CAP: usize>(
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    E: CmdExecutor<I2C, BUF_CAP>,
-    L: crate::explore::logger::Logger + core::fmt::Write,
+    E: CmdExecutor<I2C, MAX_BYTES_PER_CMD>,
+    W: core::fmt::Write,
 {
-    logger.log_info_fmt(|buf| {
-        writeln!(
-            buf,
-            "[explorer] Sending node {} bytes: {:02X?} ...",
-            cmd_idx, cmd_bytes
-        )
-    });
+    writeln!(
+        writer,
+        "[explorer] Sending node {} bytes: {:02X?} ...",
+        cmd_idx, cmd_bytes
+    ).ok();
 
-    match executor.exec(i2c, addr, cmd_bytes, logger) {
+    match executor.exec(i2c, addr, cmd_bytes, writer) {
         Ok(_) => {
-            logger.log_info_fmt(|buf| writeln!(buf, "[explorer] OK"));
+            writeln!(writer, "[explorer] OK").ok();
             Ok(())
         }
         Err(e) => {
-            logger.log_error_fmt(|buf| writeln!(buf, "[explorer] FAILED: {:?}", e));
+            writeln!(writer, "[explorer] FAILED: {}", e).ok();
             Err(e.into())
         }
     }
 }
 
-impl<I2C, const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> CmdExecutor<I2C, BUF_CAP>
-    for PrefixExecutor<INIT_SEQ_SIZE, BUF_CAP>
+impl<I2C, const INIT_SEQ_SIZE: usize, const CMD_BUFFER_SIZE: usize>
+    CmdExecutor<I2C, CMD_BUFFER_SIZE> for PrefixExecutor<INIT_SEQ_SIZE, CMD_BUFFER_SIZE>
+// Use CMD_BUFFER_SIZE
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
-    fn exec<S>(
+    fn exec<W>(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
         cmd: &[u8],
-        logger: &mut S,
+        writer: &mut W,
     ) -> Result<(), ExecutorError>
     where
-        S: core::fmt::Write + crate::explore::logger::Logger,
+        W: core::fmt::Write,
     {
         let addr_idx = addr as usize;
 
         if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
-            logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
-
-            for &c in self.init_sequence.iter() {
-                let command = [self.prefix, c];
-                Self::write_with_retry(i2c, addr, &command, logger) // Call the private method
-                    .map_err(ExecutorError::I2cError)?;
-                Self::short_delay(); // Call the private associated function
+            write!(writer, "[Info] I2C initializing for ").ok();
+            util::write_bytes_hex_fmt(writer, &[addr]).ok();
+            writeln!(writer, "...").ok();
+            let ack_ok = Self::write_with_retry(i2c, addr, &[], writer).is_ok();
+            if ack_ok {
+                // self.prefix = addr; // Removed this line as it mutates the fixed prefix
+                write!(writer, "[Info] Device found at ").ok();
+                util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                writeln!(writer, ", sending init sequence...").ok();
+                for &c in self.init_sequence.iter() {
+                    let command = [self.prefix, c]; // Uses the original self.prefix
+                    Self::write_with_retry(i2c, addr, &command, writer)
+                        .map_err(ExecutorError::I2cError)?;
+                    Self::short_delay();
+                }
+                self.initialized_addrs[addr_idx] = true;
+                write!(writer, "[Info] I2C initialized for ").ok();
+                util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                writeln!(writer).ok();
             }
-
-            self.initialized_addrs[addr_idx] = true;
-            logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initialized for 0x{addr:02X}"));
         }
-
+        let prefix = self.prefix; // Changed to use the instance's prefix
         self.buffer.clear();
         self.buffer
-            .push(self.prefix)
+            .push(prefix)
             .map_err(|_| ExecutorError::BufferOverflow)?;
         self.buffer
             .extend_from_slice(cmd)
             .map_err(|_| ExecutorError::BufferOverflow)?;
-
-        Self::write_with_retry(i2c, addr, &self.buffer, logger) // Call the private method
-            .map_err(ExecutorError::I2cError)
+        Self::write_with_retry(i2c, addr, &self.buffer, writer).map_err(ExecutorError::I2cError)
     }
 }
 
@@ -171,6 +180,7 @@ pub struct ExploreResult {
 }
 
 impl<'a, const N: usize> Explorer<'a, N> {
+    // This function calculates the max length of a single command's byte array
     pub const fn max_cmd_len(&self) -> usize {
         let mut max_len = 0;
         let mut i = 0;
@@ -181,25 +191,24 @@ impl<'a, const N: usize> Explorer<'a, N> {
             }
             i += 1;
         }
-        max_len + 1 // prefix add
+        max_len
     }
-}
 
-impl<'a, const N: usize> Explorer<'a, N> {
-    pub fn explore<I2C, E, L, const BUF_CAP: usize>(
+    pub fn explore<I2C, E, W, const CMD_BUFFER_SIZE: usize>(
+        // Use CMD_BUFFER_SIZE
         &self,
         i2c: &mut I2C,
         executor: &mut E,
-        logger: &mut L,
+        writer: &mut W,
     ) -> Result<ExploreResult, ExplorerError>
     where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-        E: CmdExecutor<I2C, BUF_CAP>,
-        L: crate::explore::logger::Logger + core::fmt::Write,
+        E: CmdExecutor<I2C, CMD_BUFFER_SIZE>, // Use CMD_BUFFER_SIZE
+        W: core::fmt::Write,
     {
         if self.sequence.is_empty() {
-            logger.log_info_fmt(|buf| writeln!(buf, "[explorer] No commands provided."));
+            writeln!(writer, "[explorer] No commands provided.").ok();
             return Err(ExplorerError::NoValidAddressesFound);
         }
 
@@ -207,7 +216,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut solved_addrs: [bool; I2C_ADDRESS_COUNT] = [false; I2C_ADDRESS_COUNT];
         let mut permutations_tested = 0;
         let iter = PermutationIter::new(self)?;
-        logger.log_info_fmt(|buf| writeln!(buf, "[explorer] Starting permutation exploration..."));
+        writeln!(writer, "[explorer] Starting permutation exploration...").ok();
         for sequence in iter {
             permutations_tested += 1;
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
@@ -216,52 +225,35 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     continue;
                 }
 
-                logger.log_info_fmt(|buf| {
-                    writeln!(
-                        buf,
-                        "[explorer] Trying sequence on 0x{:02X} (permutation {})",
-                        addr, permutations_tested
-                    )
-                });
+                write!(writer, "[explorer] Trying sequence on ").ok();
+                util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                writeln!(writer, " (permutation {})", permutations_tested).ok();
 
                 let mut all_ok = true;
                 for i in 0..self.sequence.len() {
                     let cmd_bytes = sequence[i];
-                    match execute_and_log_command(i2c, executor, logger, addr, cmd_bytes, i) {
-                        Ok(_) => {}
-                        Err(_) => {
-                            all_ok = false;
-                            break;
-                        }
+                    if execute_and_log_command(i2c, executor, writer, addr, cmd_bytes, i).is_err() {
+                        all_ok = false;
+                        break;
                     }
                 }
 
                 if all_ok {
-                    logger.log_info_fmt(|buf| {
-                        writeln!(
-                            buf,
-                            "[explorer] Successfully executed sequence on 0x{:02X}",
-                            addr
-                        )
-                    });
+                    write!(writer, "[explorer] Successfully executed sequence on ").ok();
+                    util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                    writeln!(writer).ok();
                     if found_addrs.push(addr).is_err() {
-                        logger.log_error_fmt(|buf| {
-                            writeln!(buf, "[error] Buffer overflow in found_addrs")
-                        });
+                        writeln!(writer, "[error] Buffer overflow in found_addrs").ok();
                         return Err(ExplorerError::BufferOverflow);
                     }
                     solved_addrs[addr as usize] = true;
                 } else {
-                    logger.log_info_fmt(|buf| {
-                        writeln!(
-                            buf,
-                            "[explorer] Failed to execute sequence on 0x{:02X}",
-                            addr
-                        )
-                    });
+                    write!(writer, "[explorer] Failed to execute sequence on ").ok();
+                    util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                    writeln!(writer).ok();
                 }
             }
-            // After the inner loop over addresses
+
             if found_addrs.len() == (I2C_SCAN_ADDR_END - I2C_SCAN_ADDR_START + 1) as usize {
                 break;
             }
@@ -271,29 +263,18 @@ impl<'a, const N: usize> Explorer<'a, N> {
             permutations_tested,
         })
     }
-    /// Generates a single valid topological sort of the command sequence.
-    /// This is useful when only one valid ordering is needed, and avoids
-    /// the computational cost of generating all permutations.
-    ///
-    /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
-    /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
-    pub fn get_one_topological_sort_buf<const MAX_CMD_LEN: usize>(
+
+    pub fn get_one_topological_sort_buf(
         &self,
-        _serial: &mut impl core::fmt::Write,
+        _writer: &mut impl core::fmt::Write,
         failed_nodes: &[bool; N],
-    ) -> Result<
-        (
-            heapless::Vec<heapless::Vec<u8, MAX_CMD_LEN>, N>,
-            heapless::Vec<usize, N>,
-        ),
-        ExplorerError,
-    > {
+    ) -> Result<(heapless::Vec<&'a [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
         let len = self.sequence.len();
-        let mut in_degree: heapless::Vec<usize, N> = heapless::Vec::new();
+        let mut in_degree: heapless::Vec<u8, N> = heapless::Vec::new();
         in_degree
             .resize(len, 0)
             .map_err(|_| ExplorerError::BufferOverflow)?;
-        let mut adj_list_rev: heapless::Vec<heapless::Vec<usize, N>, N> = heapless::Vec::new();
+        let mut adj_list_rev: heapless::Vec<heapless::Vec<u8, N>, N> = heapless::Vec::new();
         adj_list_rev
             .resize(len, heapless::Vec::new())
             .map_err(|_| ExplorerError::BufferOverflow)?;
@@ -302,49 +283,50 @@ impl<'a, const N: usize> Explorer<'a, N> {
             if failed_nodes[i] {
                 continue;
             }
-            in_degree[i] = node.deps.len();
+            in_degree[i] = node.deps.len() as u8; // node.deps.len() is usize, cast to u8
             for &dep_idx in node.deps.iter() {
-                if dep_idx >= len {
+                let dep_idx_usize = dep_idx as usize;
+                if dep_idx_usize >= len {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_list_rev[dep_idx]
-                    .push(i)
+                // dep_idx is u8, i is usize. adj_list_rev expects u8 for its inner Vec.
+                adj_list_rev[dep_idx_usize]
+                    .push(i as u8)
                     .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
-        let mut q: heapless::Vec<usize, N> = heapless::Vec::new();
-        for (i, &degree) in in_degree.iter().enumerate().take(len) {
-            if !failed_nodes[i] && degree == 0 {
-                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+        let mut result_sequence: heapless::Vec<&'a [u8], N> = heapless::Vec::new(); // Changed type
+        let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new(); // Changed type to u8
+        let mut visited_count = 0;
+
+        let mut q = heapless::Vec::<u8, N>::new(); // Initialize the queue 'q'
+        for i in 0..len {
+            if in_degree[i] == 0 && !failed_nodes[i] {
+                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
-        let mut result_sequence: heapless::Vec<heapless::Vec<u8, MAX_CMD_LEN>, N> =
-            heapless::Vec::new();
-        let mut result_len_per_node: heapless::Vec<usize, N> = heapless::Vec::new();
-        let mut visited_count = 0;
-
-        while let Some(u) = q.pop() {
+        while let Some(u_u8) = q.pop() {
+            // u_u8 is u8
+            let u = u_u8 as usize; // Cast to usize for indexing
             visited_count += 1;
 
             let cmd_bytes = self.sequence[u].bytes;
-            let mut cmd_vec: heapless::Vec<u8, MAX_CMD_LEN> = heapless::Vec::new();
-            cmd_vec
-                .extend_from_slice(cmd_bytes)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
             result_len_per_node
-                .push(cmd_vec.len())
+                .push(cmd_bytes.len() as u8) // Push u8
                 .map_err(|_| ExplorerError::BufferOverflow)?;
             result_sequence
-                .push(cmd_vec)
+                .push(cmd_bytes)
                 .map_err(|_| ExplorerError::BufferOverflow)?;
 
-            for &v in adj_list_rev[u].iter() {
+            for &v_u8 in adj_list_rev[u].iter() {
+                // v_u8 is u8
+                let v = v_u8 as usize; // Cast to usize for indexing
                 if !failed_nodes[v] {
                     in_degree[v] -= 1;
                     if in_degree[v] == 0 {
-                        q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
+                        q.push(v_u8).map_err(|_| ExplorerError::BufferOverflow)?; // Push u8
                     }
                 }
             }
@@ -359,15 +341,15 @@ impl<'a, const N: usize> Explorer<'a, N> {
 }
 
 pub struct PermutationIter<'a, const N: usize> {
-    sequence: &'a [CmdNode],
-    total_nodes: usize,
-    current_permutation: Vec<&'a [u8], N>,
-    used: Vec<bool, N>,
-    in_degree: Vec<usize, N>,
-    adj_list_rev: Vec<Vec<usize, N>, N>,
-    path_stack: Vec<usize, N>, // Stores original indices of commands in current_permutation
-    loop_start_indices: Vec<usize, N>, // Tracks the starting point for the next search at each level
-    is_done: bool,
+    pub explorer: &'a Explorer<'a, N>,
+    pub total_nodes: usize,
+    pub current_permutation: Vec<&'a [u8], N>,
+    pub used: Vec<bool, N>,
+    pub in_degree: Vec<u8, N>,
+    pub adj_list_rev: Vec<heapless::Vec<u8, N>, N>,
+    pub path_stack: Vec<u8, N>,
+    pub loop_start_indices: Vec<u8, N>,
+    pub is_done: bool,
 }
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
@@ -377,48 +359,49 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             return Err(ExplorerError::TooManyCommands);
         }
 
-        let mut in_degree: Vec<usize, N> = Vec::new();
-        let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
+        let mut in_degree: Vec<u8, N> = Vec::new();
+        let mut adj_list_rev: Vec<heapless::Vec<u8, N>, N> = Vec::new();
+        adj_list_rev
+            .resize(total_nodes, heapless::Vec::new())
+            .map_err(|_| ExplorerError::BufferOverflow)?;
 
         in_degree
             .resize(total_nodes, 0)
             .map_err(|_| ExplorerError::BufferOverflow)?;
-        adj_list_rev
-            .resize(total_nodes, Vec::new())
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-
         for (i, node) in explorer.sequence.iter().enumerate() {
-            in_degree[i] = node.deps.len();
+            in_degree[i as usize] = node.deps.len() as u8; // Cast i to usize
             for &dep in node.deps.iter() {
-                if dep >= total_nodes {
+                if dep as usize >= total_nodes {
+                    // Cast dep to usize for comparison
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_list_rev[dep]
-                    .push(i)
+                adj_list_rev[dep as usize]
+                    .push(i as u8)
                     .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
         // Cycle detection using Kahn's algorithm
         let mut temp_in_degree = in_degree.clone();
-        let mut q = Vec::<usize, N>::new();
+        let mut q = Vec::<u8, N>::new();
         for i in 0..total_nodes {
             if temp_in_degree[i] == 0 {
-                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
         let mut count = 0;
         let mut q_idx = 0;
         while q_idx < q.len() {
-            let u = q[q_idx];
+            let u = q[q_idx] as usize;
             q_idx += 1;
             count += 1;
 
-            for &v in adj_list_rev[u].iter() {
+            for &v_u8 in adj_list_rev[u].iter() {
+                let v = v_u8 as usize;
                 temp_in_degree[v] -= 1;
                 if temp_in_degree[v] == 0 {
-                    q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
+                    q.push(v_u8).map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
         }
@@ -427,22 +410,81 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             return Err(ExplorerError::DependencyCycle);
         }
 
+        let mut used = Vec::new();
+        used.resize(total_nodes, false)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
+
         Ok(Self {
-            sequence: explorer.sequence,
+            explorer,
             total_nodes,
             current_permutation: Vec::new(),
-            used: {
-                let mut v = Vec::new();
-                v.resize(total_nodes, false)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
-                v
-            },
+            used,
             in_degree,
             adj_list_rev,
             path_stack: Vec::new(),
             loop_start_indices: Vec::new(),
             is_done: false,
         })
+    }
+
+    fn try_extend(&mut self) -> bool {
+        let current_depth = self.current_permutation.len();
+        // The `loop_start_indices` tracks the starting point for the search at the current depth.
+        // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
+        let start_idx = self
+            .loop_start_indices
+            .get(current_depth)
+            .copied()
+            .unwrap_or(0) as usize;
+
+        // Iterate through all possible nodes (0 to total_nodes-1)
+        for i in start_idx..self.total_nodes {
+            // Check if node 'i' is NOT used AND its in-degree is 0
+            if !self.used[i] && self.in_degree[i] == 0 {
+                // Mark node 'i' as used
+                self.used[i] = true;
+                self.current_permutation
+                    .push(self.explorer.sequence[i].bytes)
+                    .unwrap_or_else(|_| self.is_done = true);
+                self.path_stack.push(i as u8)
+                    .unwrap_or_else(|_| self.is_done = true);
+                self.loop_start_indices.push((i + 1) as u8)
+                    .unwrap_or_else(|_| self.is_done = true);
+                for &neighbor_u8 in self.adj_list_rev[i].iter() {
+                    let neighbor = neighbor_u8 as usize;
+                    self.in_degree[neighbor] -= 1;
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    fn backtrack(&mut self) -> bool {
+        if let Some(last_added_idx_u8) = self.path_stack.pop() {
+            let last_added_idx = last_added_idx_u8 as usize;
+            self.current_permutation.pop();
+            // Unmark node 'last_added_idx' as used
+            self.used[last_added_idx] = false;
+            self.loop_start_indices.pop();
+
+            for &neighbor_u8 in self.adj_list_rev[last_added_idx].iter() {
+                let neighbor = neighbor_u8 as usize;
+                self.in_degree[neighbor] += 1;
+            }
+
+            // If path_stack is empty after pop, we've backtracked past the root
+            if self.path_stack.is_empty() {
+                // Removed current_permutation.is_empty() check
+                self.is_done = true;
+                return false;
+            }
+            true
+        } else {
+            // Already at the root and no more options
+            self.is_done = true;
+            false
+        }
     }
 }
 
@@ -457,7 +499,11 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
         loop {
             // If we have a complete permutation, return it and prepare for the next one.
             if self.current_permutation.len() == self.total_nodes {
-                let full_sequence = self.current_permutation.clone();
+                // Optimize SRAM: Use core::mem::take to move the Vec out, avoiding a clone.
+                // This leaves an empty Vec in its place, which will be refilled by subsequent
+                // calls to try_extend or backtrack.
+                let full_sequence = core::mem::take(&mut self.current_permutation);
+
                 // Backtrack to find the next permutation
                 if !self.backtrack() {
                     self.is_done = true;
@@ -476,70 +522,6 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
                     return None; // No more permutations
                 }
             }
-        }
-    }
-}
-
-impl<'a, const N: usize> PermutationIter<'a, N> {
-    fn try_extend(&mut self) -> bool {
-        // The `loop_start_indices` tracks the starting point for the search at the current depth.
-        // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
-        let start_idx_for_level = self.loop_start_indices.last().copied().unwrap_or(0);
-
-        // Iterate through all possible nodes (0 to total_nodes-1)
-        for idx in start_idx_for_level..self.total_nodes {
-            // If this node is already used in the current permutation, skip it
-            if self.used[idx] {
-                continue;
-            }
-
-            // Check if this node's dependencies are satisfied (i.e., its current in-degree is 0)
-            if self.in_degree[idx] == 0 {
-                // Make choice: Add this node to the current permutation
-                // Note: unwrap() is used here assuming N is sufficiently large based on initial checks.
-                self.current_permutation
-                    .push(self.sequence[idx].bytes)
-                    .unwrap();
-                self.used[idx] = true;
-
-                // Decrement in-degrees for all nodes that depend on this one
-                for &dependent_idx in self.adj_list_rev[idx].iter() {
-                    self.in_degree[dependent_idx] -= 1;
-                }
-
-                self.path_stack.push(idx).unwrap();
-                self.loop_start_indices.push(idx + 1).unwrap();
-                return true;
-            }
-        }
-        false // No node found to extend the current permutation
-    }
-
-    fn backtrack(&mut self) -> bool {
-        if let Some(last_added_idx) = self.path_stack.pop() {
-            // Undo the choice: Remove the last added node from the permutation
-            self.current_permutation.pop();
-            self.used[last_added_idx] = false; // Unmark as used
-
-            // Increment in-degrees for all nodes that depend on this one (undo decrement)
-            for &dependent_idx in self.adj_list_rev[last_added_idx].iter() {
-                self.in_degree[dependent_idx] += 1;
-            }
-
-            // Pop the loop start for the level we just finished. The next search start for the parent
-            // was already set when this level was pushed.
-            self.loop_start_indices.pop();
-
-            // If path_stack is empty after pop, we've backtracked past the root
-            if self.path_stack.is_empty() {
-                self.is_done = true;
-                return false;
-            }
-            true
-        } else {
-            // Already at the root and no more options
-            self.is_done = true;
-            false
         }
     }
 }

@@ -238,3 +238,20 @@ avoiding the high computational cost of exploring all permutations.
 
 Returns `Ok(())` if the sequence was successfully executed,
 or `Err(ExplorerError)` if an error occurred (e.g., cycle detected, execution failed).
+
+Generates a single valid topological sort of the command sequence, considering failed nodes.
+This is useful when only one valid ordering is needed, and avoids
+the computational cost of generating all permutations. It respects the `failed_nodes`
+array to exclude certain nodes and their dependencies from the sort.
+
+# Arguments
+
+* `_serial`: A writer for logging, currently unused.
+* `failed_nodes`: An array indicating which nodes (by index) have failed and should be excluded.
+
+# Returns
+
+The first element of the returned tuple is a `heapless::Vec` of command byte slices representing one valid topological sort, and
+`sequence_len_per_node` is a `heapless::Vec` of the corresponding lengths.
+
+Returns `Err(ExplorerError)` if a cycle is detected, a buffer overflows, or a dependency index is invalid.
