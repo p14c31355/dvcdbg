@@ -538,9 +538,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 self.current_permutation[self.current_permutation_len as usize] = b"";
             }
 
-            self.used
-                .clear(last_added_idx)
-                .unwrap_or_else(|_| self.is_done = true);
+            self.used.clear(last_added_idx).unwrap();
 
             for neighbor in 0..self.total_nodes {
                 if (self.adj_list_rev[last_added_idx] >> neighbor) & 1 != 0 {
