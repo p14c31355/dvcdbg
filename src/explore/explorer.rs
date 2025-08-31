@@ -140,7 +140,7 @@ where
             write!(writer, "[Info] I2C initializing for ").ok();
             util::write_bytes_hex_fmt(writer, &[addr]).ok();
             writeln!(writer, "...").ok();
-            let ack_ok = Self::write_with_retry(i2c, addr, &[addr], writer).is_ok();
+            let ack_ok = Self::write_with_retry(i2c, addr, &[], writer).is_ok();
             if ack_ok {
                 // self.prefix = addr; // Removed this line as it mutates the fixed prefix
                 write!(writer, "[Info] Device found at ").ok();
