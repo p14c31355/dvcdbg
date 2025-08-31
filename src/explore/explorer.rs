@@ -11,7 +11,7 @@ const I2C_ADDRESS_COUNT: usize = 128;
 #[derive(Copy, Clone)]
 pub struct CmdNode {
     pub bytes: &'static [u8],
-    pub deps: &'static [usize],
+    pub deps: &'static [u8],
 }
 
 pub trait CmdExecutor<I2C, const BUF_CAP: usize> {
@@ -287,13 +287,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         &self,
         _serial: &mut impl core::fmt::Write,
         failed_nodes: &[bool; N],
-    ) -> Result<
-        (
-            heapless::Vec<heapless::Vec<u8, MAX_CMD_LEN>, N>,
-            heapless::Vec<usize, N>,
-        ),
-        ExplorerError,
-    > {
+    ) -> Result<(heapless::Vec<&'a [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
         let len = self.sequence.len();
         let mut in_degree: heapless::Vec<usize, N> = heapless::Vec::new();
         in_degree
@@ -308,18 +302,13 @@ impl<'a, const N: usize> Explorer<'a, N> {
             if failed_nodes[i] {
                 continue;
             }
-            in_degree[i] = 0;
-            for &dep_idx in node.deps.iter() {
-                if dep_idx >= len {
-                    return Err(ExplorerError::InvalidDependencyIndex);
-                }
-                if !failed_nodes[dep_idx] {
-                    in_degree[i] += 1;
-                    adj_list_rev[dep_idx]
-                        .push(i)
-                        .map_err(|_| ExplorerError::BufferOverflow)?;
-                }
-            }
+            in_degree[i] = node.deps.len() as u8;
+        for &dep_idx in node.deps.iter() {
+            // Cast dep_idx and i to u8, dep_idx needs to be usize for indexing
+            adj_list_rev[dep_idx as usize]
+                .push(i as u8)
+                .map_err(|_| ExplorerError::BufferOverflow)?;
+        }
         }
 
         let mut q: heapless::Vec<usize, N> = heapless::Vec::new();
@@ -372,10 +361,10 @@ pub struct PermutationIter<'a, const N: usize> {
     total_nodes: usize,
     current_permutation: Vec<&'a [u8], N>,
     used: Vec<bool, N>,
-    in_degree: Vec<usize, N>,
-    adj_list_rev: [heapless::Vec<usize, N>; N],
-    path_stack: Vec<usize, N>,
-    loop_start_indices: Vec<usize, N>,
+    in_degree: Vec<u8, N>,
+    adj_list_rev: [heapless::Vec<u8, N>; N],
+    path_stack: Vec<u8, N>,
+    loop_start_indices: Vec<u8, N>,
     is_done: bool,
 }
 
@@ -386,21 +375,21 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             return Err(ExplorerError::TooManyCommands);
         }
 
-        let mut in_degree: Vec<usize, N> = Vec::new();
-        let mut adj_list_rev: [heapless::Vec<usize, N>; N] =
+        let mut in_degree: Vec<u8, N> = Vec::new();
+        let mut adj_list_rev: [heapless::Vec<u8, N>; N] =
             core::array::from_fn(|_| heapless::Vec::new());
 
         in_degree
             .resize(total_nodes, 0)
             .map_err(|_| ExplorerError::BufferOverflow)?;
         for (i, node) in explorer.sequence.iter().enumerate() {
-            in_degree[i] = node.deps.len();
+            in_degree[i] = node.deps.len() as u8;
             for &dep in node.deps.iter() {
                 if dep >= total_nodes {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_list_rev[dep]
-                    .push(i)
+                adj_list_rev[dep as usize]
+                    .push(i as u8)
                     .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
@@ -452,33 +441,22 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
     }
 
     fn try_extend(&mut self) -> bool {
+        let current_depth = self.current_permutation.len();
         // The `loop_start_indices` tracks the starting point for the search at the current depth.
         // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
-        let start_idx_for_level = self.loop_start_indices.last().copied().unwrap_or(0);
+        let start_idx = self.loop_start_indices.get(current_depth).copied().unwrap_or(0) as usize;
 
         // Iterate through all possible nodes (0 to total_nodes-1)
-        for idx in start_idx_for_level..self.total_nodes {
-            // If this node is already used in the current permutation, skip it
-            if self.used[idx] {
-                continue;
-            }
-
-            // Check if this node's dependencies are satisfied (i.e., its current in-degree is 0)
-            if self.in_degree[idx] == 0 {
-                // Make choice: Add this node to the current permutation
-                // Note: unwrap() is used here assuming N is sufficiently large based on initial checks.
-                self.current_permutation
-                    .push(self.sequence[idx].bytes)
-                    .unwrap();
-                self.used[idx] = true;
-
-                // Decrement in-degrees for all nodes that depend on this one
-                for &dependent_idx in self.adj_list_rev[idx].iter() {
-                    self.in_degree[dependent_idx] -= 1;
+        for i in start_idx..self.total_nodes {
+            if !self.used[i] && self.in_degree[i] == 0 {
+                self.used[i] = true;
+                self.current_permutation.push(self.explorer.sequence[i].bytes).ok();
+                self.path_stack.push(i as u8).ok(); // Cast i to u8
+                self.loop_start_indices.push((i + 1) as u8).ok(); // Cast (i+1) to u8
+                for &neighbor in self.adj_list_rev[i].iter() {
+                    // Cast neighbor to usize for indexing
+                    self.in_degree[neighbor as usize] -= 1;
                 }
-
-                self.path_stack.push(idx).unwrap();
-                self.loop_start_indices.push(idx + 1).unwrap();
                 return true;
             }
         }
@@ -489,16 +467,15 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         if let Some(last_added_idx) = self.path_stack.pop() {
             // Undo the choice: Remove the last added node from the permutation
             self.current_permutation.pop();
-            self.used[last_added_idx] = false; // Unmark as used
+            let last_node_idx = self.path_stack.pop().unwrap() as usize;
+        self.used[last_node_idx] = false;
+        self.current_permutation.pop();
+        self.loop_start_indices.pop();
 
-            // Increment in-degrees for all nodes that depend on this one (undo decrement)
-            for &dependent_idx in self.adj_list_rev[last_added_idx].iter() {
-                self.in_degree[dependent_idx] += 1;
-            }
-
-            // Pop the loop start for the level we just finished. The next search start for the parent
-            // was already set when this level was pushed.
-            self.loop_start_indices.pop();
+        for &neighbor in self.adj_list_rev[last_node_idx].iter() {
+            // Cast neighbor to usize for indexing
+            self.in_degree[neighbor as usize] += 1;
+        }
 
             // If path_stack is empty after pop, we've backtracked past the root
             if self.path_stack.is_empty() {
