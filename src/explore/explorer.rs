@@ -441,7 +441,38 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
 
         // Cycle detection using Kahn's algorithm
         let mut temp_in_degree = in_degree.clone();
-        let mut q: heapless::Vec<u8, N> = heapless::Vec::new();
+        let mut q: [u8; N] = [0; N];
+        let mut q_head: usize = 0;
+        let mut q_tail: usize = 0;
+        for i in 0..total_nodes {
+            if temp_in_degree[i] == 0 {
+                if q_tail >= N {
+                    return Err(ExplorerError::BufferOverflow);
+                }
+                q[q_tail] = i as u8;
+                q_tail += 1;
+            }
+        }
+
+        let mut count = 0;
+        while q_head < q_tail {
+            let u = q[q_head] as usize;
+            q_head += 1;
+            count += 1;
+
+            for v in 0..total_nodes {
+                if (adj_list_rev[u] >> v) & 1 != 0 {
+                    temp_in_degree[v] -= 1;
+                    if temp_in_degree[v] == 0 {
+                        if q_tail >= N {
+                            return Err(ExplorerError::BufferOverflow);
+                        }
+                        q[q_tail] = v as u8;
+                        q_tail += 1;
+                    }
+                }
+            }
+        }
         for i in 0..total_nodes {
             if temp_in_degree[i] == 0 {
                 q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
