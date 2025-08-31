@@ -365,7 +365,21 @@ pub struct PermutationIter<'a, const N: usize> {
     pub total_nodes: usize,
     pub current_permutation: Vec<&'a [u8], N>,
     // pub used: Vec<bool, N>, // REMOVE THIS LINE
+pub struct PermutationIter<'a, const N: usize> {
+    // Enforce N <= 32 for the u32 used_mask bitmask
+    #[allow(clippy::assertions_on_constants)]
+    const _: () = assert!(N <= 32, "N must be less than or equal to 32 for used_mask to work correctly");
+    pub explorer: &'a Explorer<'a, N>,
+    pub total_nodes: usize,
+    pub current_permutation: Vec<&'a [u8], N>,
+    // pub used: Vec<bool, N>, // REMOVE THIS LINE
     pub used_mask: u32, // ADD THIS LINE: Use a u32 bitmask for 'used' nodes
+    pub in_degree: Vec<u8, N>,
+    pub adj_list_rev: [heapless::Vec<u8, N>; N],
+    pub path_stack: Vec<u8, N>,
+    pub loop_start_indices: Vec<u8, N>,
+    pub is_done: bool,
+}
     pub in_degree: Vec<u8, N>,
         Ok((result_sequence, result_len_per_node))
     }
