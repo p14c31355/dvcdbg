@@ -260,8 +260,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
         let mut found_addrs: [u8; I2C_ADDRESS_COUNT] = [0; I2C_ADDRESS_COUNT];
         let mut found_addrs_len: usize = 0;
-        let mut solved_addrs: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE> =
-            util::BitFlags::new();
+        let mut solved_addrs: util::BitFlags<I2C_ADDRESS_COUNT> = util::BitFlags::new();
         let mut permutations_tested = 0;
         let mut iter = PermutationIter::new(self)?;
         writeln!(writer, "[explorer] Starting permutation exploration...").ok();
