@@ -60,7 +60,7 @@ pub fn write_bytes_hex_fmt<W: core::fmt::Write>(w: &mut W, bytes: &[u8]) -> core
 use crate::error::BitFlagsError;
 
 pub struct BitFlags<const N: usize, const S: usize> {
-    vec: heapless::Vec<u8, S>,
+    bytes: [u8; S],
 }
 
 impl<const N: usize, const S: usize> BitFlags<N, S> {
