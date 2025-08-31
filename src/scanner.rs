@@ -182,7 +182,9 @@ where
                 crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
             })?;
 
-            logger.log_info_fmt(|buf| write!(buf, "  Sending command 0x{:02x} to 0x{:02x}...", cmd, addr));
+            logger.log_info_fmt(|buf| {
+                write!(buf, "  Sending command 0x{:02x} to 0x{:02x}...", cmd, addr)
+            });
 
             match i2c.write(addr, &command_data) {
                 Ok(_) => {
@@ -196,11 +198,17 @@ where
                 Err(e) => {
                     let error_kind = e.to_compat(Some(addr));
                     if error_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
-                        logger.log_info_fmt(|buf| write!(buf, "  Command 0x{:02x} no response (NACK).", cmd));
+                        logger.log_info_fmt(|buf| {
+                            write!(buf, "  Command 0x{:02x} no response (NACK).", cmd)
+                        });
                         continue;
                     }
                     logger.log_error_fmt(|buf| {
-                        write!(buf, "  Write failed for 0x{:02x} at 0x{:02x}: {}", cmd, addr, error_kind)
+                        write!(
+                            buf,
+                            "  Write failed for 0x{:02x} at 0x{:02x}: {}",
+                            cmd, addr, error_kind
+                        )
                     });
                     last_error = Some(error_kind);
                 }

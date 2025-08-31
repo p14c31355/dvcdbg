@@ -195,9 +195,7 @@ where
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
         for (addr_idx, &addr) in found_addrs.iter().enumerate() {
-            let addr_7bit = addr & 0x7F;
-            serial_logger
-                .log_info_fmt(|buf| write!(buf, "Sending commands to 0x{:02X}", addr_7bit));
+            serial_logger.log_info_fmt(|buf| write!(buf, "Sending commands to 0x{:02X}", addr));
 
             let mut all_ok = true;
 
@@ -211,14 +209,14 @@ where
                     i2c,
                     &mut executor,
                     &mut serial_logger,
-                    addr_7bit,
+                    addr,
                     cmd_bytes,
                     i,
                 )
                 .is_err()
                 {
                     serial_logger.log_info_fmt(|buf| {
-                        write!(buf, "[warn] Command {} failed on 0x{:02X}", i, addr_7bit)
+                        write!(buf, "[warn] Command {} failed on 0x{:02X}", i, addr)
                     });
                     all_ok = false;
                     if i >= successful_seq_len {
