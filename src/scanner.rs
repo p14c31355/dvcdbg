@@ -143,7 +143,7 @@ where
 
     if found_addrs.is_empty() {
         logger.log_error_fmt(|buf| write!(buf, "No I2C devices found.\r\n"));
-        loop {}
+        return Err(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack));
     }
 
     let mut detected_cmds =
