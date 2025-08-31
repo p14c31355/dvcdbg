@@ -63,14 +63,15 @@ use crate::error::BitFlagsError;
 // For stable Rust, const generic expressions like `(N + 7) / 8` are not allowed
 // in array lengths within struct definitions. This feature (`generic_const_exprs`)
 // is currently unstable.
+
+/// A bitflag structure optimized for 128 bits, used for tracking I2C addresses.
+pub struct BitFlags {
+    bytes: [u8; 16],
+}
 //
 // Since `BitFlags` is primarily used with `I2C_ADDRESS_COUNT` (128 bits),
 // we can make it concrete for this specific size to ensure compilation on stable Rust.
 // (128 bits requires (128 + 7) / 8 = 16 bytes).
-pub struct BitFlags {
-    bytes: [u8; 16], // Fixed size for 128 bits
-}
-
 impl BitFlags {
     pub fn new() -> Self {
         Self { bytes: [0u8; 16] }
@@ -79,13 +80,19 @@ impl BitFlags {
     // N_BITS is now implicitly 128 for this concrete implementation
     const N_BITS: usize = 128;
 
-    pub fn set(&mut self, idx: usize) -> Result<(), BitFlagsError> {
+    fn check_bounds(&self, idx: usize) -> Result<(), BitFlagsError> {
         if idx >= Self::N_BITS {
-            return Err(BitFlagsError::IndexOutOfBounds {
+            Err(BitFlagsError::IndexOutOfBounds {
                 idx,
                 max: Self::N_BITS - 1,
-            });
+            })
+        } else {
+            Ok(())
         }
+    }
+
+    pub fn set(&mut self, idx: usize) -> Result<(), BitFlagsError> {
+        self.check_bounds(idx)?;
         let byte = idx / 8;
         let bit = idx % 8;
         self.bytes[byte] |= 1 << bit;
@@ -93,12 +100,7 @@ impl BitFlags {
     }
 
     pub fn clear(&mut self, idx: usize) -> Result<(), BitFlagsError> {
-        if idx >= Self::N_BITS {
-            return Err(BitFlagsError::IndexOutOfBounds {
-                idx,
-                max: Self::N_BITS - 1,
-            });
-        }
+        self.check_bounds(idx)?;
         let byte = idx / 8;
         let bit = idx % 8;
         self.bytes[byte] &= !(1 << bit);
@@ -106,12 +108,7 @@ impl BitFlags {
     }
 
     pub fn get(&self, idx: usize) -> Result<bool, BitFlagsError> {
-        if idx >= Self::N_BITS {
-            return Err(BitFlagsError::IndexOutOfBounds {
-                idx,
-                max: Self::N_BITS - 1,
-            });
-        }
+        self.check_bounds(idx)?;
         let byte = idx / 8;
         let bit = idx % 8;
         Ok((self.bytes[byte] & (1 << bit)) != 0)
