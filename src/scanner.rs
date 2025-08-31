@@ -126,11 +126,10 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     W: core::fmt::Write,
 {
-    writeln!(
+    util::prevent_garbled(
         writer,
-        "Starting I2C bus scan with initialization sequence..."
-    )
-    .ok();
+        format_args!("Starting I2C bus scan with initialization sequence..."),
+    );
     write!(writer, "Initializing scan with control byte ").ok();
     util::write_bytes_hex_fmt(writer, &[ctrl_byte]).ok();
     writeln!(writer).ok();
