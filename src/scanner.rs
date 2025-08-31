@@ -42,7 +42,9 @@ where
                     logger.log_info_fmt(|buf| write!(buf, "No response (NACK)"));
                     continue;
                 }
-                logger.log_error_fmt(|buf| write!(buf, "Write failed at 0x{:02x}: {}", addr, error_kind));
+                logger.log_error_fmt(|buf| {
+                    write!(buf, "Write failed at 0x{:02x}: {}", addr, error_kind)
+                });
                 last_error = Some(error_kind);
             }
         }
@@ -123,7 +125,13 @@ where
     L: Logger,
 {
     logger.log_info_fmt(|buf| write!(buf, "Starting I2C bus scan with initialization sequence..."));
-    logger.log_info_fmt(|buf| write!(buf, "Initializing scan with control byte 0x{:02x}", ctrl_byte));
+    logger.log_info_fmt(|buf| {
+        write!(
+            buf,
+            "Initializing scan with control byte 0x{:02x}",
+            ctrl_byte
+        )
+    });
 
     let initial_found_addrs = internal_scan(i2c, logger, &[ctrl_byte])?;
     let mut detected_cmds =
@@ -153,14 +161,19 @@ where
     for &seq_cmd in init_sequence.iter() {
         match internal_scan(i2c, logger, &[ctrl_byte, seq_cmd]) {
             Ok(responded_addrs) => {
-                if responded_addrs.iter().any(|addr| initial_found_addrs.contains(addr)) {
+                if responded_addrs
+                    .iter()
+                    .any(|addr| initial_found_addrs.contains(addr))
+                {
                     detected_cmds.push(seq_cmd).map_err(|_| {
                         crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
                     })?;
                 }
             }
             Err(e) => {
-                logger.log_error_fmt(|buf| write!(buf, "Scan failed for command 0x{:02x}: {:?}", seq_cmd, e));
+                logger.log_error_fmt(|buf| {
+                    write!(buf, "Scan failed for command 0x{:02x}: {:?}", seq_cmd, e)
+                });
                 last_error = Some(e);
             }
         }
@@ -188,7 +201,10 @@ fn log_sequence_summary<L: Logger, const N: usize>(
         }
     }
 
-    logger.log_info_fmt(|buf| { write!(buf, "\n--- I2C Sequence Scan Summary ---")?; Ok(()) });
+    logger.log_info_fmt(|buf| {
+        write!(buf, "\n--- I2C Sequence Scan Summary ---")?;
+        Ok(())
+    });
     logger.log_info_fmt(|buf| {
         write!(buf, "Expected Commands:")?;
         for &cmd in expected_sequence {
@@ -216,5 +232,8 @@ fn log_sequence_summary<L: Logger, const N: usize>(
         Ok(())
     });
 
-    logger.log_info_fmt(|buf| { write!(buf, "--- End Summary ---\n")?; Ok(()) });
+    logger.log_info_fmt(|buf| {
+        write!(buf, "--- End Summary ---\n")?;
+        Ok(())
+    });
 }

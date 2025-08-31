@@ -3,8 +3,8 @@
 use crate::explore::explorer::*;
 use crate::explore::logger::*;
 
-use crate::compat::util;
 use crate::compat::err_compat::HalErrorExt; // HalErrorExt をインポート
+use crate::compat::util;
 use crate::error::ExplorerError;
 
 use core::fmt::Write;
@@ -66,20 +66,16 @@ where
         writeln!(buf, "Running full exploration...")
     });
 
-    let successful_seq = match crate::scanner::scan_init_sequence(
-        i2c,
-        &mut serial_logger,
-        prefix,
-        init_sequence,
-    ) {
-        Ok(seq) => seq,
-        Err(e) => {
-            runner_log_error(&mut serial_logger, |buf| {
-                writeln!(buf, "Failed to scan init sequence: {:?}", e)
-            });
-            return Err(ExplorerError::ExecutionFailed(e));
-        }
-    };
+    let successful_seq =
+        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence) {
+            Ok(seq) => seq,
+            Err(e) => {
+                runner_log_error(&mut serial_logger, |buf| {
+                    writeln!(buf, "Failed to scan init sequence: {:?}", e)
+                });
+                return Err(ExplorerError::ExecutionFailed(e));
+            }
+        };
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[log] Start driver safe init"));
 
@@ -140,9 +136,8 @@ where
         match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence) {
             Ok(seq) => seq,
             Err(e) => {
-                serial_logger.log_error_fmt(|buf| {
-                    writeln!(buf, "Failed to scan init sequence: {:?}", e)
-                });
+                serial_logger
+                    .log_error_fmt(|buf| writeln!(buf, "Failed to scan init sequence: {:?}", e));
                 return Err(ExplorerError::ExecutionFailed(e.into()));
             }
         };
@@ -151,35 +146,45 @@ where
 
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
 
-    let mut executor =
-        crate::explore::explorer::PrefixExecutor::<MAX_CMD_LEN, MAX_CMD_LEN>::new(found_addrs[0], successful_seq);
+    let mut executor = crate::explore::explorer::PrefixExecutor::<MAX_CMD_LEN, MAX_CMD_LEN>::new(
+        found_addrs[0],
+        successful_seq,
+    );
 
     let mut failed_nodes = [false; N];
 
     loop {
-        let (sequence_bytes, _sequence_len) =
-            match explorer.get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes) {
-                Ok(seq) => seq,
-                Err(ExplorerError::DependencyCycle) => {
-                    serial_logger.log_error_fmt(|buf| {
-                        writeln!(buf, "[error] Dependency cycle detected, stopping exploration")
-                    });
-                    break;
-                }
-                Err(e) => {
-                    serial_logger.log_error_fmt(|buf| {
-                        writeln!(buf, "[error] Failed to generate topological sort: {:?}. Aborting.", e)
-                    });
-                    return Err(e);
-                }
-            };
+        let (sequence_bytes, _sequence_len) = match explorer
+            .get_one_topological_sort_buf::<MAX_CMD_LEN>(&mut serial_logger, &failed_nodes)
+        {
+            Ok(seq) => seq,
+            Err(ExplorerError::DependencyCycle) => {
+                serial_logger.log_error_fmt(|buf| {
+                    writeln!(
+                        buf,
+                        "[error] Dependency cycle detected, stopping exploration"
+                    )
+                });
+                break;
+            }
+            Err(e) => {
+                serial_logger.log_error_fmt(|buf| {
+                    writeln!(
+                        buf,
+                        "[error] Failed to generate topological sort: {:?}. Aborting.",
+                        e
+                    )
+                });
+                return Err(e);
+            }
+        };
 
-        let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> =
-            heapless::Vec::new();
+        let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
         for (addr_idx, &addr) in found_addrs.iter().enumerate() {
             let addr_7bit = addr & 0x7F;
-            serial_logger.log_info_fmt(|buf| write!(buf, "Sending commands to 0x{:02X}", addr_7bit));
+            serial_logger
+                .log_info_fmt(|buf| write!(buf, "Sending commands to 0x{:02X}", addr_7bit));
 
             let mut all_ok = true;
 
@@ -189,9 +194,19 @@ where
                 }
                 let cmd_bytes = &sequence_bytes[i];
 
-                if execute_and_log_command(i2c, &mut executor, &mut serial_logger, addr_7bit, cmd_bytes, i).is_err()
+                if execute_and_log_command(
+                    i2c,
+                    &mut executor,
+                    &mut serial_logger,
+                    addr_7bit,
+                    cmd_bytes,
+                    i,
+                )
+                .is_err()
                 {
-                    serial_logger.log_info_fmt(|buf| write!(buf, "[warn] Command {} failed on 0x{:02X}", i, addr_7bit));
+                    serial_logger.log_info_fmt(|buf| {
+                        write!(buf, "[warn] Command {} failed on 0x{:02X}", i, addr_7bit)
+                    });
                     all_ok = false;
                     if i >= successful_seq_len {
                         failed_nodes[i] = true;
@@ -217,7 +232,6 @@ where
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[I] Explorer finished"));
     Ok(())
 }
-
 
 pub fn run_single_sequence_explorer<I2C, S, const N: usize, const MAX_CMD_LEN: usize>(
     explorer: &Explorer<'_, N>,

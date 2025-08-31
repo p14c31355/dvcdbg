@@ -141,23 +141,26 @@ where
 
             let ack_ok = Self::write_with_retry(i2c, addr, &[addr], logger).is_ok();
 
-        if ack_ok {
-            self.prefix = addr;
-            let _ = logger.log_info_fmt(|buf| {
-                writeln!(buf, "[Info] Device found at 0x{addr:02X}, sending init sequence...")
-            });
-        }
-            
-            for &c in self.init_sequence.iter() {
-                let command = [self.prefix, c];
-                Self::write_with_retry(i2c, addr, &command, logger)
-                    .map_err(ExecutorError::I2cError)?;
-                Self::short_delay();
-            }
+            if ack_ok {
+                self.prefix = addr;
+                let _ = logger.log_info_fmt(|buf| {
+                    writeln!(
+                        buf,
+                        "[Info] Device found at 0x{addr:02X}, sending init sequence..."
+                    )
+                });
 
-            self.initialized_addrs[addr_idx] = true;
-            let _ =
-                logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initialized for 0x{addr:02X}"));
+                for &c in self.init_sequence.iter() {
+                    let command = [self.prefix, c];
+                    Self::write_with_retry(i2c, addr, &command, logger)
+                        .map_err(ExecutorError::I2cError)?;
+                    Self::short_delay();
+                }
+
+                self.initialized_addrs[addr_idx] = true;
+                let _ = logger
+                    .log_info_fmt(|buf| writeln!(buf, "[Info] I2C initialized for 0x{addr:02X}"));
+            }
         }
 
         let prefix = addr;

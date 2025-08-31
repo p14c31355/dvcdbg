@@ -1,8 +1,8 @@
 use core::fmt::Write;
-use dvcdbg::compat::{I2cCompat, SerialCompat};
-use dvcdbg::prelude::*;
-use dvcdbg::explore::logger::Logger;
 use dvcdbg::compat::util::ERROR_STRING_BUFFER_SIZE;
+use dvcdbg::compat::{I2cCompat, SerialCompat};
+use dvcdbg::explore::logger::Logger;
+use dvcdbg::prelude::*;
 use heapless::String;
 
 // -----------------------------
@@ -91,14 +91,7 @@ fn test_full_stack() {
     assert!(i2c.read(0x42, &mut buf).is_ok());
     assert!(i2c.write_read(0x42, &[1, 2], &mut buf).is_ok());
 
-    assert!(
-        scan_i2c(
-            &mut i2c,
-            &mut serial,
-            0x00,
-        )
-        .is_ok()
-    );
+    assert!(scan_i2c(&mut i2c, &mut serial, 0x00,).is_ok());
 
     assert_log!(false, &mut serial, "test log macro");
 
