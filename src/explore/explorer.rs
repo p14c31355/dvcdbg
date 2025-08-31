@@ -200,9 +200,6 @@ where
 
         // Existing command execution logic remains similar
         self.buffer_len = 0;
-        if self.buffer_len >= CMD_BUFFER_SIZE {
-            return Err(ExecutorError::BufferOverflow);
-        }
         self.buffer[self.buffer_len] = self.prefix;
         self.buffer_len += 1;
 

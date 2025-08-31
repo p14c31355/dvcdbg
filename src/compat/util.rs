@@ -65,9 +65,7 @@ pub struct BitFlags<const N: usize, const S: usize> {
 
 impl<const N: usize, const S: usize> BitFlags<N, S> {
     pub fn new() -> Self {
-        Self {
-            vec: heapless::Vec::from_slice(&[0u8; S]).unwrap(),
-        }
+        Self { bytes: [0u8; S] }
     }
 
     pub fn set(&mut self, idx: usize) -> Result<(), BitFlagsError> {
@@ -76,7 +74,7 @@ impl<const N: usize, const S: usize> BitFlags<N, S> {
         }
         let byte = idx / 8;
         let bit = idx % 8;
-        self.vec[byte] |= 1 << bit;
+        self.bytes[byte] |= 1 << bit;
         Ok(())
     }
 
@@ -86,7 +84,7 @@ impl<const N: usize, const S: usize> BitFlags<N, S> {
         }
         let byte = idx / 8;
         let bit = idx % 8;
-        self.vec[byte] &= !(1 << bit);
+        self.bytes[byte] &= !(1 << bit);
         Ok(())
     }
 
@@ -96,7 +94,7 @@ impl<const N: usize, const S: usize> BitFlags<N, S> {
         }
         let byte = idx / 8;
         let bit = idx % 8;
-        Ok((self.vec[byte] & (1 << bit)) != 0)
+        Ok((self.bytes[byte] & (1 << bit)) != 0)
     }
 }
 
@@ -106,10 +104,14 @@ pub fn prevent_garbled<W: core::fmt::Write>(serial: &mut W, args: core::fmt::Arg
     let mut buffer = heapless::String::<512>::new();
     core::fmt::Write::write_fmt(&mut buffer, args).ok();
 
-    let mut start = 0;
+    let start = 0;
     while start < buffer.len() {
-        let end = (start + UART_CHUNK_SIZE).min(buffer.len());
+        let mut end = (start + UART_CHUNK_SIZE).min(buffer.len());
+        if end < buffer.len() {
+            while !buffer.is_char_boundary(end) {
+                end -= 1;
+            }
+        }
         writeln!(serial, "{}", &buffer[start..end]).ok();
-        start = end;
     }
 }
