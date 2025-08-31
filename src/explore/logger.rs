@@ -25,7 +25,6 @@ pub trait Logger {
 /// Immediate-write serial logger
 pub struct SerialLogger<'a, S: core::fmt::Write> {
     writer: &'a mut S,
-    buffer: String<ERROR_STRING_BUFFER_SIZE>,
     log_level: LogLevel,
 }
 
@@ -34,11 +33,7 @@ where
     S: core::fmt::Write,
 {
     pub fn new(writer: &'a mut S, log_level: LogLevel) -> Self {
-        Self {
-            writer,
-            log_level,
-            buffer: String::new(),
-        }
+        Self { writer, log_level }
     }
 }
 
@@ -51,11 +46,13 @@ where
         F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
     {
         if matches!(self.log_level, LogLevel::Verbose | LogLevel::Normal) {
-            self.buffer.clear();
-            if f(&mut self.buffer).is_ok() {
+            // Create a temporary buffer on the stack for formatting, if needed by 'f'
+            // This buffer is only alive for the duration of the 'f' call.
+            let mut temp_buffer = String::<ERROR_STRING_BUFFER_SIZE>::new();
+            if f(&mut temp_buffer).is_ok() {
                 let _ = self.writer.write_str("[I] ");
-                let _ = self.writer.write_str(&self.buffer);
-                let _ = self.writer.write_str("\n");
+                let _ = self.writer.write_str(&temp_buffer);
+                let _ = self.writer.write_str("\r\n");
             }
         }
     }
@@ -65,34 +62,29 @@ where
         F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
     {
         if matches!(self.log_level, LogLevel::Verbose | LogLevel::Normal) {
-            self.buffer.clear();
-            if f(&mut self.buffer).is_ok() {
+            // Create a temporary buffer on the stack for formatting, if needed by 'f'
+            let mut temp_buffer = String::<ERROR_STRING_BUFFER_SIZE>::new();
+            if f(&mut temp_buffer).is_ok() {
                 let _ = self.writer.write_str("[E] ");
-                let _ = self.writer.write_str(&self.buffer);
-                let _ = self.writer.write_str("\n");
+                let _ = self.writer.write_str(&temp_buffer);
+                let _ = self.writer.write_str("\r\n");
             }
         }
     }
 }
 
-impl<'a, S: core::fmt::Write> core::fmt::Write for SerialLogger<'a, S> {
+impl<'a, S> core::fmt::Write for SerialLogger<'a, S>
+where
+    S: core::fmt::Write,
+{
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        self.writer.write_str(s)?;
-        Ok(())
+        self.writer.write_str(s)
     }
 }
 
 pub struct NullLogger;
 
 impl Logger for NullLogger {
-    fn log_info_fmt<F>(&mut self, _fmt: F)
-    where
-        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> Result<(), core::fmt::Error>,
-    {
-    }
-    fn log_error_fmt<F>(&mut self, _fmt: F)
-    where
-        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> Result<(), core::fmt::Error>,
-    {
-    }
+    fn log_info_fmt<F>(&mut self, _f: F) {}
+    fn log_error_fmt<F>(&mut self, _f: F) {}
 }
