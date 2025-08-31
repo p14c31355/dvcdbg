@@ -6,7 +6,6 @@ use crate::error::{ExecutorError, ExplorerError};
 use core::fmt::Write;
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
-use heapless::Vec;
 const I2C_ADDRESS_COUNT: usize = 128;
 const I2C_ADDRESS_BITFLAGS_SIZE: usize = I2C_ADDRESS_COUNT / 8;
 
@@ -29,22 +28,36 @@ pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
 
 /// A command executor that prepends a prefix to each command.
 pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> {
-    // Use INIT_SEQUENCE_LEN and CMD_BUFFER_SIZE
-    buffer: Vec<u8, CMD_BUFFER_SIZE>, // Use CMD_BUFFER_SIZE
+    buffer: [u8; CMD_BUFFER_SIZE],
+    buffer_len: usize,
     initialized_addrs: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE>,
     prefix: u8,
-    init_sequence: heapless::Vec<u8, INIT_SEQUENCE_LEN>, // Capacity is the length of the init sequence
+    init_sequence: [u8; INIT_SEQUENCE_LEN],
+    init_sequence_len: usize,
 }
 
 impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
     PrefixExecutor<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>
 {
-    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, INIT_SEQUENCE_LEN>) -> Self {
+    pub fn new(prefix: u8, init_sequence: &[u8]) -> Self {
+        let mut init_seq_arr = [0u8; INIT_SEQUENCE_LEN];
+        let mut init_seq_len = 0;
+        for (i, &b) in init_sequence.iter().enumerate() {
+            if i < INIT_SEQUENCE_LEN {
+                init_seq_arr[i] = b;
+                init_seq_len += 1;
+            } else {
+                break;
+            }
+        }
+
         Self {
-            buffer: Vec::new(),
+            buffer: [0; CMD_BUFFER_SIZE],
+            buffer_len: 0,
             initialized_addrs: util::BitFlags::new(),
             prefix,
-            init_sequence,
+            init_sequence: init_seq_arr,
+            init_sequence_len: init_seq_len,
         }
     }
 
@@ -137,19 +150,19 @@ where
     {
         let addr_idx = addr as usize;
 
-        if !self.initialized_addrs.get(addr_idx).unwrap_or(false) && !self.init_sequence.is_empty() {
+        if !self.initialized_addrs.get(addr_idx).unwrap_or(false) && self.init_sequence_len > 0 {
             write!(writer, "[Info] I2C initializing for ").ok();
             util::write_bytes_hex_fmt(writer, &[addr]).ok();
             writeln!(writer, "...").ok();
             let ack_ok = Self::write_with_retry(i2c, addr, &[], writer).is_ok();
             if ack_ok {
-                // self.prefix = addr; // Removed this line as it mutates the fixed prefix
                 write!(writer, "[Info] Device found at ").ok();
                 util::write_bytes_hex_fmt(writer, &[addr]).ok();
                 writeln!(writer, ", sending init sequence...").ok();
-                for &c in self.init_sequence.iter() {
-                    let command = [self.prefix, c]; // Uses the original self.prefix
-                    Self::write_with_retry(i2c, addr, &command, writer)
+                for &c in &self.init_sequence[..self.init_sequence_len] {
+                    self.buffer[0] = self.prefix;
+                    self.buffer[1] = c;
+                    Self::write_with_retry(i2c, addr, &self.buffer[..2], writer)
                         .map_err(ExecutorError::I2cError)?;
                     Self::short_delay();
                 }
@@ -159,15 +172,23 @@ where
                 writeln!(writer).ok();
             }
         }
-        let prefix = self.prefix; // Changed to use the instance's prefix
-        self.buffer.clear();
-        self.buffer
-            .push(prefix)
-            .map_err(|_| ExecutorError::BufferOverflow)?;
-        self.buffer
-            .extend_from_slice(cmd)
-            .map_err(|_| ExecutorError::BufferOverflow)?;
-        Self::write_with_retry(i2c, addr, &self.buffer, writer).map_err(ExecutorError::I2cError)
+        self.buffer_len = 0;
+        if self.buffer_len >= CMD_BUFFER_SIZE {
+            return Err(ExecutorError::BufferOverflow);
+        }
+        self.buffer[self.buffer_len] = self.prefix;
+        self.buffer_len += 1;
+
+        if self.buffer_len + cmd.len() > CMD_BUFFER_SIZE {
+            return Err(ExecutorError::BufferOverflow);
+        }
+        for (i, &b) in cmd.iter().enumerate() {
+            self.buffer[self.buffer_len + i] = b;
+        }
+        self.buffer_len += cmd.len();
+
+        Self::write_with_retry(i2c, addr, &self.buffer[..self.buffer_len], writer)
+            .map_err(ExecutorError::I2cError)
     }
 }
 
@@ -176,7 +197,8 @@ pub struct Explorer<'a, const N: usize> {
 }
 
 pub struct ExploreResult {
-    pub found_addrs: Vec<u8, I2C_ADDRESS_COUNT>,
+    pub found_addrs: [u8; I2C_ADDRESS_COUNT],
+    pub found_addrs_len: usize,
     pub permutations_tested: usize,
 }
 
@@ -205,7 +227,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
     where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-        E: CmdExecutor<I2C, CMD_BUFFER_SIZE>, // Use CMD_BUFFER_SIZE
+        E: CmdExecutor<I2C, CMD_BUFFER_SIZE>,
         W: core::fmt::Write,
     {
         if self.sequence.is_empty() {
@@ -213,12 +235,18 @@ impl<'a, const N: usize> Explorer<'a, N> {
             return Err(ExplorerError::NoValidAddressesFound);
         }
 
-        let mut found_addrs: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
+        let mut found_addrs: [u8; I2C_ADDRESS_COUNT] = [0; I2C_ADDRESS_COUNT];
+        let mut found_addrs_len: usize = 0;
         let mut solved_addrs: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE> = util::BitFlags::new();
         let mut permutations_tested = 0;
-        let iter = PermutationIter::new(self)?;
+        let mut iter = PermutationIter::new(self)?;
         writeln!(writer, "[explorer] Starting permutation exploration...").ok();
-        for sequence in iter {
+        loop {
+            let sequence = match iter.next() {
+                Some(s) => s,
+                None => break,
+            };
+
             permutations_tested += 1;
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 let addr = addr_val;
@@ -243,7 +271,10 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     write!(writer, "[explorer] Successfully executed sequence on ").ok();
                     util::write_bytes_hex_fmt(writer, &[addr]).ok();
                     writeln!(writer).ok();
-                    if found_addrs.push(addr).is_err() {
+                    if found_addrs_len < I2C_ADDRESS_COUNT {
+                        found_addrs[found_addrs_len] = addr;
+                        found_addrs_len += 1;
+                    } else {
                         writeln!(writer, "[error] Buffer overflow in found_addrs").ok();
                         return Err(ExplorerError::BufferOverflow);
                     }
@@ -255,12 +286,13 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 }
             }
 
-            if found_addrs.len() == (I2C_SCAN_ADDR_END - I2C_SCAN_ADDR_START + 1) as usize {
+            if found_addrs_len == (I2C_SCAN_ADDR_END - I2C_SCAN_ADDR_START + 1) as usize {
                 break;
             }
         }
         Ok(ExploreResult {
             found_addrs,
+            found_addrs_len,
             permutations_tested,
         })
     }
@@ -344,15 +376,15 @@ impl<'a, const N: usize> Explorer<'a, N> {
 pub struct PermutationIter<'a, const N: usize> {
     pub explorer: &'a Explorer<'a, N>,
     pub total_nodes: usize,
-    pub current_permutation: [&'a [u8]; N], // Changed to fixed-size array
-    pub current_permutation_len: u8, // Changed to u8
+    pub current_permutation: [&'a [u8]; N],
+    pub current_permutation_len: u8,
     pub used: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE>,
-    pub in_degree: [u8; N], // Changed to fixed-size array
-    pub adj_list_rev: [u128; N], // Changed to fixed-size array of u128
-    pub path_stack: [u8; N], // Changed to fixed-size array
-    pub path_stack_len: u8, // Added to track the length of path_stack
-    pub loop_start_indices: [u8; N], // Changed to fixed-size array
-    pub loop_start_indices_len: u8, // Added to track the length of loop_start_indices
+    pub in_degree: [u8; N],
+    pub adj_list_rev: [u128; N],
+    pub path_stack: [u8; N],
+    pub path_stack_len: u8,
+    pub loop_start_indices: [u8; N],
+    pub loop_start_indices_len: u8,
     pub is_done: bool,
 }
 
@@ -363,8 +395,8 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             return Err(ExplorerError::TooManyCommands);
         }
 
-        let mut in_degree: [u8; N] = [0; N]; // Initialized with zeros
-        let mut adj_list_rev: [u128; N] = [0; N]; // Initialized with zeros
+        let mut in_degree: [u8; N] = [0; N];
+        let mut adj_list_rev: [u128; N] = [0; N];
 
         for (i, node) in explorer.sequence.iter().enumerate() {
             in_degree[i] = node.deps.len() as u8;
@@ -424,7 +456,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         Ok(Self {
             explorer,
             total_nodes,
-            current_permutation: [b""; N], // Initialize with empty byte slice
+            current_permutation: [b""; N],
             current_permutation_len: 0,
             used,
             in_degree,
