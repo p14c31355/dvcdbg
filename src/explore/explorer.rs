@@ -6,7 +6,6 @@ use crate::error::{ExecutorError, ExplorerError};
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 const I2C_ADDRESS_COUNT: usize = 128;
-const I2C_ADDRESS_BITFLAGS_SIZE: usize = I2C_ADDRESS_COUNT / 8;
 
 #[derive(Copy, Clone)]
 pub struct CmdNode {
@@ -29,7 +28,7 @@ pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
 pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> {
     buffer: [u8; CMD_BUFFER_SIZE],
     buffer_len: usize,
-    initialized_addrs: util::BitFlags<I2C_ADDRESS_COUNT>,
+    initialized_addrs: util::BitFlags, // No generic parameter needed now
     prefix: u8,
     init_sequence: [u8; INIT_SEQUENCE_LEN],
     init_sequence_len: usize,
@@ -48,7 +47,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
         Self {
             buffer: [0; CMD_BUFFER_SIZE],
             buffer_len: 0,
-            initialized_addrs: util::BitFlags::new(),
+            initialized_addrs: util::BitFlags::new(), // No generic parameter
             prefix,
             init_sequence: init_seq_arr,
             init_sequence_len: init_seq_len,
@@ -84,7 +83,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
                     last_error = Some(compat_err);
-                    writeln!(writer, "[I2C retry error] {}", compat_err).ok();
+                    writeln!(writer, "[I2C retry error] {compat_err}").ok();
                     Self::short_delay();
                 }
             }
@@ -124,7 +123,7 @@ where
         }
         Err(e) => {
             // Replaced writeln! with prevent_garbled
-            util::prevent_garbled(writer, format_args!("[explorer] FAILED: {}", e));
+            util::prevent_garbled(writer, format_args!("[explorer] FAILED: {e}"));
             Err(e.into())
         }
     }
@@ -259,7 +258,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
         let mut found_addrs: [u8; I2C_ADDRESS_COUNT] = [0; I2C_ADDRESS_COUNT];
         let mut found_addrs_len: usize = 0;
-        let mut solved_addrs: util::BitFlags<I2C_ADDRESS_COUNT> = util::BitFlags::new();
+        let mut solved_addrs: util::BitFlags = util::BitFlags::new();
         let mut permutations_tested = 0;
         let mut iter = PermutationIter::new(self)?;
         writeln!(writer, "[explorer] Starting permutation exploration...").ok();
@@ -281,7 +280,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
                 write!(writer, "[explorer] Trying sequence on ").ok();
                 util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                writeln!(writer, " (permutation {})", permutations_tested).ok();
+                writeln!(writer, " (permutation {permutations_tested})").ok();
 
                 let mut all_ok = true;
                 for i in 0..self.sequence.len() {
@@ -405,7 +404,7 @@ pub struct PermutationIter<'a, const N: usize> {
     pub total_nodes: usize,
     pub current_permutation: [&'a [u8]; N],
     pub current_permutation_len: u8,
-    pub used: util::BitFlags<N>,
+    pub used: util::BitFlags, // No generic parameter needed now
     pub in_degree: [u8; N],
     pub adj_list_rev: [u128; N],
     pub path_stack: [u8; N],
@@ -434,7 +433,6 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             in_degree[i] = node.deps.len() as u8;
             for &dep in node.deps.iter() {
                 if dep as usize >= total_nodes {
-                    // Cast dep to usize for comparison
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
                 adj_list_rev[dep as usize] |= 1 << (i as u128);
@@ -450,14 +448,13 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             }
         }
 
-                let mut count = 0;
+        let mut count = 0;
         let mut q_idx = 0;
         while q_idx < q.len() {
             let u = q[q_idx] as usize;
             q_idx += 1;
             count += 1;
 
-            // Iterate through bits in adj_list_rev[u]
             for v in 0..total_nodes {
                 if (adj_list_rev[u] >> v) & 1 != 0 {
                     temp_in_degree[v] -= 1;
@@ -475,17 +472,15 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         Ok(Self {
             explorer,
             total_nodes,
-            current_permutation: [b"", N],
+            current_permutation: [b""; N], // Corrected: Initialize with N empty byte slices
             current_permutation_len: 0,
-            used: util::BitFlags::new(),
+            used: util::BitFlags::new(), // Corrected: No generic parameter
             in_degree,
             adj_list_rev,
             path_stack: [0; N],
             path_stack_len: 0,
             is_done: false,
-            q,
-            q_head,
-            q_tail,
+            // Removed q, q_head, q_tail from here as they are local variables
         })
     }
 
@@ -548,7 +543,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                     self.in_degree[neighbor] += 1;
                 }
             }
-            return true;
+            true
         } else {
             // Already at the root and no more options
             self.is_done = true;

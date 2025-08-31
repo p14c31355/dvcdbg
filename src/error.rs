@@ -149,10 +149,10 @@ impl From<ExecutorError> for ExplorerError {
 impl fmt::Display for ExecutorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExecutorError::I2cError(kind) => write!(f, "I2cError: {}", kind),
+            ExecutorError::I2cError(kind) => write!(f, "I2cError: {kind}"),
             ExecutorError::ExecFailed => f.write_str("ExecFailed"),
             ExecutorError::BufferOverflow => f.write_str("BufferOverflow"),
-            ExecutorError::BitFlagsError(e) => write!(f, "BitFlagsError: {:?}", e),
+            ExecutorError::BitFlagsError(e) => write!(f, "BitFlagsError: {e:?}"),
         }
     }
 }
@@ -164,12 +164,12 @@ impl fmt::Display for ExplorerError {
             ExplorerError::DependencyCycle => f.write_str("DependencyCycle"),
             ExplorerError::NoValidAddressesFound => f.write_str("NoValidAddressesFound"),
             ExplorerError::ExecutionFailed(kind) => {
-                write!(f, "ExecutionFailed: {}", kind)
+                write!(f, "ExecutionFailed: {kind}")
             }
             ExplorerError::BufferOverflow => f.write_str("BufferOverflow"),
             ExplorerError::InvalidDependencyIndex => f.write_str("InvalidDependencyIndex"),
-            ExplorerError::DeviceNotFound(kind) => write!(f, "DeviceNotFound: {}", kind),
-            ExplorerError::BitFlagsError(e) => write!(f, "BitFlagsError: {:?}", e),
+            ExplorerError::DeviceNotFound(kind) => write!(f, "DeviceNotFound: {kind}"),
+            ExplorerError::BitFlagsError(e) => write!(f, "BitFlagsError: {e:?}"),
         }
     }
 }

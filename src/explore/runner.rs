@@ -31,7 +31,7 @@ where
     let found_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addrs) => addrs,
         Err(e) => {
-            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {}", e));
+            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e}"));
             return Err(ExplorerError::ExecutionFailed(e.into()));
         }
     };
@@ -49,7 +49,7 @@ where
         Err(e) => {
             util::prevent_garbled(
                 serial,
-                format_args!("[error] Failed to scan init sequence: {}", e),
+                format_args!("[error] Failed to scan init sequence: {e}"),
             );
             return Err(ExplorerError::ExecutionFailed(e));
         }
@@ -67,10 +67,7 @@ where
         explorer.explore::<_, _, _, CMD_BUFFER_SIZE>(i2c, &mut executor, serial)?;
 
     for addr in exploration_result.found_addrs[..exploration_result.found_addrs_len].iter() {
-        util::prevent_garbled(
-            serial,
-            format_args!("[driver] Found device at {:02X}", addr),
-        );
+        util::prevent_garbled(serial, format_args!("[driver] Found device at {addr:02X}"));
     }
 
     util::prevent_garbled(
@@ -105,7 +102,7 @@ where
     let mut found_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addrs) => addrs,
         Err(e) => {
-            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {:?}", e));
+            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}"));
             return Err(ExplorerError::ExecutionFailed(e.into()));
         }
     };
@@ -122,7 +119,7 @@ where
         ) {
             Ok(seq) => seq,
             Err(e) => {
-                util::prevent_garbled(serial, format_args!("Failed to scan init sequence: {}", e));
+                util::prevent_garbled(serial, format_args!("Failed to scan init sequence: {e}"));
                 return Err(ExplorerError::ExecutionFailed(e.into()));
             }
         };
@@ -168,7 +165,7 @@ where
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
         for (addr_idx, &addr) in found_addrs.iter().enumerate() {
-            util::prevent_garbled(serial, format_args!("Sending commands to {:02X}", addr));
+            util::prevent_garbled(serial, format_args!("Sending commands to {addr:02X}"));
 
             let mut all_ok = true;
 
@@ -182,7 +179,7 @@ where
                 {
                     util::prevent_garbled(
                         serial,
-                        format_args!("[warn] Command {} failed on {:02X}", i, addr),
+                        format_args!("[warn] Command {i} failed on {addr:02X}"),
                     );
                     all_ok = false;
                     if i >= successful_seq_len {
@@ -254,7 +251,7 @@ where
             &mut executor,
             serial,
             target_addr,
-            &single_sequence.0[i],
+            single_sequence.0[i],
             i,
         )?;
     }

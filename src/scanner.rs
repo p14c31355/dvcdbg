@@ -44,7 +44,7 @@ where
                 }
                 write!(writer, "Write failed at ").ok();
                 util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                writeln!(writer, ": {}", error_kind).ok();
+                writeln!(writer, ": {error_kind}").ok();
                 last_error = Some(error_kind);
             }
         }
@@ -137,7 +137,7 @@ where
     let found_addrs = match crate::scanner::scan_i2c(i2c, writer, ctrl_byte) {
         Ok(addrs) => addrs,
         Err(e) => {
-            writeln!(writer, "Failed to scan I2C: {:?}\r\n", e).ok();
+            writeln!(writer, "Failed to scan I2C: {e:?}\r\n").ok();
             return Err(e);
         }
     };
@@ -214,7 +214,7 @@ where
                     util::write_bytes_hex_fmt(writer, &[cmd]).ok();
                     write!(writer, " at ").ok();
                     util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                    writeln!(writer, ": {}", error_kind).ok();
+                    writeln!(writer, ": {error_kind}").ok();
                     last_error = Some(error_kind);
                 }
             }
