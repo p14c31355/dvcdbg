@@ -59,8 +59,8 @@ pub fn write_bytes_hex_fmt<W: core::fmt::Write>(w: &mut W, bytes: &[u8]) -> core
 // bitmask utility
 use crate::error::BitFlagsError;
 
-pub struct BitFlags<const N: usize, const S: usize> {
-    bytes: [u8; S],
+pub struct BitFlags<const N: usize> {
+    bytes: [u8; (N + 7) / 8],
 }
 
 impl<const N: usize, const S: usize> BitFlags<N, S> {
