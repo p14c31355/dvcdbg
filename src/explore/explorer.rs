@@ -349,8 +349,10 @@ pub struct PermutationIter<'a, const N: usize> {
     pub used: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE>,
     pub in_degree: [u8; N], // Changed to fixed-size array
     pub adj_list_rev: [u128; N], // Changed to fixed-size array of u128
-    pub path_stack: Vec<u8, N>,
-    pub loop_start_indices: Vec<u8, N>,
+    pub path_stack: [u8; N], // Changed to fixed-size array
+    pub path_stack_len: u8, // Added to track the length of path_stack
+    pub loop_start_indices: [u8; N], // Changed to fixed-size array
+    pub loop_start_indices_len: u8, // Added to track the length of loop_start_indices
     pub is_done: bool,
 }
 
@@ -416,8 +418,10 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             used,
             in_degree,
             adj_list_rev,
-            path_stack: Vec::new(),
-            loop_start_indices: Vec::new(),
+            path_stack: [0; N], // Initialize with zeros
+            path_stack_len: 0, // Initialize length to 0
+            loop_start_indices: [0; N], // Initialize with zeros
+            loop_start_indices_len: 0, // Initialize length to 0
             is_done: false,
         })
     }
@@ -426,11 +430,11 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         let current_depth = self.current_permutation_len as usize; // Use the new length field, cast to usize
         // The `loop_start_indices` tracks the starting point for the search at the current depth.
         // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
-        let start_idx = self
-            .loop_start_indices
-            .get(current_depth)
-            .copied()
-            .unwrap_or(0) as usize;
+        let start_idx = if current_depth < self.loop_start_indices_len as usize {
+            self.loop_start_indices[current_depth] as usize
+        } else {
+            0
+        };
 
         // Iterate through all possible nodes (0 to total_nodes-1)
         for i in start_idx..self.total_nodes {
@@ -445,10 +449,20 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 } else {
                     self.is_done = true; // Buffer overflow
                 }
-                self.path_stack.push(i as u8)
-                    .unwrap_or_else(|_| self.is_done = true);
-                self.loop_start_indices.push((i + 1) as u8)
-                    .unwrap_or_else(|_| self.is_done = true);
+                // Push to path_stack
+                if self.path_stack_len < N as u8 {
+                    self.path_stack[self.path_stack_len as usize] = i as u8;
+                    self.path_stack_len += 1;
+                } else {
+                    self.is_done = true; // Buffer overflow
+                }
+                // Push to loop_start_indices
+                if self.loop_start_indices_len < N as u8 {
+                    self.loop_start_indices[self.loop_start_indices_len as usize] = (i + 1) as u8;
+                    self.loop_start_indices_len += 1;
+                } else {
+                    self.is_done = true; // Buffer overflow
+                }
                 // Iterate through bits in adj_list_rev[i]
                 for neighbor in 0..self.total_nodes {
                     if (self.adj_list_rev[i] >> neighbor) & 1 != 0 {
@@ -462,7 +476,9 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
     }
 
     fn backtrack(&mut self) -> bool {
-        if let Some(last_added_idx_u8) = self.path_stack.pop() {
+        if self.path_stack_len > 0 {
+            self.path_stack_len -= 1;
+            let last_added_idx_u8 = self.path_stack[self.path_stack_len as usize];
             let last_added_idx = last_added_idx_u8 as usize;
             // Remove from current_permutation
             if self.current_permutation_len > 0 {
@@ -471,7 +487,10 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             }
             // Unmark node 'last_added_idx' as used
             self.used.clear(last_added_idx).unwrap_or_else(|_| self.is_done = true);
-            self.loop_start_indices.pop();
+            // Pop from loop_start_indices
+            if self.loop_start_indices_len > 0 {
+                self.loop_start_indices_len -= 1;
+            }
 
             // Iterate through bits in adj_list_rev[last_added_idx]
             for neighbor in 0..self.total_nodes {
