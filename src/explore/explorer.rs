@@ -344,7 +344,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
 pub struct PermutationIter<'a, const N: usize> {
     pub explorer: &'a Explorer<'a, N>,
     pub total_nodes: usize,
-    pub current_permutation: [Option<&'a [u8]>; N], // Changed to fixed-size array of Option
+    pub current_permutation: [&'a [u8]; N], // Changed to fixed-size array
     pub current_permutation_len: u8, // Changed to u8
     pub used: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE>,
     pub in_degree: [u8; N], // Changed to fixed-size array
@@ -367,28 +367,34 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         let mut adj_list_rev: [u128; N] = [0; N]; // Initialized with zeros
 
         for (i, node) in explorer.sequence.iter().enumerate() {
-            in_degree[i as usize] = node.deps.len() as u8; // Cast i to usize
+            in_degree[i] = node.deps.len() as u8;
             for &dep in node.deps.iter() {
                 if dep as usize >= total_nodes {
                     // Cast dep to usize for comparison
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_list_rev[dep as usize] |= 1 << (i as u128); // Set bit for dependency
+                adj_list_rev[dep as usize] |= 1 << (i as u128);
             }
         }
 
         // Cycle detection using Kahn's algorithm
         let mut temp_in_degree = in_degree.clone();
-        let mut q = Vec::<u8, N>::new();
+        let mut q = [0u8; N];
+        let mut q_len = 0;
         for i in 0..total_nodes {
             if temp_in_degree[i] == 0 {
-                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
+                if q_len < N {
+                    q[q_len] = i as u8;
+                    q_len += 1;
+                } else {
+                    return Err(ExplorerError::BufferOverflow);
+                }
             }
         }
 
         let mut count = 0;
         let mut q_idx = 0;
-        while q_idx < q.len() {
+        while q_idx < q_len {
             let u = q[q_idx] as usize;
             q_idx += 1;
             count += 1;
@@ -398,7 +404,12 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 if (adj_list_rev[u] >> v) & 1 != 0 {
                     temp_in_degree[v] -= 1;
                     if temp_in_degree[v] == 0 {
-                        q.push(v as u8).map_err(|_| ExplorerError::BufferOverflow)?;
+                        if q_len < N {
+                            q[q_len] = v as u8;
+                            q_len += 1;
+                        } else {
+                            return Err(ExplorerError::BufferOverflow);
+                        }
                     }
                 }
             }
@@ -413,23 +424,21 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         Ok(Self {
             explorer,
             total_nodes,
-            current_permutation: [None; N], // Initialize with None
-            current_permutation_len: 0, // Initialize length to 0
+            current_permutation: [b""; N], // Initialize with empty byte slice
+            current_permutation_len: 0,
             used,
             in_degree,
             adj_list_rev,
-            path_stack: [0; N], // Initialize with zeros
-            path_stack_len: 0, // Initialize length to 0
-            loop_start_indices: [0; N], // Initialize with zeros
-            loop_start_indices_len: 0, // Initialize length to 0
+            path_stack: [0; N],
+            path_stack_len: 0,
+            loop_start_indices: [0; N],
+            loop_start_indices_len: 0,
             is_done: false,
         })
     }
 
     fn try_extend(&mut self) -> bool {
-        let current_depth = self.current_permutation_len as usize; // Use the new length field, cast to usize
-        // The `loop_start_indices` tracks the starting point for the search at the current depth.
-        // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
+        let current_depth = self.current_permutation_len as usize;
         let start_idx = if current_depth < self.loop_start_indices_len as usize {
             self.loop_start_indices[current_depth] as usize
         } else {
@@ -442,26 +451,25 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             if !self.used.get(i).unwrap_or(false) && self.in_degree[i] == 0 {
                 // Mark node 'i' as used
                 self.used.set(i).unwrap_or_else(|_| self.is_done = true);
-                // Add to current_permutation
-                if self.current_permutation_len < N as u8 { // Compare with N as u8
-                    self.current_permutation[self.current_permutation_len as usize] = Some(self.explorer.sequence[i].bytes);
+                if self.current_permutation_len < N as u8 {
+                    self.current_permutation[self.current_permutation_len as usize] = self.explorer.sequence[i].bytes;
                     self.current_permutation_len += 1;
                 } else {
-                    self.is_done = true; // Buffer overflow
+                    self.is_done = true;
                 }
                 // Push to path_stack
                 if self.path_stack_len < N as u8 {
                     self.path_stack[self.path_stack_len as usize] = i as u8;
                     self.path_stack_len += 1;
                 } else {
-                    self.is_done = true; // Buffer overflow
+                    self.is_done = true;
                 }
                 // Push to loop_start_indices
                 if self.loop_start_indices_len < N as u8 {
                     self.loop_start_indices[self.loop_start_indices_len as usize] = (i + 1) as u8;
                     self.loop_start_indices_len += 1;
                 } else {
-                    self.is_done = true; // Buffer overflow
+                    self.is_done = true;
                 }
                 // Iterate through bits in adj_list_rev[i]
                 for neighbor in 0..self.total_nodes {
@@ -483,7 +491,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             // Remove from current_permutation
             if self.current_permutation_len > 0 {
                 self.current_permutation_len -= 1;
-                self.current_permutation[self.current_permutation_len as usize] = None;
+                self.current_permutation[self.current_permutation_len as usize] = b"";
             }
             // Unmark node 'last_added_idx' as used
             self.used.clear(last_added_idx).unwrap_or_else(|_| self.is_done = true);
@@ -498,10 +506,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                     self.in_degree[neighbor] += 1;
                 }
             }
-
-            // If path_stack is empty after pop, we've backtracked past the root
-            if self.path_stack.is_empty() {
-                // Removed current_permutation.is_empty() check
+            if self.path_stack_len == 0 && self.current_permutation_len == 0 {
                 self.is_done = true;
                 return false;
             }
@@ -515,7 +520,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
 }
 
 impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
-    type Item = Vec<&'a [u8], N>; // Still returns a Vec for now
+    type Item = [&'a [u8]; N];
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_done {
@@ -523,24 +528,12 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
         }
 
         loop {
-            // If we have a complete permutation, return it and prepare for the next one.
-            if self.current_permutation_len as usize == self.total_nodes { // Use the new length field
-                // Create a new Vec from the current_permutation array
-                let mut full_sequence = Vec::new();
-                for i in 0..self.total_nodes {
-                    if let Some(bytes) = self.current_permutation[i] {
-                        full_sequence.push(bytes).unwrap_or_else(|_| self.is_done = true);
-                    } else {
-                        self.is_done = true; // Should not happen if current_permutation_len == total_nodes
-                        return None;
-                    }
-                }
-
-                // Backtrack to find the next permutation
+            if self.current_permutation_len as usize == self.total_nodes {
+                let result = self.current_permutation;
                 if !self.backtrack() {
                     self.is_done = true;
                 }
-                return Some(full_sequence);
+                return Some(result);
             }
 
             // Try to extend the current partial permutation
