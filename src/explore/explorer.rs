@@ -303,12 +303,12 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 continue;
             }
             in_degree[i] = node.deps.len() as u8; // node.deps.len() is usize, cast to u8
-        for &dep_idx in node.deps.iter() {
-            // dep_idx is u8, i is usize. adj_list_rev expects u8 for its inner Vec.
-            adj_list_rev[dep_idx as usize]
-                .push(i as u8)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
-        }
+            for &dep_idx in node.deps.iter() {
+                // dep_idx is u8, i is usize. adj_list_rev expects u8 for its inner Vec.
+                adj_list_rev[dep_idx as usize]
+                    .push(i as u8)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
+            }
         }
 
         let mut q: heapless::Vec<u8, N> = heapless::Vec::new(); // Changed to u8
@@ -322,7 +322,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new(); // Changed type to u8
         let mut visited_count = 0;
 
-        while let Some(u_u8) = q.pop() { // u_u8 is u8
+        while let Some(u_u8) = q.pop() {
+            // u_u8 is u8
             let u = u_u8 as usize; // Cast to usize for indexing
             visited_count += 1;
 
@@ -334,7 +335,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 .push(cmd_bytes)
                 .map_err(|_| ExplorerError::BufferOverflow)?;
 
-            for &v_u8 in adj_list_rev[u].iter() { // v_u8 is u8
+            for &v_u8 in adj_list_rev[u].iter() {
+                // v_u8 is u8
                 let v = v_u8 as usize; // Cast to usize for indexing
                 if !failed_nodes[v] {
                     in_degree[v] -= 1;
@@ -382,7 +384,8 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         for (i, node) in explorer.sequence.iter().enumerate() {
             in_degree[i as usize] = node.deps.len() as u8; // Cast i to usize
             for &dep in node.deps.iter() {
-                if dep as usize >= total_nodes { // Cast dep to usize for comparison
+                if dep as usize >= total_nodes {
+                    // Cast dep to usize for comparison
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
                 adj_list_rev[dep as usize]
@@ -407,7 +410,8 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             q_idx += 1;
             count += 1;
 
-            for &v_u8 in adj_list_rev[u].iter() { // v is u8
+            for &v_u8 in adj_list_rev[u].iter() {
+                // v is u8
                 let v = v_u8 as usize; // Cast v to usize for indexing
                 temp_in_degree[v] -= 1;
                 if temp_in_degree[v] == 0 {
@@ -442,7 +446,11 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         let current_depth = self.current_permutation.len();
         // The `loop_start_indices` tracks the starting point for the search at the current depth.
         // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
-        let start_idx = self.loop_start_indices.get(current_depth).copied().unwrap_or(0) as usize;
+        let start_idx = self
+            .loop_start_indices
+            .get(current_depth)
+            .copied()
+            .unwrap_or(0) as usize;
 
         // Iterate through all possible nodes (0 to total_nodes-1)
         for i in start_idx..self.total_nodes {
@@ -451,7 +459,8 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 self.current_permutation.push(self.sequence[i].bytes).ok(); // Changed self.explorer.sequence to self.sequence
                 self.path_stack.push(i as u8).ok(); // Cast i to u8
                 self.loop_start_indices.push((i + 1) as u8).ok(); // Cast (i+1) to u8
-                for &neighbor_u8 in self.adj_list_rev[i].iter() { // neighbor_u8 is u8
+                for &neighbor_u8 in self.adj_list_rev[i].iter() {
+                    // neighbor_u8 is u8
                     let neighbor = neighbor_u8 as usize; // Cast neighbor to usize for indexing
                     self.in_degree[neighbor] -= 1;
                 }
@@ -469,13 +478,15 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             self.used[last_added_idx] = false;
             self.loop_start_indices.pop(); // Remove the last start index
 
-            for &neighbor_u8 in self.adj_list_rev[last_added_idx].iter() { // neighbor_u8 is u8
+            for &neighbor_u8 in self.adj_list_rev[last_added_idx].iter() {
+                // neighbor_u8 is u8
                 let neighbor = neighbor_u8 as usize; // Cast neighbor to usize for indexing
                 self.in_degree[neighbor] += 1;
             }
 
             // If path_stack is empty after pop, we've backtracked past the root
-            if self.path_stack.is_empty() { // Removed current_permutation.is_empty() check
+            if self.path_stack.is_empty() {
+                // Removed current_permutation.is_empty() check
                 self.is_done = true;
                 return false;
             }
