@@ -25,7 +25,6 @@ impl core::fmt::Write for DummySerial {
     }
 }
 
-
 struct DummyI2c;
 impl I2cCompat for DummyI2c {
     type Error = core::convert::Infallible;

@@ -41,14 +41,9 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
 {
     pub fn new(prefix: u8, init_sequence: &[u8]) -> Self {
         let mut init_seq_arr = [0u8; INIT_SEQUENCE_LEN];
-        let mut init_seq_len = 0;
-        for (i, &b) in init_sequence.iter().enumerate() {
-            if i < INIT_SEQUENCE_LEN {
-                init_seq_arr[i] = b;
-                init_seq_len += 1;
-            } else {
-                break;
-            }
+        let init_seq_len = init_sequence.len().min(INIT_SEQUENCE_LEN);
+        if init_seq_len > 0 {
+            init_seq_arr[..init_seq_len].copy_from_slice(&init_sequence[..init_seq_len]);
         }
 
         Self {
@@ -154,7 +149,12 @@ where
     {
         let addr_idx = addr as usize;
 
-        if !self.initialized_addrs.get(addr_idx).unwrap_or(false) && self.init_sequence_len > 0 {
+        if !self
+            .initialized_addrs
+            .get(addr_idx)
+            .map_err(ExecutorError::BitFlagsError)?
+            && self.init_sequence_len > 0
+        {
             // Check for buffer space for batched init sequence
             if (self.init_sequence_len * 2) > CMD_BUFFER_SIZE {
                 return Err(ExecutorError::BufferOverflow);
@@ -169,25 +169,35 @@ where
                 write!(writer, "[Info] Device found at ").ok();
                 util::write_bytes_hex_fmt(writer, &[addr]).ok();
                 writeln!(writer, ", sending init sequence...").ok();
-                
+
                 // Batch the init sequence
-                for (i, &c) in self.init_sequence[..self.init_sequence_len].iter().enumerate() {
+                for (i, &c) in self.init_sequence[..self.init_sequence_len]
+                    .iter()
+                    .enumerate()
+                {
                     self.buffer[2 * i] = self.prefix;
                     self.buffer[2 * i + 1] = c;
                 }
-                
-                Self::write_with_retry(i2c, addr, &self.buffer[..self.init_sequence_len * 2], writer)
-                    .map_err(ExecutorError::I2cError)?;
-                    
+
+                Self::write_with_retry(
+                    i2c,
+                    addr,
+                    &self.buffer[..self.init_sequence_len * 2],
+                    writer,
+                )
+                .map_err(ExecutorError::I2cError)?;
+
                 Self::short_delay();
-                
-                self.initialized_addrs.set(addr_idx).map_err(|e| ExecutorError::BitFlagsError(e))?;
+
+                self.initialized_addrs
+                    .set(addr_idx)
+                    .map_err(|e| ExecutorError::BitFlagsError(e))?;
                 write!(writer, "[Info] I2C initialized for ").ok();
                 util::write_bytes_hex_fmt(writer, &[addr]).ok();
                 writeln!(writer).ok();
             }
         }
-        
+
         // Existing command execution logic remains similar
         self.buffer_len = 0;
         if self.buffer_len >= CMD_BUFFER_SIZE {
@@ -254,7 +264,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
         let mut found_addrs: [u8; I2C_ADDRESS_COUNT] = [0; I2C_ADDRESS_COUNT];
         let mut found_addrs_len: usize = 0;
-        let mut solved_addrs: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE> = util::BitFlags::new();
+        let mut solved_addrs: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE> =
+            util::BitFlags::new();
         let mut permutations_tested = 0;
         let mut iter = PermutationIter::new(self)?;
         writeln!(writer, "[explorer] Starting permutation exploration...").ok();
@@ -267,7 +278,10 @@ impl<'a, const N: usize> Explorer<'a, N> {
             permutations_tested += 1;
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 let addr = addr_val;
-                if solved_addrs.get(addr as usize).unwrap_or(false) {
+                if solved_addrs
+                    .get(addr as usize)
+                    .map_err(ExplorerError::BitFlagsError)?
+                {
                     continue;
                 }
 
@@ -295,7 +309,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
                         writeln!(writer, "[error] Buffer overflow in found_addrs").ok();
                         return Err(ExplorerError::BufferOverflow);
                     }
-                    solved_addrs.set(addr as usize).map_err(|e| ExplorerError::BitFlagsError(e))?;
+                    solved_addrs
+                        .set(addr as usize)
+                        .map_err(|e| ExplorerError::BitFlagsError(e))?;
                 } else {
                     write!(writer, "[explorer] Failed to execute sequence on ").ok();
                     util::write_bytes_hex_fmt(writer, &[addr]).ok();
@@ -405,6 +421,10 @@ pub struct PermutationIter<'a, const N: usize> {
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
     pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
+        const _: () = assert!(
+            N <= 128,
+            "PermutationIter currently only supports up to 128 nodes due to using a u128 bitmask."
+        );
         let total_nodes = explorer.sequence.len();
         if total_nodes > N {
             return Err(ExplorerError::TooManyCommands);
@@ -473,11 +493,17 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         let current_depth = self.current_permutation_len as usize;
 
         for i in 0..self.total_nodes {
-            if !self.used.get(i).unwrap_or(false) && self.in_degree[i] == 0 {
+            if !self
+                .used
+                .get(i)
+                .map_err(|_| ExplorerError::BufferOverflow)?
+                && self.in_degree[i] == 0
+            {
                 // Mark node 'i' as used
                 self.used.set(i).unwrap_or_else(|_| self.is_done = true);
                 if self.current_permutation_len < N as u8 {
-                    self.current_permutation[self.current_permutation_len as usize] = self.explorer.sequence[i].bytes;
+                    self.current_permutation[self.current_permutation_len as usize] =
+                        self.explorer.sequence[i].bytes;
                     self.current_permutation_len += 1;
                 } else {
                     self.is_done = true;
@@ -489,7 +515,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 } else {
                     self.is_done = true;
                 }
-                
+
                 for neighbor in 0..self.total_nodes {
                     if (self.adj_list_rev[i] >> neighbor) & 1 != 0 {
                         self.in_degree[neighbor] -= 1;
@@ -506,14 +532,16 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             self.path_stack_len -= 1;
             let last_added_idx_u8 = self.path_stack[self.path_stack_len as usize];
             let last_added_idx = last_added_idx_u8 as usize;
-            
+
             if self.current_permutation_len > 0 {
                 self.current_permutation_len -= 1;
                 self.current_permutation[self.current_permutation_len as usize] = b"";
             }
-            
-            self.used.clear(last_added_idx).unwrap_or_else(|_| self.is_done = true);
-            
+
+            self.used
+                .clear(last_added_idx)
+                .unwrap_or_else(|_| self.is_done = true);
+
             for neighbor in 0..self.total_nodes {
                 if (self.adj_list_rev[last_added_idx] >> neighbor) & 1 != 0 {
                     self.in_degree[neighbor] += 1;

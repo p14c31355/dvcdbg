@@ -65,7 +65,9 @@ pub struct BitFlags<const N: usize, const S: usize> {
 
 impl<const N: usize, const S: usize> BitFlags<N, S> {
     pub fn new() -> Self {
-        Self { vec: heapless::Vec::from_slice(&[0u8; S]).unwrap() }
+        Self {
+            vec: heapless::Vec::from_slice(&[0u8; S]).unwrap(),
+        }
     }
 
     pub fn set(&mut self, idx: usize) -> Result<(), BitFlagsError> {

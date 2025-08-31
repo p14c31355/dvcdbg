@@ -127,7 +127,11 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     W: core::fmt::Write,
 {
-    writeln!(writer, "Starting I2C bus scan with initialization sequence...").ok();
+    writeln!(
+        writer,
+        "Starting I2C bus scan with initialization sequence..."
+    )
+    .ok();
     write!(writer, "Initializing scan with control byte ").ok();
     util::write_bytes_hex_fmt(writer, &[ctrl_byte]).ok();
     writeln!(writer).ok();
@@ -247,7 +251,7 @@ fn log_sequence_summary<W, const N: usize>(
     write!(writer, "Expected Commands:").ok();
     for &cmd in expected_sequence {
         write!(writer, " ").ok();
-    util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
     }
     writeln!(writer).ok();
 
