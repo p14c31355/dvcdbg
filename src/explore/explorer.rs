@@ -133,7 +133,6 @@ where
 
 impl<I2C, const INIT_SEQ_SIZE: usize, const CMD_BUFFER_SIZE: usize>
     CmdExecutor<I2C, CMD_BUFFER_SIZE> for PrefixExecutor<INIT_SEQ_SIZE, CMD_BUFFER_SIZE>
-// Use CMD_BUFFER_SIZE
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -151,27 +150,40 @@ where
         let addr_idx = addr as usize;
 
         if !self.initialized_addrs.get(addr_idx).unwrap_or(false) && self.init_sequence_len > 0 {
+            // Check for buffer space for batched init sequence
+            if (self.init_sequence_len * 2) > CMD_BUFFER_SIZE {
+                return Err(ExecutorError::BufferOverflow);
+            }
+
             write!(writer, "[Info] I2C initializing for ").ok();
             util::write_bytes_hex_fmt(writer, &[addr]).ok();
             writeln!(writer, "...").ok();
             let ack_ok = Self::write_with_retry(i2c, addr, &[], writer).is_ok();
+
             if ack_ok {
                 write!(writer, "[Info] Device found at ").ok();
                 util::write_bytes_hex_fmt(writer, &[addr]).ok();
                 writeln!(writer, ", sending init sequence...").ok();
-                for &c in &self.init_sequence[..self.init_sequence_len] {
-                    self.buffer[0] = self.prefix;
-                    self.buffer[1] = c;
-                    Self::write_with_retry(i2c, addr, &self.buffer[..2], writer)
-                        .map_err(ExecutorError::I2cError)?;
-                    Self::short_delay();
+                
+                // Batch the init sequence
+                for (i, &c) in self.init_sequence[..self.init_sequence_len].iter().enumerate() {
+                    self.buffer[2 * i] = self.prefix;
+                    self.buffer[2 * i + 1] = c;
                 }
+                
+                Self::write_with_retry(i2c, addr, &self.buffer[..self.init_sequence_len * 2], writer)
+                    .map_err(ExecutorError::I2cError)?;
+                    
+                Self::short_delay();
+                
                 self.initialized_addrs.set(addr_idx).map_err(|e| ExecutorError::BitFlagsError(e))?;
                 write!(writer, "[Info] I2C initialized for ").ok();
                 util::write_bytes_hex_fmt(writer, &[addr]).ok();
                 writeln!(writer).ok();
             }
         }
+        
+        // Existing command execution logic remains similar
         self.buffer_len = 0;
         if self.buffer_len >= CMD_BUFFER_SIZE {
             return Err(ExecutorError::BufferOverflow);
@@ -383,8 +395,6 @@ pub struct PermutationIter<'a, const N: usize> {
     pub adj_list_rev: [u128; N],
     pub path_stack: [u8; N],
     pub path_stack_len: u8,
-    pub loop_start_indices: [u8; N],
-    pub loop_start_indices_len: u8,
     pub is_done: bool,
 }
 
@@ -411,22 +421,16 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
 
         // Cycle detection using Kahn's algorithm
         let mut temp_in_degree = in_degree.clone();
-        let mut q = [0u8; N];
-        let mut q_len = 0;
+        let mut q: heapless::Vec<u8, N> = heapless::Vec::new();
         for i in 0..total_nodes {
             if temp_in_degree[i] == 0 {
-                if q_len < N {
-                    q[q_len] = i as u8;
-                    q_len += 1;
-                } else {
-                    return Err(ExplorerError::BufferOverflow);
-                }
+                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
         let mut count = 0;
         let mut q_idx = 0;
-        while q_idx < q_len {
+        while q_idx < q.len() {
             let u = q[q_idx] as usize;
             q_idx += 1;
             count += 1;
@@ -436,12 +440,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 if (adj_list_rev[u] >> v) & 1 != 0 {
                     temp_in_degree[v] -= 1;
                     if temp_in_degree[v] == 0 {
-                        if q_len < N {
-                            q[q_len] = v as u8;
-                            q_len += 1;
-                        } else {
-                            return Err(ExplorerError::BufferOverflow);
-                        }
+                        q.push(v as u8).map_err(|_| ExplorerError::BufferOverflow)?;
                     }
                 }
             }
@@ -451,35 +450,24 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             return Err(ExplorerError::DependencyCycle);
         }
 
-        let used = util::BitFlags::new();
-
         Ok(Self {
             explorer,
             total_nodes,
             current_permutation: [b""; N],
             current_permutation_len: 0,
-            used,
+            used: util::BitFlags::new(),
             in_degree,
             adj_list_rev,
             path_stack: [0; N],
             path_stack_len: 0,
-            loop_start_indices: [0; N],
-            loop_start_indices_len: 0,
             is_done: false,
         })
     }
 
     fn try_extend(&mut self) -> bool {
         let current_depth = self.current_permutation_len as usize;
-        let start_idx = if current_depth < self.loop_start_indices_len as usize {
-            self.loop_start_indices[current_depth] as usize
-        } else {
-            0
-        };
 
-        // Iterate through all possible nodes (0 to total_nodes-1)
-        for i in start_idx..self.total_nodes {
-            // Check if node 'i' is NOT used AND its in-degree is 0
+        for i in 0..self.total_nodes {
             if !self.used.get(i).unwrap_or(false) && self.in_degree[i] == 0 {
                 // Mark node 'i' as used
                 self.used.set(i).unwrap_or_else(|_| self.is_done = true);
@@ -496,14 +484,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 } else {
                     self.is_done = true;
                 }
-                // Push to loop_start_indices
-                if self.loop_start_indices_len < N as u8 {
-                    self.loop_start_indices[self.loop_start_indices_len as usize] = (i + 1) as u8;
-                    self.loop_start_indices_len += 1;
-                } else {
-                    self.is_done = true;
-                }
-                // Iterate through bits in adj_list_rev[i]
+                
                 for neighbor in 0..self.total_nodes {
                     if (self.adj_list_rev[i] >> neighbor) & 1 != 0 {
                         self.in_degree[neighbor] -= 1;
@@ -520,29 +501,20 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             self.path_stack_len -= 1;
             let last_added_idx_u8 = self.path_stack[self.path_stack_len as usize];
             let last_added_idx = last_added_idx_u8 as usize;
-            // Remove from current_permutation
+            
             if self.current_permutation_len > 0 {
                 self.current_permutation_len -= 1;
                 self.current_permutation[self.current_permutation_len as usize] = b"";
             }
-            // Unmark node 'last_added_idx' as used
+            
             self.used.clear(last_added_idx).unwrap_or_else(|_| self.is_done = true);
-            // Pop from loop_start_indices
-            if self.loop_start_indices_len > 0 {
-                self.loop_start_indices_len -= 1;
-            }
-
-            // Iterate through bits in adj_list_rev[last_added_idx]
+            
             for neighbor in 0..self.total_nodes {
                 if (self.adj_list_rev[last_added_idx] >> neighbor) & 1 != 0 {
                     self.in_degree[neighbor] += 1;
                 }
             }
-            if self.path_stack_len == 0 && self.current_permutation_len == 0 {
-                self.is_done = true;
-                return false;
-            }
-            true
+            return true;
         } else {
             // Already at the root and no more options
             self.is_done = true;
@@ -562,15 +534,12 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
         loop {
             if self.current_permutation_len as usize == self.total_nodes {
                 let result = self.current_permutation;
-                if !self.backtrack() {
-                    self.is_done = true;
-                }
+                self.backtrack();
                 return Some(result);
             }
 
             // Try to extend the current partial permutation
             if self.try_extend() {
-                // Successfully extended, continue building the permutation
                 continue;
             } else {
                 // Could not extend, backtrack
