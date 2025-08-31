@@ -110,8 +110,7 @@ where
     util::prevent_garbled(
         writer,
         format_args!(
-            "[explorer] Sending node {} bytes: {:02X?} ...",
-            cmd_idx, cmd_bytes
+            "[explorer] Sending node {cmd_idx} bytes: {cmd_bytes:02X?} ..."
         ),
     );
 
@@ -189,7 +188,7 @@ where
 
                 self.initialized_addrs
                     .set(addr_idx)
-                    .map_err(|e| ExecutorError::BitFlagsError(e))?;
+                    .map_err(ExecutorError::BitFlagsError)?;
                 write!(writer, "[Info] I2C initialized for ").ok();
                 util::write_bytes_hex_fmt(writer, &[addr]).ok();
                 writeln!(writer).ok();
@@ -304,7 +303,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     }
                     solved_addrs
                         .set(addr as usize)
-                        .map_err(|e| ExplorerError::BitFlagsError(e))?;
+                        .map_err(ExplorerError::BitFlagsError)?;
                 } else {
                     write!(writer, "[explorer] Failed to execute sequence on ").ok();
                     util::write_bytes_hex_fmt(writer, &[addr]).ok();
@@ -440,8 +439,8 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         }
 
         // Cycle detection using Kahn's algorithm
-        let mut temp_in_degree = in_degree.clone();
-        let mut q: [u8; N] = [0; N];
+        let mut temp_in_degree = in_degree;
+        let mut q: heapless::Vec<u8, N> = heapless::Vec::new();
         let mut q_head: usize = 0;
         let mut q_tail: usize = 0;
         for i in 0..total_nodes {

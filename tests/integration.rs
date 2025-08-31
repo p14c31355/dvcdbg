@@ -20,7 +20,7 @@ impl SerialCompat for DummySerial {
 impl core::fmt::Write for DummySerial {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         // For testing purposes, we can print to stdout to see what would be logged
-        print!("{}", s);
+        print!("{s}");
         Ok(())
     }
 }

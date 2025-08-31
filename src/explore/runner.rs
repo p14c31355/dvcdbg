@@ -32,7 +32,7 @@ where
         Ok(addrs) => addrs,
         Err(e) => {
             util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e}"));
-            return Err(ExplorerError::ExecutionFailed(e.into()));
+            return Err(ExplorerError::ExecutionFailed(e));
         }
     };
     if found_addrs.is_empty() {
@@ -103,7 +103,7 @@ where
         Ok(addrs) => addrs,
         Err(e) => {
             util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}"));
-            return Err(ExplorerError::ExecutionFailed(e.into()));
+            return Err(ExplorerError::ExecutionFailed(e));
         }
     };
     if found_addrs.is_empty() {
@@ -120,7 +120,7 @@ where
             Ok(seq) => seq,
             Err(e) => {
                 util::prevent_garbled(serial, format_args!("Failed to scan init sequence: {e}"));
-                return Err(ExplorerError::ExecutionFailed(e.into()));
+                return Err(ExplorerError::ExecutionFailed(e));
             }
         };
 
@@ -154,8 +154,7 @@ where
                     util::prevent_garbled(
                         serial,
                         format_args!(
-                            "[error] Failed to generate topological sort: {}. Aborting.",
-                            e
+                            "[error] Failed to generate topological sort: {e}. Aborting."
                         ),
                     );
                     return Err(e);
@@ -237,8 +236,7 @@ where
     util::prevent_garbled(
         serial,
         format_args!(
-            "[explorer] Obtained one topological sort. Executing on {:02X}...",
-            target_addr
+            "[explorer] Obtained one topological sort. Executing on {target_addr:02X}..."
         ),
     );
 
@@ -259,8 +257,7 @@ where
     util::prevent_garbled(
         serial,
         format_args!(
-            "[explorer] Single sequence execution complete for {:02X}.",
-            target_addr
+            "[explorer] Single sequence execution complete for {target_addr:02X}."
         ),
     );
 

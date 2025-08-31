@@ -72,6 +72,12 @@ pub struct BitFlags {
 // Since `BitFlags` is primarily used with `I2C_ADDRESS_COUNT` (128 bits),
 // we can make it concrete for this specific size to ensure compilation on stable Rust.
 // (128 bits requires (128 + 7) / 8 = 16 bytes).
+impl Default for BitFlags {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BitFlags {
     pub fn new() -> Self {
         Self { bytes: [0u8; 16] }
