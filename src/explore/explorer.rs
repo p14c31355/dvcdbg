@@ -46,7 +46,7 @@ impl<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQ_S
 
     // Private helper for short delay
     fn short_delay() {
-        for _ in 0..8_000 {
+        for _ in 0..1_000 {
             core::hint::spin_loop();
         }
     }
@@ -64,7 +64,7 @@ impl<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQ_S
         S: core::fmt::Write + crate::explore::logger::Logger,
     {
         let mut last_error = None;
-        for _attempt in 0..10 {
+        for _attempt in 0..2 {
             match i2c.write(addr, bytes) {
                 Ok(_) => {
                     Self::short_delay();
@@ -139,6 +139,14 @@ where
             let _ = logger
                 .log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
 
+            let ack_ok = Self::write_with_retry(i2c, addr, &[addr], logger).is_ok();
+
+        if ack_ok {
+            self.prefix = addr;
+            let _ = logger.log_info_fmt(|buf| {
+                writeln!(buf, "[Info] Device found at 0x{addr:02X}, sending init sequence...")
+        });}
+            
             for &c in self.init_sequence.iter() {
                 let command = [self.prefix, c];
                 Self::write_with_retry(i2c, addr, &command, logger)
@@ -151,9 +159,10 @@ where
                 logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initialized for 0x{addr:02X}"));
         }
 
+        let prefix = addr;
         self.buffer.clear();
         self.buffer
-            .push(self.prefix)
+            .push(prefix)
             .map_err(|_| ExecutorError::BufferOverflow)?;
         self.buffer
             .extend_from_slice(cmd)

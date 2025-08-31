@@ -122,14 +122,12 @@ where
 {
     let mut serial_logger = SerialLogger::new(serial, log_level);
 
-    // I2C アドレススキャン
     let mut found_addrs = crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix)
         .map_err(ExplorerError::DeviceNotFound)?;
     if found_addrs.is_empty() {
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
-    // 初期化シーケンスを送信して ACK を確認
     let successful_seq: heapless::Vec<u8, MAX_CMD_LEN> =
         crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence)
             .map_err(|e| {

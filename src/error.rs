@@ -15,6 +15,9 @@ pub enum ErrorKind {
     /// Buffer / data structure related errors
     Buffer(BufferError),
 
+    /// Explorer-related errors
+    Explorer(ExplorerError),
+
     /// Invalid configuration or unsupported setup
     InvalidConfig,
 
@@ -95,12 +98,13 @@ impl fmt::Display for ErrorKind {
             ErrorKind::InvalidConfig => f.write_str("InvalidConfig"),
             ErrorKind::Unknown => f.write_str("Unknown"),
             ErrorKind::Other => f.write_str("Other"),
+            ErrorKind::Explorer(e) => write!(f, "Explorer: {}", e),
         }
     }
 }
 
 /// Errors that can occur during exploration of command sequences.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExplorerError {
     /// The provided sequence contained more commands than supported by the capacity N.
     TooManyCommands,
@@ -109,13 +113,13 @@ pub enum ExplorerError {
     /// No valid I2C addresses were found for any command sequence.
     NoValidAddressesFound,
     /// An I2C command execution failed.
-    ExecutionFailed(crate::error::ErrorKind),
+    ExecutionFailed,
     /// An internal buffer overflowed.
     BufferOverflow,
     /// A dependency index is out of bounds.
     InvalidDependencyIndex,
     /// An I2C scan operation failed.
-    DeviceNotFound(crate::error::ErrorKind),
+    DeviceNotFound,
 }
 
 /// Errors that can occur during command execution.
@@ -132,10 +136,8 @@ pub enum ExecutorError {
 impl From<ExecutorError> for ExplorerError {
     fn from(error: ExecutorError) -> Self {
         match error {
-            ExecutorError::I2cError(kind) => ExplorerError::ExecutionFailed(kind),
-            ExecutorError::ExecFailed => {
-                ExplorerError::ExecutionFailed(crate::error::ErrorKind::Unknown)
-            }
+            ExecutorError::I2cError(_) => ExplorerError::ExecutionFailed,
+            ExecutorError::ExecFailed => ExplorerError::ExecutionFailed,
             ExecutorError::BufferOverflow => ExplorerError::BufferOverflow,
         }
     }
@@ -147,12 +149,10 @@ impl fmt::Display for ExplorerError {
             ExplorerError::TooManyCommands => f.write_str("TooManyCommands"),
             ExplorerError::DependencyCycle => f.write_str("DependencyCycle"),
             ExplorerError::NoValidAddressesFound => f.write_str("NoValidAddressesFound"),
-            ExplorerError::ExecutionFailed(kind) => {
-                write!(f, "ExecutionFailed: {}", kind)
-            }
+            ExplorerError::ExecutionFailed => f.write_str("ExecutionFailed"),
             ExplorerError::BufferOverflow => f.write_str("BufferOverflow"),
             ExplorerError::InvalidDependencyIndex => f.write_str("InvalidDependencyIndex"),
-            ExplorerError::DeviceNotFound(kind) => write!(f, "DeviceNotFound: {}", kind),
+            ExplorerError::DeviceNotFound => f.write_str("DeviceNotFound"),
         }
     }
 }

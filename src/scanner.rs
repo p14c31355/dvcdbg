@@ -1,6 +1,7 @@
 //! Scanner utilities for I2C bus device discovery and analysis.
 
 use crate::compat::HalErrorExt;
+use crate::error::ExplorerError;
 use crate::explore::logger::Logger;
 use core::fmt::Write;
 
@@ -102,101 +103,41 @@ pub fn scan_init_sequence<I2C, L, const MAX_CMD_LEN: usize>(
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    L: Logger,
+    L: crate::explore::logger::Logger + core::fmt::Write,
 {
-    logger.log_info_fmt(|buf| write!(buf, "Starting I2C bus scan with initialization sequence..."));
-    logger.log_info_fmt(|buf| write!(buf, "Initializing scan with control byte 0x{:02x}", ctrl_byte));
+    let found_addrs = crate::scanner::scan_i2c(i2c, logger, ctrl_byte)
+        .map_err(|_| crate::error::ErrorKind::Explorer(ExplorerError::DeviceNotFound))?;
 
-    let initial_found_addrs = internal_scan(i2c, logger, &[ctrl_byte])?;
-    let mut detected_cmds =
-        check_init_sequence(i2c, logger, ctrl_byte, init_sequence, &initial_found_addrs)?;
+    if found_addrs.is_empty() {
+        return Err(crate::error::ErrorKind::Explorer(ExplorerError::NoValidAddressesFound));
+    }
 
-    logger.log_info_fmt(|buf| write!(buf, "I2C scan with init sequence complete."));
-    log_sequence_summary(logger, init_sequence, &mut detected_cmds);
+    logger.log_info_fmt(|buf| write!(buf, "[I] Starting init sequence scan..."));
 
-    Ok(detected_cmds)
-}
+    let mut detected_cmds = heapless::Vec::<u8, MAX_CMD_LEN>::new();
 
-fn check_init_sequence<I2C, L, const N: usize>(
-    i2c: &mut I2C,
-    logger: &mut L,
-    ctrl_byte: u8,
-    init_sequence: &[u8; N],
-    initial_found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
-) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
-where
-    I2C: crate::compat::I2cCompat,
-    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    L: Logger,
-{
-    let mut detected_cmds = heapless::Vec::<u8, N>::new();
-    let mut last_error: Option<crate::error::ErrorKind> = None;
-
-    for &seq_cmd in init_sequence.iter() {
-        match internal_scan(i2c, logger, &[seq_cmd]) {
-            Ok(responded_addrs) => {
-                if responded_addrs.iter().any(|addr| initial_found_addrs.contains(addr)) {
-                    detected_cmds.push(seq_cmd).map_err(|_| {
-                        crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
-                    })?;
+    for &addr in found_addrs.iter() {
+        for &cmd in init_sequence.iter() {
+            let packet = [addr, cmd]; // prefix = addr
+            match i2c.write(addr, &packet) {
+                Ok(_) => {
+                    detected_cmds.push(cmd).ok();
+                    logger.log_info_fmt(|buf| write!(buf, "[I] Addr 0x{:02X} responded to cmd 0x{:02X}", addr, cmd));
+                }
+                Err(e) => {
+                    let error_kind = e.to_compat(Some(addr));
+                    if error_kind != crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
+                        logger.log_error_fmt(|buf| write!(buf, "[E] Addr 0x{:02X} cmd 0x{:02X} error: {:?}", addr, cmd, error_kind));
+                    }
                 }
             }
-            Err(e) => {
-                logger.log_error_fmt(|buf| write!(buf, "Scan failed for command 0x{:02x}: {:?}", seq_cmd, e));
-                last_error = Some(e);
-            }
         }
     }
 
+    logger.log_info_fmt(|buf| write!(buf, "[I] Init sequence scan complete."));
     if detected_cmds.is_empty() {
-        Err(last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)))
-    } else {
-        Ok(detected_cmds)
-    }
-}
-
-fn log_sequence_summary<L: Logger, const N: usize>(
-    logger: &mut L,
-    expected_sequence: &[u8; N],
-    detected_cmds: &mut heapless::Vec<u8, N>,
-) {
-    let mut missing_cmds = heapless::Vec::<u8, N>::new();
-    let mut sorted_detected_cmds = detected_cmds.clone();
-    sorted_detected_cmds.sort_unstable();
-
-    for &cmd in expected_sequence.iter() {
-        if sorted_detected_cmds.binary_search(&cmd).is_err() {
-            missing_cmds.push(cmd).ok();
-        }
+        return Err(crate::error::ErrorKind::Explorer(ExplorerError::DeviceNotFound));
     }
 
-    logger.log_info_fmt(|buf| { write!(buf, "\n--- I2C Sequence Scan Summary ---")?; Ok(()) });
-    logger.log_info_fmt(|buf| {
-        write!(buf, "Expected Commands:")?;
-        for &cmd in expected_sequence {
-            write!(buf, " 0x{:02x}", cmd)?;
-        }
-        writeln!(buf)?;
-        Ok(())
-    });
-
-    logger.log_info_fmt(|buf| {
-        write!(buf, "Commands That Responded:")?;
-        for &cmd in detected_cmds.iter() {
-            write!(buf, " 0x{:02x}", cmd)?;
-        }
-        writeln!(buf)?;
-        Ok(())
-    });
-
-    logger.log_info_fmt(|buf| {
-        write!(buf, "Commands With No Response:")?;
-        for &cmd in missing_cmds.iter() {
-            write!(buf, " 0x{:02x}", cmd)?;
-        }
-        writeln!(buf)?;
-        Ok(())
-    });
-
-    logger.log_info_fmt(|buf| { write!(buf, "--- End Summary ---\n")?; Ok(()) });
+    Ok(detected_cmds)
 }
