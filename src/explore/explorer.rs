@@ -344,10 +344,11 @@ impl<'a, const N: usize> Explorer<'a, N> {
 pub struct PermutationIter<'a, const N: usize> {
     pub explorer: &'a Explorer<'a, N>,
     pub total_nodes: usize,
-    pub current_permutation: Vec<&'a [u8], N>,
-    pub used: Vec<bool, N>,
-    pub in_degree: Vec<u8, N>,
-    pub adj_list_rev: Vec<heapless::Vec<u8, N>, N>,
+    pub current_permutation: [Option<&'a [u8]>; N], // Changed to fixed-size array of Option
+    pub current_permutation_len: u8, // Changed to u8
+    pub used: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE>,
+    pub in_degree: [u8; N], // Changed to fixed-size array
+    pub adj_list_rev: [u128; N], // Changed to fixed-size array of u128
     pub path_stack: Vec<u8, N>,
     pub loop_start_indices: Vec<u8, N>,
     pub is_done: bool,
@@ -360,15 +361,9 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             return Err(ExplorerError::TooManyCommands);
         }
 
-        let mut in_degree: Vec<u8, N> = Vec::new();
-        let mut adj_list_rev: Vec<heapless::Vec<u8, N>, N> = Vec::new();
-        adj_list_rev
-            .resize(total_nodes, heapless::Vec::new())
-            .map_err(|_| ExplorerError::BufferOverflow)?;
+        let mut in_degree: [u8; N] = [0; N]; // Initialized with zeros
+        let mut adj_list_rev: [u128; N] = [0; N]; // Initialized with zeros
 
-        in_degree
-            .resize(total_nodes, 0)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
         for (i, node) in explorer.sequence.iter().enumerate() {
             in_degree[i as usize] = node.deps.len() as u8; // Cast i to usize
             for &dep in node.deps.iter() {
@@ -376,9 +371,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                     // Cast dep to usize for comparison
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_list_rev[dep as usize]
-                    .push(i as u8)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
+                adj_list_rev[dep as usize] |= 1 << (i as u128); // Set bit for dependency
             }
         }
 
@@ -398,11 +391,13 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             q_idx += 1;
             count += 1;
 
-            for &v_u8 in adj_list_rev[u].iter() {
-                let v = v_u8 as usize;
-                temp_in_degree[v] -= 1;
-                if temp_in_degree[v] == 0 {
-                    q.push(v_u8).map_err(|_| ExplorerError::BufferOverflow)?;
+            // Iterate through bits in adj_list_rev[u]
+            for v in 0..total_nodes {
+                if (adj_list_rev[u] >> v) & 1 != 0 {
+                    temp_in_degree[v] -= 1;
+                    if temp_in_degree[v] == 0 {
+                        q.push(v as u8).map_err(|_| ExplorerError::BufferOverflow)?;
+                    }
                 }
             }
         }
@@ -411,14 +406,13 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             return Err(ExplorerError::DependencyCycle);
         }
 
-        let mut used = Vec::new();
-        used.resize(total_nodes, false)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
+        let used = util::BitFlags::new();
 
         Ok(Self {
             explorer,
             total_nodes,
-            current_permutation: Vec::new(),
+            current_permutation: [None; N], // Initialize with None
+            current_permutation_len: 0, // Initialize length to 0
             used,
             in_degree,
             adj_list_rev,
@@ -429,7 +423,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
     }
 
     fn try_extend(&mut self) -> bool {
-        let current_depth = self.current_permutation.len();
+        let current_depth = self.current_permutation_len as usize; // Use the new length field, cast to usize
         // The `loop_start_indices` tracks the starting point for the search at the current depth.
         // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
         let start_idx = self
@@ -441,19 +435,25 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         // Iterate through all possible nodes (0 to total_nodes-1)
         for i in start_idx..self.total_nodes {
             // Check if node 'i' is NOT used AND its in-degree is 0
-            if !self.used[i] && self.in_degree[i] == 0 {
+            if !self.used.get(i).unwrap_or(false) && self.in_degree[i] == 0 {
                 // Mark node 'i' as used
-                self.used[i] = true;
-                self.current_permutation
-                    .push(self.explorer.sequence[i].bytes)
-                    .unwrap_or_else(|_| self.is_done = true);
+                self.used.set(i).unwrap_or_else(|_| self.is_done = true);
+                // Add to current_permutation
+                if self.current_permutation_len < N as u8 { // Compare with N as u8
+                    self.current_permutation[self.current_permutation_len as usize] = Some(self.explorer.sequence[i].bytes);
+                    self.current_permutation_len += 1;
+                } else {
+                    self.is_done = true; // Buffer overflow
+                }
                 self.path_stack.push(i as u8)
                     .unwrap_or_else(|_| self.is_done = true);
                 self.loop_start_indices.push((i + 1) as u8)
                     .unwrap_or_else(|_| self.is_done = true);
-                for &neighbor_u8 in self.adj_list_rev[i].iter() {
-                    let neighbor = neighbor_u8 as usize;
-                    self.in_degree[neighbor] -= 1;
+                // Iterate through bits in adj_list_rev[i]
+                for neighbor in 0..self.total_nodes {
+                    if (self.adj_list_rev[i] >> neighbor) & 1 != 0 {
+                        self.in_degree[neighbor] -= 1;
+                    }
                 }
                 return true;
             }
@@ -464,14 +464,20 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
     fn backtrack(&mut self) -> bool {
         if let Some(last_added_idx_u8) = self.path_stack.pop() {
             let last_added_idx = last_added_idx_u8 as usize;
-            self.current_permutation.pop();
+            // Remove from current_permutation
+            if self.current_permutation_len > 0 {
+                self.current_permutation_len -= 1;
+                self.current_permutation[self.current_permutation_len as usize] = None;
+            }
             // Unmark node 'last_added_idx' as used
-            self.used[last_added_idx] = false;
+            self.used.clear(last_added_idx).unwrap_or_else(|_| self.is_done = true);
             self.loop_start_indices.pop();
 
-            for &neighbor_u8 in self.adj_list_rev[last_added_idx].iter() {
-                let neighbor = neighbor_u8 as usize;
-                self.in_degree[neighbor] += 1;
+            // Iterate through bits in adj_list_rev[last_added_idx]
+            for neighbor in 0..self.total_nodes {
+                if (self.adj_list_rev[last_added_idx] >> neighbor) & 1 != 0 {
+                    self.in_degree[neighbor] += 1;
+                }
             }
 
             // If path_stack is empty after pop, we've backtracked past the root
@@ -490,7 +496,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
 }
 
 impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
-    type Item = Vec<&'a [u8], N>;
+    type Item = Vec<&'a [u8], N>; // Still returns a Vec for now
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_done {
@@ -499,11 +505,17 @@ impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
 
         loop {
             // If we have a complete permutation, return it and prepare for the next one.
-            if self.current_permutation.len() == self.total_nodes {
-                // Optimize SRAM: Use core::mem::take to move the Vec out, avoiding a clone.
-                // This leaves an empty Vec in its place, which will be refilled by subsequent
-                // calls to try_extend or backtrack.
-                let full_sequence = core::mem::take(&mut self.current_permutation);
+            if self.current_permutation_len as usize == self.total_nodes { // Use the new length field
+                // Create a new Vec from the current_permutation array
+                let mut full_sequence = Vec::new();
+                for i in 0..self.total_nodes {
+                    if let Some(bytes) = self.current_permutation[i] {
+                        full_sequence.push(bytes).unwrap_or_else(|_| self.is_done = true);
+                    } else {
+                        self.is_done = true; // Should not happen if current_permutation_len == total_nodes
+                        return None;
+                    }
+                }
 
                 // Backtrack to find the next permutation
                 if !self.backtrack() {
