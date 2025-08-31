@@ -463,9 +463,11 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 self.used[i] = true;
                 self.current_permutation
                     .push(self.explorer.sequence[i].bytes)
-                    .ok();
-                self.path_stack.push(i as u8).ok();
-                self.loop_start_indices.push((i + 1) as u8).ok();
+                    .unwrap_or_else(|_| self.is_done = true);
+                self.path_stack.push(i as u8)
+                    .unwrap_or_else(|_| self.is_done = true);
+                self.loop_start_indices.push((i + 1) as u8)
+                    .unwrap_or_else(|_| self.is_done = true);
                 for &neighbor_u8 in self.adj_list_rev[i].iter() {
                     let neighbor = neighbor_u8 as usize;
                     self.in_degree[neighbor] -= 1;
