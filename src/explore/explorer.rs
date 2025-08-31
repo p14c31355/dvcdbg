@@ -289,11 +289,11 @@ impl<'a, const N: usize> Explorer<'a, N> {
         failed_nodes: &[bool; N],
     ) -> Result<(heapless::Vec<&'a [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
         let len = self.sequence.len();
-        let mut in_degree: heapless::Vec<usize, N> = heapless::Vec::new();
+        let mut in_degree: heapless::Vec<u8, N> = heapless::Vec::new();
         in_degree
             .resize(len, 0)
             .map_err(|_| ExplorerError::BufferOverflow)?;
-        let mut adj_list_rev: heapless::Vec<heapless::Vec<usize, N>, N> = heapless::Vec::new();
+        let mut adj_list_rev: heapless::Vec<heapless::Vec<u8, N>, N> = heapless::Vec::new();
         adj_list_rev
             .resize(len, heapless::Vec::new())
             .map_err(|_| ExplorerError::BufferOverflow)?;
@@ -302,47 +302,44 @@ impl<'a, const N: usize> Explorer<'a, N> {
             if failed_nodes[i] {
                 continue;
             }
-            in_degree[i] = node.deps.len() as u8;
+            in_degree[i] = node.deps.len() as u8; // node.deps.len() is usize, cast to u8
         for &dep_idx in node.deps.iter() {
-            // Cast dep_idx and i to u8, dep_idx needs to be usize for indexing
+            // dep_idx is u8, i is usize. adj_list_rev expects u8 for its inner Vec.
             adj_list_rev[dep_idx as usize]
                 .push(i as u8)
                 .map_err(|_| ExplorerError::BufferOverflow)?;
         }
         }
 
-        let mut q: heapless::Vec<usize, N> = heapless::Vec::new();
+        let mut q: heapless::Vec<u8, N> = heapless::Vec::new(); // Changed to u8
         for (i, &degree) in in_degree.iter().enumerate().take(len) {
             if !failed_nodes[i] && degree == 0 {
-                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?; // Cast i to u8
             }
         }
 
-        let mut result_sequence: heapless::Vec<heapless::Vec<u8, MAX_CMD_LEN>, N> =
-            heapless::Vec::new();
-        let mut result_len_per_node: heapless::Vec<usize, N> = heapless::Vec::new();
+        let mut result_sequence: heapless::Vec<&'a [u8], N> = heapless::Vec::new(); // Changed type
+        let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new(); // Changed type to u8
         let mut visited_count = 0;
 
-        while let Some(u) = q.pop() {
+        while let Some(u_u8) = q.pop() { // u_u8 is u8
+            let u = u_u8 as usize; // Cast to usize for indexing
             visited_count += 1;
 
             let cmd_bytes = self.sequence[u].bytes;
-            let mut cmd_vec: heapless::Vec<u8, MAX_CMD_LEN> = heapless::Vec::new();
-            cmd_vec
-                .extend_from_slice(cmd_bytes)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
             result_len_per_node
-                .push(cmd_vec.len())
+                .push(cmd_bytes.len() as u8) // Push u8
                 .map_err(|_| ExplorerError::BufferOverflow)?;
             result_sequence
-                .push(cmd_vec)
+                .push(cmd_bytes)
                 .map_err(|_| ExplorerError::BufferOverflow)?;
 
-            for &v in adj_list_rev[u].iter() {
+            for &v_u8 in adj_list_rev[u].iter() { // v_u8 is u8
+                let v = v_u8 as usize; // Cast to usize for indexing
                 if !failed_nodes[v] {
                     in_degree[v] -= 1;
                     if in_degree[v] == 0 {
-                        q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
+                        q.push(v_u8).map_err(|_| ExplorerError::BufferOverflow)?; // Push u8
                     }
                 }
             }
@@ -383,9 +380,9 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             .resize(total_nodes, 0)
             .map_err(|_| ExplorerError::BufferOverflow)?;
         for (i, node) in explorer.sequence.iter().enumerate() {
-            in_degree[i] = node.deps.len() as u8;
+            in_degree[i as usize] = node.deps.len() as u8; // Cast i to usize
             for &dep in node.deps.iter() {
-                if dep >= total_nodes {
+                if dep as usize >= total_nodes { // Cast dep to usize for comparison
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
                 adj_list_rev[dep as usize]
@@ -396,24 +393,25 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
 
         // Cycle detection using Kahn's algorithm
         let mut temp_in_degree = in_degree.clone();
-        let mut q = Vec::<usize, N>::new();
+        let mut q = Vec::<u8, N>::new(); // Changed to u8
         for i in 0..total_nodes {
             if temp_in_degree[i] == 0 {
-                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
+                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?; // Cast i to u8
             }
         }
 
         let mut count = 0;
         let mut q_idx = 0;
         while q_idx < q.len() {
-            let u = q[q_idx];
+            let u = q[q_idx] as usize; // Cast u to usize for indexing
             q_idx += 1;
             count += 1;
 
-            for &v in adj_list_rev[u].iter() {
+            for &v_u8 in adj_list_rev[u].iter() { // v is u8
+                let v = v_u8 as usize; // Cast v to usize for indexing
                 temp_in_degree[v] -= 1;
                 if temp_in_degree[v] == 0 {
-                    q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
+                    q.push(v_u8).map_err(|_| ExplorerError::BufferOverflow)?; // Push u8
                 }
             }
         }
@@ -450,12 +448,12 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         for i in start_idx..self.total_nodes {
             if !self.used[i] && self.in_degree[i] == 0 {
                 self.used[i] = true;
-                self.current_permutation.push(self.explorer.sequence[i].bytes).ok();
+                self.current_permutation.push(self.sequence[i].bytes).ok(); // Changed self.explorer.sequence to self.sequence
                 self.path_stack.push(i as u8).ok(); // Cast i to u8
                 self.loop_start_indices.push((i + 1) as u8).ok(); // Cast (i+1) to u8
-                for &neighbor in self.adj_list_rev[i].iter() {
-                    // Cast neighbor to usize for indexing
-                    self.in_degree[neighbor as usize] -= 1;
+                for &neighbor_u8 in self.adj_list_rev[i].iter() { // neighbor_u8 is u8
+                    let neighbor = neighbor_u8 as usize; // Cast neighbor to usize for indexing
+                    self.in_degree[neighbor] -= 1;
                 }
                 return true;
             }
@@ -464,21 +462,20 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
     }
 
     fn backtrack(&mut self) -> bool {
-        if let Some(last_added_idx) = self.path_stack.pop() {
+        if let Some(last_added_idx_u8) = self.path_stack.pop() {
+            let last_added_idx = last_added_idx_u8 as usize; // Cast to usize
             // Undo the choice: Remove the last added node from the permutation
             self.current_permutation.pop();
-            let last_node_idx = self.path_stack.pop().unwrap() as usize;
-        self.used[last_node_idx] = false;
-        self.current_permutation.pop();
-        self.loop_start_indices.pop();
+            self.used[last_added_idx] = false;
+            self.loop_start_indices.pop(); // Remove the last start index
 
-        for &neighbor in self.adj_list_rev[last_node_idx].iter() {
-            // Cast neighbor to usize for indexing
-            self.in_degree[neighbor as usize] += 1;
-        }
+            for &neighbor_u8 in self.adj_list_rev[last_added_idx].iter() { // neighbor_u8 is u8
+                let neighbor = neighbor_u8 as usize; // Cast neighbor to usize for indexing
+                self.in_degree[neighbor] += 1;
+            }
 
             // If path_stack is empty after pop, we've backtracked past the root
-            if self.path_stack.is_empty() {
+            if self.path_stack.is_empty() { // Removed current_permutation.is_empty() check
                 self.is_done = true;
                 return false;
             }
