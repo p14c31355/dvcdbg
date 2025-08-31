@@ -4,6 +4,7 @@ use crate::explore::explorer::*;
 use crate::explore::logger::*;
 
 use crate::compat::util;
+use crate::compat::err_compat::HalErrorExt; // HalErrorExt をインポート
 use crate::error::ExplorerError;
 
 use core::fmt::Write;
@@ -76,7 +77,7 @@ where
             runner_log_error(&mut serial_logger, |buf| {
                 writeln!(buf, "Failed to scan init sequence: {:?}", e)
             });
-            return Err(ExplorerError::DeviceNotFound(e));
+            return Err(e);
         }
     };
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
@@ -122,8 +123,7 @@ where
 {
     let mut serial_logger = SerialLogger::new(serial, log_level);
 
-    let mut found_addrs = crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix)
-        .map_err(ExplorerError::DeviceNotFound)?;
+    let mut found_addrs = crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix)?;
     if found_addrs.is_empty() {
         return Err(ExplorerError::NoValidAddressesFound);
     }
@@ -134,7 +134,7 @@ where
                 serial_logger.log_error_fmt(|buf| {
                     writeln!(buf, "Failed to scan init sequence: {:?}", e)
                 });
-                ExplorerError::DeviceNotFound(e)
+                e
             })?;
 
     let successful_seq_len = successful_seq.len();

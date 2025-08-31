@@ -15,9 +15,6 @@ pub enum ErrorKind {
     /// Buffer / data structure related errors
     Buffer(BufferError),
 
-    /// Explorer-related errors
-    Explorer(ExplorerError),
-
     /// Invalid configuration or unsupported setup
     InvalidConfig,
 
@@ -42,6 +39,25 @@ pub enum I2cError {
     Nack,
     ArbitrationLost,
     Bus,
+}
+
+impl fmt::Display for I2cError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            I2cError::Nack => f.write_str("Nack"),
+            I2cError::ArbitrationLost => f.write_str("ArbitrationLost"),
+            I2cError::Bus => f.write_str("BusError"),
+        }
+    }
+}
+
+impl From<crate::error::ErrorKind> for ExplorerError {
+    fn from(error: crate::error::ErrorKind) -> Self {
+        match error {
+            crate::error::ErrorKind::I2c(i2c_err) => ExplorerError::DeviceNotFound(i2c_err),
+            _ => ExplorerError::ExecutionFailed,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,7 +114,6 @@ impl fmt::Display for ErrorKind {
             ErrorKind::InvalidConfig => f.write_str("InvalidConfig"),
             ErrorKind::Unknown => f.write_str("Unknown"),
             ErrorKind::Other => f.write_str("Other"),
-            ErrorKind::Explorer(e) => write!(f, "Explorer: {}", e),
         }
     }
 }
@@ -119,7 +134,7 @@ pub enum ExplorerError {
     /// A dependency index is out of bounds.
     InvalidDependencyIndex,
     /// An I2C scan operation failed.
-    DeviceNotFound,
+    DeviceNotFound(I2cError), // I2cError を直接受け取るように変更
 }
 
 /// Errors that can occur during command execution.
@@ -152,7 +167,7 @@ impl fmt::Display for ExplorerError {
             ExplorerError::ExecutionFailed => f.write_str("ExecutionFailed"),
             ExplorerError::BufferOverflow => f.write_str("BufferOverflow"),
             ExplorerError::InvalidDependencyIndex => f.write_str("InvalidDependencyIndex"),
-            ExplorerError::DeviceNotFound => f.write_str("DeviceNotFound"),
+            ExplorerError::DeviceNotFound(e) => write!(f, "DeviceNotFound: {}", e), // 表示を更新
         }
     }
 }

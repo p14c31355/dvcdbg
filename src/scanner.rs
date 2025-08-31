@@ -99,17 +99,20 @@ pub fn scan_init_sequence<I2C, L, const MAX_CMD_LEN: usize>(
     logger: &mut L,
     ctrl_byte: u8,
     init_sequence: &[u8; MAX_CMD_LEN],
-) -> Result<heapless::Vec<u8, MAX_CMD_LEN>, crate::error::ErrorKind>
+) -> Result<heapless::Vec<u8, MAX_CMD_LEN>, ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     L: crate::explore::logger::Logger + core::fmt::Write,
 {
     let found_addrs = crate::scanner::scan_i2c(i2c, logger, ctrl_byte)
-        .map_err(|_| crate::error::ErrorKind::Explorer(ExplorerError::DeviceNotFound))?;
+        .map_err(|e| match e {
+            crate::error::ErrorKind::I2c(i2c_err) => ExplorerError::DeviceNotFound(i2c_err),
+            _ => ExplorerError::ExecutionFailed,
+        })?;
 
     if found_addrs.is_empty() {
-        return Err(crate::error::ErrorKind::Explorer(ExplorerError::NoValidAddressesFound));
+        return Err(ExplorerError::NoValidAddressesFound);
     }
 
     logger.log_info_fmt(|buf| write!(buf, "[I] Starting init sequence scan..."));
@@ -136,7 +139,7 @@ where
 
     logger.log_info_fmt(|buf| write!(buf, "[I] Init sequence scan complete."));
     if detected_cmds.is_empty() {
-        return Err(crate::error::ErrorKind::Explorer(ExplorerError::DeviceNotFound));
+        return Err(ExplorerError::DeviceNotFound(crate::error::I2cError::Nack));
     }
 
     Ok(detected_cmds)
