@@ -1,14 +1,14 @@
 // runner.rs
 
-use crate::explore::explorer::*;
-use crate::explore::logger::*;
 use crate::compat::err_compat::HalErrorExt;
 use crate::compat::util;
-use crate::error::ExplorerError;
-use core::fmt::Write;
 use crate::compat::util::ERROR_STRING_BUFFER_SIZE;
+use crate::compat::util::calculate_cmd_buffer_size;
+use crate::error::ExplorerError;
+use crate::explore::explorer::*;
+use crate::explore::logger::*;
 use crate::scanner::I2C_MAX_DEVICES;
-use crate::compat::util::calculate_cmd_buffer_size; // Import the const fn
+use core::fmt::Write; // Import the const fn
 
 // Helper for logging info with the [explorer] prefix
 pub fn explorer_log_info<S, F>(logger: &mut SerialLogger<S>, f: F)
@@ -83,7 +83,8 @@ where
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
-    let successful_seq = match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>( // Use INIT_SEQUENCE_LEN
+    let successful_seq = match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(
+        // Use INIT_SEQUENCE_LEN
         i2c,
         &mut serial_logger,
         prefix,
@@ -175,7 +176,8 @@ where
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
 
     let mut executor =
-        crate::explore::explorer::PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new( // Use calculated size
+        crate::explore::explorer::PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(
+            // Use calculated size
             found_addrs[0],
             successful_seq,
         );
@@ -296,7 +298,8 @@ where
         Ok(())
     });
 
-    let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, heapless::Vec::new()); // Use calculated size
+    let mut executor =
+        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, heapless::Vec::new()); // Use calculated size
 
     for i in 0..sequence_len {
         execute_and_log_command(

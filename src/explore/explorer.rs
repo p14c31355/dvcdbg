@@ -15,10 +15,9 @@ pub struct CmdNode {
     pub deps: &'static [u8],
 }
 
-pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> { // Use CMD_BUFFER_SIZE
-    fn exec<
-        L: crate::explore::logger::Logger + core::fmt::Write,
-    >(
+pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
+    // Use CMD_BUFFER_SIZE
+    fn exec<L: crate::explore::logger::Logger + core::fmt::Write>(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
@@ -28,7 +27,8 @@ pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> { // Use CMD_BUFFER_SIZ
 }
 
 /// A command executor that prepends a prefix to each command.
-pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> { // Use INIT_SEQUENCE_LEN and CMD_BUFFER_SIZE
+pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> {
+    // Use INIT_SEQUENCE_LEN and CMD_BUFFER_SIZE
     buffer: Vec<u8, CMD_BUFFER_SIZE>, // Use CMD_BUFFER_SIZE
     initialized_addrs: [bool; I2C_ADDRESS_COUNT],
     prefix: u8,
@@ -120,8 +120,9 @@ where
     }
 }
 
-impl<I2C, const INIT_SEQ_SIZE: usize, const CMD_BUFFER_SIZE: usize> // Use CMD_BUFFER_SIZE
-    CmdExecutor<I2C, CMD_BUFFER_SIZE> for PrefixExecutor<INIT_SEQ_SIZE, CMD_BUFFER_SIZE> // Use CMD_BUFFER_SIZE
+impl<I2C, const INIT_SEQ_SIZE: usize, const CMD_BUFFER_SIZE: usize>
+    CmdExecutor<I2C, CMD_BUFFER_SIZE> for PrefixExecutor<INIT_SEQ_SIZE, CMD_BUFFER_SIZE>
+// Use CMD_BUFFER_SIZE
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -203,7 +204,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
         max_len
     }
 
-    pub fn explore<I2C, E, L, const CMD_BUFFER_SIZE: usize>( // Use CMD_BUFFER_SIZE
+    pub fn explore<I2C, E, L, const CMD_BUFFER_SIZE: usize>(
+        // Use CMD_BUFFER_SIZE
         &self,
         i2c: &mut I2C,
         executor: &mut E,
@@ -373,7 +375,30 @@ pub struct PermutationIter<'a, const N: usize> {
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
     pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
-        // ... existing code ...
+        let total_nodes = explorer.sequence.len();
+        if total_nodes > N {
+            return Err(ExplorerError::TooManyCommands);
+        }
+
+        let mut in_degree: Vec<u8, N> = Vec::new();
+        let mut adj_list_rev: [heapless::Vec<u8, N>; N] =
+            core::array::from_fn(|_| heapless::Vec::new());
+
+        in_degree
+            .resize(total_nodes, 0)
+            .map_err(|_| ExplorerError::BufferOverflow)?;
+        for (i, node) in explorer.sequence.iter().enumerate() {
+            in_degree[i as usize] = node.deps.len() as u8; // Cast i to usize
+            for &dep in node.deps.iter() {
+                if dep as usize >= total_nodes {
+                    // Cast dep to usize for comparison
+                    return Err(ExplorerError::InvalidDependencyIndex);
+                }
+                adj_list_rev[dep as usize]
+                    .push(i as u8)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+        }
 
         // Cycle detection using Kahn's algorithm
         let mut temp_in_degree = in_degree.clone();
@@ -434,7 +459,9 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             if ((self.used_mask >> i) & 1) == 0 && self.in_degree[i] == 0 {
                 // Mark node 'i' as used (set its bit)
                 self.used_mask |= 1 << i;
-                self.current_permutation.push(self.explorer.sequence[i].bytes).ok();
+                self.current_permutation
+                    .push(self.explorer.sequence[i].bytes)
+                    .ok();
                 self.path_stack.push(i as u8).ok();
                 self.loop_start_indices.push((i + 1) as u8).ok();
                 for &neighbor_u8 in self.adj_list_rev[i].iter() {
