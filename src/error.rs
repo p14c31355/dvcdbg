@@ -116,6 +116,8 @@ pub enum ExplorerError {
     InvalidDependencyIndex,
     /// An I2C scan operation failed.
     DeviceNotFound(crate::error::ErrorKind),
+    /// An error occurred in the BitFlags utility.
+    BitFlagsError(BitFlagsError),
 }
 
 /// Errors that can occur during command execution.
@@ -127,6 +129,8 @@ pub enum ExecutorError {
     ExecFailed,
     /// An internal buffer overflowed during command preparation.
     BufferOverflow,
+    /// An error occurred in the BitFlags utility.
+    BitFlagsError(BitFlagsError),
 }
 
 impl From<ExecutorError> for ExplorerError {
@@ -137,6 +141,7 @@ impl From<ExecutorError> for ExplorerError {
                 ExplorerError::ExecutionFailed(crate::error::ErrorKind::Unknown)
             }
             ExecutorError::BufferOverflow => ExplorerError::BufferOverflow,
+            ExecutorError::BitFlagsError(e) => ExplorerError::BitFlagsError(e),
         }
     }
 }
@@ -147,6 +152,7 @@ impl fmt::Display for ExecutorError {
             ExecutorError::I2cError(kind) => write!(f, "I2cError: {}", kind),
             ExecutorError::ExecFailed => f.write_str("ExecFailed"),
             ExecutorError::BufferOverflow => f.write_str("BufferOverflow"),
+            ExecutorError::BitFlagsError(e) => write!(f, "BitFlagsError: {:?}", e),
         }
     }
 }
@@ -163,6 +169,12 @@ impl fmt::Display for ExplorerError {
             ExplorerError::BufferOverflow => f.write_str("BufferOverflow"),
             ExplorerError::InvalidDependencyIndex => f.write_str("InvalidDependencyIndex"),
             ExplorerError::DeviceNotFound(kind) => write!(f, "DeviceNotFound: {}", kind),
+            ExplorerError::BitFlagsError(e) => write!(f, "BitFlagsError: {:?}", e),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BitFlagsError {
+    IndexOutOfBounds { idx: usize, max: usize },
 }

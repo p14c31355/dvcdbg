@@ -8,6 +8,7 @@ use core::fmt::Write;
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use heapless::Vec;
 const I2C_ADDRESS_COUNT: usize = 128;
+const I2C_ADDRESS_BITFLAGS_SIZE: usize = I2C_ADDRESS_COUNT / 8;
 
 #[derive(Copy, Clone)]
 pub struct CmdNode {
@@ -30,7 +31,7 @@ pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
 pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> {
     // Use INIT_SEQUENCE_LEN and CMD_BUFFER_SIZE
     buffer: Vec<u8, CMD_BUFFER_SIZE>, // Use CMD_BUFFER_SIZE
-    initialized_addrs: [bool; I2C_ADDRESS_COUNT],
+    initialized_addrs: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE>,
     prefix: u8,
     init_sequence: heapless::Vec<u8, INIT_SEQUENCE_LEN>, // Capacity is the length of the init sequence
 }
@@ -41,7 +42,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
     pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, INIT_SEQUENCE_LEN>) -> Self {
         Self {
             buffer: Vec::new(),
-            initialized_addrs: [false; I2C_ADDRESS_COUNT],
+            initialized_addrs: util::BitFlags::new(),
             prefix,
             init_sequence,
         }
@@ -136,7 +137,7 @@ where
     {
         let addr_idx = addr as usize;
 
-        if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
+        if !self.initialized_addrs.get(addr_idx).unwrap_or(false) && !self.init_sequence.is_empty() {
             write!(writer, "[Info] I2C initializing for ").ok();
             util::write_bytes_hex_fmt(writer, &[addr]).ok();
             writeln!(writer, "...").ok();
@@ -152,7 +153,7 @@ where
                         .map_err(ExecutorError::I2cError)?;
                     Self::short_delay();
                 }
-                self.initialized_addrs[addr_idx] = true;
+                self.initialized_addrs.set(addr_idx).map_err(|e| ExecutorError::BitFlagsError(e))?;
                 write!(writer, "[Info] I2C initialized for ").ok();
                 util::write_bytes_hex_fmt(writer, &[addr]).ok();
                 writeln!(writer).ok();
@@ -213,7 +214,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         }
 
         let mut found_addrs: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
-        let mut solved_addrs: [bool; I2C_ADDRESS_COUNT] = [false; I2C_ADDRESS_COUNT];
+        let mut solved_addrs: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE> = util::BitFlags::new();
         let mut permutations_tested = 0;
         let iter = PermutationIter::new(self)?;
         writeln!(writer, "[explorer] Starting permutation exploration...").ok();
@@ -221,7 +222,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
             permutations_tested += 1;
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 let addr = addr_val;
-                if solved_addrs[addr as usize] {
+                if solved_addrs.get(addr as usize).unwrap_or(false) {
                     continue;
                 }
 
@@ -246,7 +247,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                         writeln!(writer, "[error] Buffer overflow in found_addrs").ok();
                         return Err(ExplorerError::BufferOverflow);
                     }
-                    solved_addrs[addr as usize] = true;
+                    solved_addrs.set(addr as usize).map_err(|e| ExplorerError::BitFlagsError(e))?;
                 } else {
                     write!(writer, "[explorer] Failed to execute sequence on ").ok();
                     util::write_bytes_hex_fmt(writer, &[addr]).ok();

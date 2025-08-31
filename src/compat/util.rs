@@ -55,3 +55,45 @@ pub fn write_bytes_hex_fmt<W: core::fmt::Write>(w: &mut W, bytes: &[u8]) -> core
     }
     Ok(())
 }
+
+// bitmask utility
+use crate::error::BitFlagsError;
+
+pub struct BitFlags<const N: usize, const S: usize> {
+    vec: heapless::Vec<u8, S>,
+}
+
+impl<const N: usize, const S: usize> BitFlags<N, S> {
+    pub fn new() -> Self {
+        Self { vec: heapless::Vec::from_slice(&[0u8; S]).unwrap() }
+    }
+
+    pub fn set(&mut self, idx: usize) -> Result<(), BitFlagsError> {
+        if idx >= N {
+            return Err(BitFlagsError::IndexOutOfBounds { idx, max: N - 1 });
+        }
+        let byte = idx / 8;
+        let bit = idx % 8;
+        self.vec[byte] |= 1 << bit;
+        Ok(())
+    }
+
+    pub fn clear(&mut self, idx: usize) -> Result<(), BitFlagsError> {
+        if idx >= N {
+            return Err(BitFlagsError::IndexOutOfBounds { idx, max: N - 1 });
+        }
+        let byte = idx / 8;
+        let bit = idx % 8;
+        self.vec[byte] &= !(1 << bit);
+        Ok(())
+    }
+
+    pub fn get(&self, idx: usize) -> Result<bool, BitFlagsError> {
+        if idx >= N {
+            return Err(BitFlagsError::IndexOutOfBounds { idx, max: N - 1 });
+        }
+        let byte = idx / 8;
+        let bit = idx % 8;
+        Ok((self.vec[byte] & (1 << bit)) != 0)
+    }
+}
