@@ -2,7 +2,6 @@
 
 use crate::compat::HalErrorExt;
 use crate::compat::util;
-use core::fmt::Write;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;

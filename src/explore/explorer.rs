@@ -3,7 +3,6 @@
 use crate::compat::err_compat::HalErrorExt;
 use crate::compat::util;
 use crate::error::{ExecutorError, ExplorerError};
-use core::fmt::Write;
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 const I2C_ADDRESS_COUNT: usize = 128;
@@ -488,7 +487,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
     }
 
     fn try_extend(&mut self) -> bool {
-        let current_depth = self.current_permutation_len as usize;
+        let _current_depth = self.current_permutation_len as usize;
 
         for i in 0..self.total_nodes {
             let used = match self.used.get(i) {
