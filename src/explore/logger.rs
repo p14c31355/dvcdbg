@@ -4,8 +4,8 @@
 
 use crate::compat::util::ERROR_STRING_BUFFER_SIZE;
 use heapless::String;
-
-static mut LOG_BUFFER: heapless::String<ERROR_STRING_BUFFER_SIZE> = heapless::String::new();
+use critical_section;
+static mut LOG_BUFFER: Option<String<ERROR_STRING_BUFFER_SIZE>> = None;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogLevel {
@@ -35,6 +35,11 @@ where
     S: core::fmt::Write,
 {
     pub fn new(writer: &'a mut S, log_level: LogLevel) -> Self {
+        critical_section::with(|_| unsafe {
+            if LOG_BUFFER.is_none() {
+                LOG_BUFFER = Some(String::new());
+            }
+        });
         Self { writer, log_level }
     }
 }
@@ -48,16 +53,16 @@ where
         F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
     {
         if matches!(self.log_level, LogLevel::Verbose | LogLevel::Normal) {
-            unsafe {
-                let log_buffer_ptr: *mut String<ERROR_STRING_BUFFER_SIZE> = &raw mut LOG_BUFFER;
-                (*log_buffer_ptr).clear();
-
-                if f(&mut *log_buffer_ptr).is_ok() {
-                    let _ = self.writer.write_str("[I] ");
-                    let _ = self.writer.write_str(&*log_buffer_ptr);
-                    let _ = self.writer.write_str("\r\n");
+            critical_section::with(|_| unsafe {
+                if let Some(temp_buffer) = &mut LOG_BUFFER {
+                    temp_buffer.clear();
+                    if f(temp_buffer).is_ok() {
+                        let _ = self.writer.write_str("[I] ");
+                        let _ = self.writer.write_str(&temp_buffer);
+                        let _ = self.writer.write_str("\r\n");
+                    }
                 }
-            }
+            });
         }
     }
 
@@ -66,15 +71,16 @@ where
         F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
     {
         if matches!(self.log_level, LogLevel::Verbose | LogLevel::Normal) {
-            unsafe {
-                let log_buffer_ptr: *mut String<ERROR_STRING_BUFFER_SIZE> = &raw mut LOG_BUFFER;
-                (*log_buffer_ptr).clear();
-                if f(&mut *log_buffer_ptr).is_ok() {
-                    let _ = self.writer.write_str("[E] ");
-                    let _ = self.writer.write_str(&*log_buffer_ptr);
-                    let _ = self.writer.write_str("\r\n");
+            critical_section::with(|_| unsafe {
+                if let Some(temp_buffer) = &mut LOG_BUFFER {
+                    temp_buffer.clear();
+                    if f(temp_buffer).is_ok() {
+                        let _ = self.writer.write_str("[E] ");
+                        let _ = self.writer.write_str(&temp_buffer);
+                        let _ = self.writer.write_str("\r\n");
+                    }
                 }
-            }
+            });
         }
     }
 }
