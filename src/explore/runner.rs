@@ -77,7 +77,7 @@ where
             runner_log_error(&mut serial_logger, |buf| {
                 writeln!(buf, "Failed to scan init sequence: {:?}", e)
             });
-            return Err(e);
+            return Err(ExplorerError::ExecutionFailed(e));
         }
     };
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
@@ -123,19 +123,29 @@ where
 {
     let mut serial_logger = SerialLogger::new(serial, log_level);
 
-    let mut found_addrs = crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix)?;
+    let mut found_addrs = match crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix) {
+        Ok(addrs) => addrs,
+        Err(e) => {
+            runner_log_error(&mut serial_logger, |buf| {
+                writeln!(buf, "Failed to scan I2C: {:?}", e)
+            });
+            return Err(ExplorerError::ExecutionFailed(e.into()));
+        }
+    };
     if found_addrs.is_empty() {
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
     let successful_seq: heapless::Vec<u8, MAX_CMD_LEN> =
-        crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence)
-            .map_err(|e| {
+        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence) {
+            Ok(seq) => seq,
+            Err(e) => {
                 serial_logger.log_error_fmt(|buf| {
                     writeln!(buf, "Failed to scan init sequence: {:?}", e)
                 });
-                e
-            })?;
+                return Err(ExplorerError::ExecutionFailed(e.into()));
+            }
+        };
 
     let successful_seq_len = successful_seq.len();
 
