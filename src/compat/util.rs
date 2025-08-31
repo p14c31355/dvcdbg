@@ -65,7 +65,9 @@ pub struct BitFlags<const N: usize> {
 
 impl<const N: usize> BitFlags<N> {
     pub fn new() -> Self {
-        Self { bytes: [0u8; (N + 7) / 8] }
+        Self {
+            bytes: [0u8; (N + 7) / 8],
+        }
     }
 
     pub fn set(&mut self, idx: usize) -> Result<(), BitFlagsError> {

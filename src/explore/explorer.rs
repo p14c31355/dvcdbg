@@ -416,9 +416,12 @@ pub struct PermutationIter<'a, const N: usize> {
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
     pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
-        // The assertion `N <= 128` is moved to the struct definition or a higher level
-        // where `N` is a generic parameter of the item containing the const.
-        // `const` items cannot use generic parameters from outer items.
+        const {
+            assert!(
+                N <= 128,
+                "PermutationIter uses a u128 bitmask, so N cannot exceed 128"
+            );
+        };
 
         let total_nodes = explorer.sequence.len();
         if total_nodes > N {
