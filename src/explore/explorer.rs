@@ -5,6 +5,7 @@ use crate::error::{ExecutorError, ExplorerError};
 use core::fmt::Write;
 
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
+use crate::compat::util::calculate_cmd_buffer_size;
 use heapless::Vec;
 const I2C_ADDRESS_COUNT: usize = 128;
 
@@ -14,33 +15,33 @@ pub struct CmdNode {
     pub deps: &'static [u8],
 }
 
-pub trait CmdExecutor<I2C, const BUF_CAP: usize> {
-    fn exec<S>(
+pub trait CmdExecutor<I2C, const BUF_CAP: usize> { 
+    fn exec<
+        L: crate::explore::logger::Logger + core::fmt::Write,
+    >(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
         cmd: &[u8],
-        logger: &mut S,
-    ) -> Result<(), ExecutorError>
-    where
-        S: core::fmt::Write + crate::explore::logger::Logger;
+        logger: &mut L,
+    ) -> Result<(), ExecutorError>;
 }
 
 /// A command executor that prepends a prefix to each command.
-pub struct PrefixExecutor<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> {
+pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const BUF_CAP: usize> {
+    buffer: Vec<u8, BUF_CAP>,
+    initialized_addrs: [bool; I2C_ADDRESS_COUNT],
     prefix: u8,
-    init_sequence: heapless::Vec<u8, INIT_SEQ_SIZE>,
-    initialized_addrs: [bool; 128],
-    buffer: heapless::Vec<u8, BUF_CAP>,
+    init_sequence: heapless::Vec<u8, INIT_SEQUENCE_LEN>, // Capacity is the length of the init sequence
 }
 
-impl<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQ_SIZE, BUF_CAP> {
-    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, INIT_SEQ_SIZE>) -> Self {
+impl<const INIT_SEQUENCE_LEN: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQUENCE_LEN, BUF_CAP> {
+    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, INIT_SEQUENCE_LEN>) -> Self {
         Self {
+            buffer: Vec::new(),
+            initialized_addrs: [false; I2C_ADDRESS_COUNT],
             prefix,
             init_sequence,
-            initialized_addrs: [false; 128],
-            buffer: heapless::Vec::new(),
         }
     }
 
@@ -196,19 +197,19 @@ impl<'a, const N: usize> Explorer<'a, N> {
             }
             i += 1;
         }
-        max_len + 1
+        max_len
     }
 
-    pub fn explore<I2C, E, L, const BUF_CAP: usize>(
+    pub fn explore<I2C, E, L, const MAX_BYTES_PER_CMD: usize>(
         &self,
         i2c: &mut I2C,
         executor: &mut E,
         logger: &mut L,
-    ) -> Result<ExploreResult, ExplorerError>
+    ) -> Result<ExplorationResult, ExplorerError>
     where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-        E: CmdExecutor<I2C, BUF_CAP>,
+        E: CmdExecutor<I2C, { calculate_cmd_buffer_size(1, MAX_BYTES_PER_CMD) }>, // Use calculated size
         L: crate::explore::logger::Logger + core::fmt::Write,
     {
         if self.sequence.is_empty() {
@@ -283,7 +284,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         })
     }
 
-    pub fn get_one_topological_sort_buf<const MAX_CMD_LEN: usize>(
+    pub fn get_one_topological_sort_buf<const MAX_BYTES_PER_CMD: usize>(
         &self,
         _serial: &mut impl core::fmt::Write,
         failed_nodes: &[bool; N],

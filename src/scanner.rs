@@ -1,6 +1,7 @@
 //! Scanner utilities for I2C bus device discovery and analysis.
 
 use crate::compat::HalErrorExt;
+use crate::error::ExplorerError;
 use crate::explore::logger::Logger;
 use core::fmt::Write;
 
@@ -112,12 +113,12 @@ where
 /// # Returns
 ///
 /// A `heapless::Vec<u8, N>` containing the bytes from `init_sequence` that elicited a response.
-pub fn scan_init_sequence<I2C, L, const MAX_CMD_LEN: usize>(
+pub fn scan_init_sequence<I2C, L, const INIT_SEQUENCE_LEN: usize>(
     i2c: &mut I2C,
     logger: &mut L,
     ctrl_byte: u8,
-    init_sequence: &[u8; MAX_CMD_LEN],
-) -> Result<heapless::Vec<u8, MAX_CMD_LEN>, crate::error::ErrorKind>
+    init_sequence: &[u8; INIT_SEQUENCE_LEN], // Use INIT_SEQUENCE_LEN
+) -> Result<heapless::Vec<u8, INIT_SEQUENCE_LEN>, crate::error::ErrorKind> // Use INIT_SEQUENCE_LEN
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
