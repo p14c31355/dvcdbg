@@ -66,7 +66,7 @@ where
         serial,
         format_args!(
             "[explorer] Exploration complete. {} addresses found across {} permutations.",
-            exploration_result.found_addrs.len(),
+            exploration_result.found_addrs_len,
             exploration_result.permutations_tested
         ),
     );
