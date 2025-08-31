@@ -118,6 +118,7 @@ pub fn scan_init_sequence<I2C, L, const MAX_CMD_LEN: usize>(
     logger: &mut L,
     ctrl_byte: u8,
     init_sequence: &[u8; MAX_CMD_LEN],
+    found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
 ) -> Result<heapless::Vec<u8, MAX_CMD_LEN>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
@@ -133,9 +134,8 @@ where
         )
     });
 
-    let initial_found_addrs = internal_scan(i2c, logger, &[ctrl_byte])?;
     let mut detected_cmds =
-        check_init_sequence(i2c, logger, ctrl_byte, init_sequence, &initial_found_addrs)?;
+        check_init_sequence(i2c, logger, ctrl_byte, init_sequence, found_addrs)?;
 
     logger.log_info_fmt(|buf| write!(buf, "I2C scan with init sequence complete."));
     log_sequence_summary(logger, init_sequence, &mut detected_cmds);
@@ -148,7 +148,7 @@ fn check_init_sequence<I2C, L, const N: usize>(
     logger: &mut L,
     ctrl_byte: u8,
     init_sequence: &[u8; N],
-    initial_found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
+    found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
 ) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
@@ -158,32 +158,41 @@ where
     let mut detected_cmds = heapless::Vec::<u8, N>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
-    let mut combined_sequence = heapless::Vec::<u8, I2C_MAX_DEVICES>::new();
-    combined_sequence.push(ctrl_byte).map_err(|_| {
-        crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
-    })?;
-    combined_sequence.extend_from_slice(init_sequence).map_err(|_| {
-        crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
-    })?;
+    for &addr in found_addrs.iter() {
+        logger.log_info_fmt(|buf| write!(buf, "Testing init sequence on 0x{:02x}...", addr));
 
-    match internal_scan(i2c, logger, &combined_sequence) {
-        Ok(responded_addrs) => {
-            if responded_addrs
-                .iter()
-                .any(|addr| initial_found_addrs.contains(addr))
-            {
-                if let Some(&first_byte) = init_sequence.first() {
-                    detected_cmds.push(first_byte).map_err(|_| {
-                        crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
-                    })?;
+        for &cmd in init_sequence.iter() {
+            let mut command_data = heapless::Vec::<u8, 2>::new(); // ctrl_byte + cmd
+            command_data.push(ctrl_byte).map_err(|_| {
+                crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+            })?;
+            command_data.push(cmd).map_err(|_| {
+                crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+            })?;
+
+            logger.log_info_fmt(|buf| write!(buf, "  Sending command 0x{:02x} to 0x{:02x}...", cmd, addr));
+
+            match i2c.write(addr, &command_data) {
+                Ok(_) => {
+                    if !detected_cmds.contains(&cmd) {
+                        detected_cmds.push(cmd).map_err(|_| {
+                            crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+                        })?;
+                    }
+                    logger.log_info_fmt(|buf| write!(buf, "  Command 0x{:02x} responded.", cmd));
+                }
+                Err(e) => {
+                    let error_kind = e.to_compat(Some(addr));
+                    if error_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
+                        logger.log_info_fmt(|buf| write!(buf, "  Command 0x{:02x} no response (NACK).", cmd));
+                        continue;
+                    }
+                    logger.log_error_fmt(|buf| {
+                        write!(buf, "  Write failed for 0x{:02x} at 0x{:02x}: {}", cmd, addr, error_kind)
+                    });
+                    last_error = Some(error_kind);
                 }
             }
-        }
-        Err(e) => {
-            logger.log_error_fmt(|buf| {
-                write!(buf, "Scan failed for init sequence: {:?}", e)
-            });
-            last_error = Some(e);
         }
     }
 

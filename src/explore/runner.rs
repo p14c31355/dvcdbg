@@ -66,8 +66,21 @@ where
         writeln!(buf, "Running full exploration...")
     });
 
+    let found_addrs = match crate::scanner::scan_i2c(i2c, &mut serial_logger, prefix) {
+        Ok(addrs) => addrs,
+        Err(e) => {
+            runner_log_error(&mut serial_logger, |buf| {
+                writeln!(buf, "Failed to scan I2C: {:?}", e)
+            });
+            return Err(ExplorerError::ExecutionFailed(e.into()));
+        }
+    };
+    if found_addrs.is_empty() {
+        return Err(ExplorerError::NoValidAddressesFound);
+    }
+
     let successful_seq =
-        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence) {
+        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence, &found_addrs) {
             Ok(seq) => seq,
             Err(e) => {
                 runner_log_error(&mut serial_logger, |buf| {
@@ -133,7 +146,7 @@ where
     }
 
     let successful_seq: heapless::Vec<u8, MAX_CMD_LEN> =
-        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence) {
+        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence, &found_addrs) {
             Ok(seq) => seq,
             Err(e) => {
                 serial_logger
