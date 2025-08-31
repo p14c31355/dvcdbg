@@ -1,7 +1,6 @@
 //! Scanner utilities for I2C bus device discovery and analysis.
 
 use crate::compat::HalErrorExt;
-use crate::explore::logger::Logger;
 use core::fmt::Write;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
@@ -12,38 +11,36 @@ pub const I2C_MAX_DEVICES: usize = 128;
 ///
 /// It iterates through all possible I2C addresses and attempts to write the
 /// provided `data`.
-fn internal_scan<I2C, L>(
+fn internal_scan<I2C, W>(
     i2c: &mut I2C,
-    logger: &mut L,
+    writer: &mut W,
     data: &[u8],
 ) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    L: Logger,
+    W: core::fmt::Write,
 {
     let mut found_addrs = heapless::Vec::<u8, I2C_MAX_DEVICES>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-        logger.log_info_fmt(|buf| write!(buf, "Scanning 0x{:02x}...", addr));
+        writeln!(writer, "Scanning 0x{:02x}...", addr).ok();
 
         match i2c.write(addr, data) {
             Ok(_) => {
                 found_addrs.push(addr).map_err(|_| {
                     crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
                 })?;
-                logger.log_info_fmt(|buf| write!(buf, "Found"));
+                writeln!(writer, "Found").ok();
             }
             Err(e) => {
                 let error_kind = e.to_compat(Some(addr));
                 if error_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
-                    logger.log_info_fmt(|buf| write!(buf, "No response (NACK)"));
+                    writeln!(writer, "No response (NACK)").ok();
                     continue;
                 }
-                logger.log_error_fmt(|buf| {
-                    write!(buf, "Write failed at 0x{:02x}: {}", addr, error_kind)
-                });
+                writeln!(writer, "Write failed at 0x{:02x}: {}", addr, error_kind).ok();
                 last_error = Some(error_kind);
             }
         }
@@ -64,18 +61,18 @@ where
 /// - `serial`: The serial writer for logging.
 /// - `ctrl_byte`: The control byte.
 /// - `log_level`: The desired logging level.
-pub fn scan_i2c<I2C, L>(
+pub fn scan_i2c<I2C, W>(
     i2c: &mut I2C,
-    logger: &mut L,
+    writer: &mut W,
     ctrl_byte: u8,
 ) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    L: Logger,
+    W: core::fmt::Write,
 {
-    logger.log_info_fmt(|buf| write!(buf, "Scanning I2C bus with a single control byte..."));
-    internal_scan(i2c, logger, &[ctrl_byte])
+    writeln!(writer, "Scanning I2C bus with a single control byte...").ok();
+    internal_scan(i2c, writer, &[ctrl_byte])
 }
 
 /// Scans the I2C bus for devices that respond to a given initialization sequence.
@@ -112,10 +109,10 @@ where
 /// # Returns
 ///
 /// A `heapless::Vec<u8, N>` containing the bytes from `init_sequence` that elicited a response.
-pub fn scan_init_sequence<I2C, L, const INIT_SEQUENCE_LEN: usize>(
+pub fn scan_init_sequence<I2C, W, const INIT_SEQUENCE_LEN: usize>(
     // Use INIT_SEQUENCE_LEN
     i2c: &mut I2C,
-    logger: &mut L,
+    writer: &mut W,
     ctrl_byte: u8,
     init_sequence: &[u8; INIT_SEQUENCE_LEN], // Use INIT_SEQUENCE_LEN
 ) -> Result<heapless::Vec<u8, INIT_SEQUENCE_LEN>, crate::error::ErrorKind>
@@ -123,42 +120,40 @@ pub fn scan_init_sequence<I2C, L, const INIT_SEQUENCE_LEN: usize>(
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    L: Logger,
+    W: core::fmt::Write,
 {
-    logger.log_info_fmt(|buf| write!(buf, "Starting I2C bus scan with initialization sequence..."));
-    logger.log_info_fmt(|buf| {
-        write!(
-            buf,
-            "Initializing scan with control byte 0x{:02x}",
-            ctrl_byte
-        )
-    });
+    writeln!(writer, "Starting I2C bus scan with initialization sequence...").ok();
+    writeln!(
+        writer,
+        "Initializing scan with control byte 0x{:02x}",
+        ctrl_byte
+    ).ok();
 
-    let found_addrs = match crate::scanner::scan_i2c(i2c, logger, ctrl_byte) {
+    let found_addrs = match crate::scanner::scan_i2c(i2c, writer, ctrl_byte) {
         Ok(addrs) => addrs,
         Err(e) => {
-            logger.log_error_fmt(|buf| write!(buf, "Failed to scan I2C: {:?}\r\n", e));
+            writeln!(writer, "Failed to scan I2C: {:?}\r\n", e).ok();
             return Err(e);
         }
     };
 
     if found_addrs.is_empty() {
-        logger.log_error_fmt(|buf| write!(buf, "No I2C devices found.\r\n"));
+        writeln!(writer, "No I2C devices found.\r\n").ok();
         return Err(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack));
     }
 
     let mut detected_cmds =
-        check_init_sequence(i2c, logger, ctrl_byte, init_sequence, &found_addrs)?;
+        check_init_sequence(i2c, writer, ctrl_byte, init_sequence, &found_addrs)?;
 
-    logger.log_info_fmt(|buf| write!(buf, "I2C scan with init sequence complete."));
-    log_sequence_summary(logger, init_sequence, &mut detected_cmds);
+    writeln!(writer, "I2C scan with init sequence complete.").ok();
+    log_sequence_summary(writer, init_sequence, &mut detected_cmds);
 
     Ok(detected_cmds)
 }
 
-fn check_init_sequence<I2C, L, const N: usize>(
+fn check_init_sequence<I2C, W, const N: usize>(
     i2c: &mut I2C,
-    logger: &mut L,
+    writer: &mut W,
     ctrl_byte: u8,
     init_sequence: &[u8; N],
     found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
@@ -166,13 +161,13 @@ fn check_init_sequence<I2C, L, const N: usize>(
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    L: Logger,
+    W: core::fmt::Write,
 {
     let mut detected_cmds = heapless::Vec::<u8, N>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for &addr in found_addrs.iter() {
-        logger.log_info_fmt(|buf| write!(buf, "Testing init sequence on 0x{:02x}...", addr));
+        writeln!(writer, "Testing init sequence on 0x{:02x}...", addr).ok();
 
         for &cmd in init_sequence.iter() {
             let mut command_data = heapless::Vec::<u8, 2>::new(); // ctrl_byte + cmd
@@ -183,9 +178,7 @@ where
                 crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
             })?;
 
-            logger.log_info_fmt(|buf| {
-                write!(buf, "  Sending command 0x{:02x} to 0x{:02x}...", cmd, addr)
-            });
+            writeln!(writer, "  Sending command 0x{:02x} to 0x{:02x}...", cmd, addr).ok();
 
             match i2c.write(addr, &command_data) {
                 Ok(_) => {
@@ -194,23 +187,19 @@ where
                             crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
                         })?;
                     }
-                    logger.log_info_fmt(|buf| write!(buf, "  Command 0x{:02x} responded.", cmd));
+                    writeln!(writer, "  Command 0x{:02x} responded.", cmd).ok();
                 }
                 Err(e) => {
                     let error_kind = e.to_compat(Some(addr));
                     if error_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
-                        logger.log_info_fmt(|buf| {
-                            write!(buf, "  Command 0x{:02x} no response (NACK).", cmd)
-                        });
+                        writeln!(writer, "  Command 0x{:02x} no response (NACK).", cmd).ok();
                         continue;
                     }
-                    logger.log_error_fmt(|buf| {
-                        write!(
-                            buf,
-                            "  Write failed for 0x{:02x} at 0x{:02x}: {}",
-                            cmd, addr, error_kind
-                        )
-                    });
+                    writeln!(
+                        writer,
+                        "  Write failed for 0x{:02x} at 0x{:02x}: {}",
+                        cmd, addr, error_kind
+                    ).ok();
                     last_error = Some(error_kind);
                 }
             }
@@ -224,11 +213,13 @@ where
     }
 }
 
-fn log_sequence_summary<L: Logger, const N: usize>(
-    logger: &mut L,
+fn log_sequence_summary<W, const N: usize>(
+    writer: &mut W,
     expected_sequence: &[u8; N],
     detected_cmds: &mut heapless::Vec<u8, N>,
-) {
+) where
+    W: core::fmt::Write,
+{
     let mut missing_cmds = heapless::Vec::<u8, N>::new();
     let mut sorted_detected_cmds = detected_cmds.clone();
     sorted_detected_cmds.sort_unstable();
@@ -239,39 +230,24 @@ fn log_sequence_summary<L: Logger, const N: usize>(
         }
     }
 
-    logger.log_info_fmt(|buf| {
-        write!(buf, "\n--- I2C Sequence Scan Summary ---")?;
-        Ok(())
-    });
-    logger.log_info_fmt(|buf| {
-        write!(buf, "Expected Commands:")?;
-        for &cmd in expected_sequence {
-            write!(buf, " 0x{:02x}", cmd)?;
-        }
-        writeln!(buf)?;
-        Ok(())
-    });
+    writeln!(writer, "\n--- I2C Sequence Scan Summary ---").ok();
+    write!(writer, "Expected Commands:").ok();
+    for &cmd in expected_sequence {
+        write!(writer, " 0x{:02x}", cmd).ok();
+    }
+    writeln!(writer).ok();
 
-    logger.log_info_fmt(|buf| {
-        write!(buf, "Commands That Responded:")?;
-        for &cmd in detected_cmds.iter() {
-            write!(buf, " 0x{:02x}", cmd)?;
-        }
-        writeln!(buf)?;
-        Ok(())
-    });
+    write!(writer, "Commands That Responded:").ok();
+    for &cmd in detected_cmds.iter() {
+        write!(writer, " 0x{:02x}", cmd).ok();
+    }
+    writeln!(writer).ok();
 
-    logger.log_info_fmt(|buf| {
-        write!(buf, "Commands With No Response:")?;
-        for &cmd in missing_cmds.iter() {
-            write!(buf, " 0x{:02x}", cmd)?;
-        }
-        writeln!(buf)?;
-        Ok(())
-    });
+    write!(writer, "Commands With No Response:").ok();
+    for &cmd in missing_cmds.iter() {
+        write!(writer, " 0x{:02x}", cmd).ok();
+    }
+    writeln!(writer).ok();
 
-    logger.log_info_fmt(|buf| {
-        write!(buf, "--- End Summary ---\n")?;
-        Ok(())
-    });
+    writeln!(writer, "--- End Summary ---\n").ok();
 }

@@ -1,9 +1,6 @@
 use core::fmt::Write;
-use dvcdbg::compat::util::ERROR_STRING_BUFFER_SIZE;
 use dvcdbg::compat::{I2cCompat, SerialCompat};
-use dvcdbg::explore::logger::Logger;
 use dvcdbg::prelude::*;
-use heapless::String;
 
 // -----------------------------
 // Dummy implementations
@@ -28,31 +25,6 @@ impl core::fmt::Write for DummySerial {
     }
 }
 
-impl Logger for DummySerial {
-    fn log_info_fmt<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
-    {
-        let mut buffer = String::new();
-        if f(&mut buffer).is_ok() {
-            let _ = self.write_str("[I] ");
-            let _ = self.write_str(&buffer);
-            let _ = self.write_str("\n");
-        }
-    }
-
-    fn log_error_fmt<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut String<ERROR_STRING_BUFFER_SIZE>) -> core::fmt::Result,
-    {
-        let mut buffer = String::new();
-        if f(&mut buffer).is_ok() {
-            let _ = self.write_str("[E] ");
-            let _ = self.write_str(&buffer);
-            let _ = self.write_str("\n");
-        }
-    }
-}
 
 struct DummyI2c;
 impl I2cCompat for DummyI2c {
@@ -91,7 +63,7 @@ fn test_full_stack() {
     assert!(i2c.read(0x42, &mut buf).is_ok());
     assert!(i2c.write_read(0x42, &[1, 2], &mut buf).is_ok());
 
-    assert!(scan_i2c(&mut i2c, &mut serial, 0x00,).is_ok());
+    assert!(scan_i2c(&mut i2c, &mut serial, 0x00).is_ok());
 
     assert_log!(false, &mut serial, "test log macro");
 

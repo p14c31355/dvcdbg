@@ -15,5 +15,3 @@ pub use crate::explore::explorer::{CmdExecutor, CmdNode, Explorer};
 
 pub use crate::explore::runner::{run_explorer, run_single_sequence_explorer};
 pub use crate::scanner::{scan_i2c, scan_init_sequence};
-
-pub use crate::explore::logger::{LogLevel, Logger, SerialLogger};

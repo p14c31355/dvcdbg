@@ -16,12 +16,12 @@ pub struct CmdNode {
 
 pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
     // Use CMD_BUFFER_SIZE
-    fn exec<L: crate::explore::logger::Logger + core::fmt::Write>(
+    fn exec<W: core::fmt::Write>(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
         cmd: &[u8],
-        logger: &mut L,
+        writer: &mut W,
     ) -> Result<(), ExecutorError>;
 }
 
@@ -54,16 +54,16 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
     }
 
     // Private helper for write with retry
-    fn write_with_retry<I2C, S>(
+    fn write_with_retry<I2C, W>(
         i2c: &mut I2C,
         addr: u8,
         bytes: &[u8],
-        logger: &mut S,
+        writer: &mut W,
     ) -> Result<(), crate::error::ErrorKind>
     where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-        S: core::fmt::Write + crate::explore::logger::Logger,
+        W: core::fmt::Write,
     {
         let mut last_error = None;
         for _attempt in 0..2 {
@@ -75,8 +75,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
                     last_error = Some(compat_err);
-                    let _ = logger
-                        .log_error_fmt(|buf| writeln!(buf, "[I2C retry error] {compat_err:?}"));
+                    writeln!(writer, "[I2C retry error] {compat_err:?}").ok();
                     Self::short_delay();
                 }
             }
@@ -85,10 +84,10 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
     }
 }
 
-pub fn execute_and_log_command<I2C, E, L, const MAX_BYTES_PER_CMD: usize>(
+pub fn execute_and_log_command<I2C, E, W, const MAX_BYTES_PER_CMD: usize>(
     i2c: &mut I2C,
     executor: &mut E,
-    logger: &mut L,
+    writer: &mut W,
     addr: u8,
     cmd_bytes: &[u8],
     cmd_idx: usize,
@@ -97,23 +96,21 @@ where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     E: CmdExecutor<I2C, MAX_BYTES_PER_CMD>,
-    L: crate::explore::logger::Logger + core::fmt::Write,
+    W: core::fmt::Write,
 {
-    let _ = logger.log_info_fmt(|buf| {
-        writeln!(
-            buf,
-            "[explorer] Sending node {} bytes: {:02X?} ...",
-            cmd_idx, cmd_bytes
-        )
-    });
+    writeln!(
+        writer,
+        "[explorer] Sending node {} bytes: {:02X?} ...",
+        cmd_idx, cmd_bytes
+    ).ok();
 
-    match executor.exec(i2c, addr, cmd_bytes, logger) {
+    match executor.exec(i2c, addr, cmd_bytes, writer) {
         Ok(_) => {
-            let _ = logger.log_info_fmt(|buf| writeln!(buf, "[explorer] OK"));
+            writeln!(writer, "[explorer] OK").ok();
             Ok(())
         }
         Err(e) => {
-            let _ = logger.log_error_fmt(|buf| writeln!(buf, "[explorer] FAILED: {:?}", e));
+            writeln!(writer, "[explorer] FAILED: {:?}", e).ok();
             Err(e.into())
         }
     }
@@ -126,39 +123,35 @@ where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
-    fn exec<S>(
+    fn exec<W>(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
         cmd: &[u8],
-        logger: &mut S,
+        writer: &mut W,
     ) -> Result<(), ExecutorError>
     where
-        S: core::fmt::Write + crate::explore::logger::Logger,
+        W: core::fmt::Write,
     {
         let addr_idx = addr as usize;
 
         if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
-            let _ = logger
-                .log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
-            let ack_ok = Self::write_with_retry(i2c, addr, &[addr], logger).is_ok();
+            writeln!(writer, "[Info] I2C initializing for 0x{addr:02X}...").ok();
+            let ack_ok = Self::write_with_retry(i2c, addr, &[addr], writer).is_ok();
             if ack_ok {
                 // self.prefix = addr; // Removed this line as it mutates the fixed prefix
-                let _ = logger.log_info_fmt(|buf| {
-                    writeln!(
-                        buf,
-                        "[Info] Device found at 0x{addr:02X}, sending init sequence..."
-                    )
-                });
+                writeln!(
+                    writer,
+                    "[Info] Device found at 0x{addr:02X}, sending init sequence..."
+                ).ok();
                 for &c in self.init_sequence.iter() {
                     let command = [self.prefix, c]; // Uses the original self.prefix
-                    Self::write_with_retry(i2c, addr, &command, logger)
+                    Self::write_with_retry(i2c, addr, &command, writer)
                         .map_err(ExecutorError::I2cError)?;
                     Self::short_delay();
                 }
                 self.initialized_addrs[addr_idx] = true;
-                let _ = logger
-                    .log_info_fmt(|buf| writeln!(buf, "[Info] I2C initialized for 0x{addr:02X}"));
+                writeln!(writer, "[Info] I2C initialized for 0x{addr:02X}").ok();
             }
         }
         let prefix = self.prefix; // Changed to use the instance's prefix
@@ -169,7 +162,7 @@ where
         self.buffer
             .extend_from_slice(cmd)
             .map_err(|_| ExecutorError::BufferOverflow)?;
-        Self::write_with_retry(i2c, addr, &self.buffer, logger).map_err(ExecutorError::I2cError)
+        Self::write_with_retry(i2c, addr, &self.buffer, writer).map_err(ExecutorError::I2cError)
     }
 }
 
@@ -197,21 +190,21 @@ impl<'a, const N: usize> Explorer<'a, N> {
         max_len
     }
 
-    pub fn explore<I2C, E, L, const CMD_BUFFER_SIZE: usize>(
+    pub fn explore<I2C, E, W, const CMD_BUFFER_SIZE: usize>(
         // Use CMD_BUFFER_SIZE
         &self,
         i2c: &mut I2C,
         executor: &mut E,
-        logger: &mut L,
+        writer: &mut W,
     ) -> Result<ExploreResult, ExplorerError>
     where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
         E: CmdExecutor<I2C, CMD_BUFFER_SIZE>, // Use CMD_BUFFER_SIZE
-        L: crate::explore::logger::Logger + core::fmt::Write,
+        W: core::fmt::Write,
     {
         if self.sequence.is_empty() {
-            let _ = logger.log_info_fmt(|buf| writeln!(buf, "[explorer] No commands provided."));
+            writeln!(writer, "[explorer] No commands provided.").ok();
             return Err(ExplorerError::NoValidAddressesFound);
         }
 
@@ -219,8 +212,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut solved_addrs: [bool; I2C_ADDRESS_COUNT] = [false; I2C_ADDRESS_COUNT];
         let mut permutations_tested = 0;
         let iter = PermutationIter::new(self)?;
-        let _ = logger
-            .log_info_fmt(|buf| writeln!(buf, "[explorer] Starting permutation exploration..."));
+        writeln!(writer, "[explorer] Starting permutation exploration...").ok();
         for sequence in iter {
             permutations_tested += 1;
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
@@ -229,46 +221,38 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     continue;
                 }
 
-                let _ = logger.log_info_fmt(|buf| {
-                    writeln!(
-                        buf,
-                        "[explorer] Trying sequence on 0x{:02X} (permutation {})",
-                        addr, permutations_tested
-                    )
-                });
+                writeln!(
+                    writer,
+                    "[explorer] Trying sequence on 0x{:02X} (permutation {})",
+                    addr, permutations_tested
+                ).ok();
 
                 let mut all_ok = true;
                 for i in 0..self.sequence.len() {
                     let cmd_bytes = sequence[i];
-                    if execute_and_log_command(i2c, executor, logger, addr, cmd_bytes, i).is_err() {
+                    if execute_and_log_command(i2c, executor, writer, addr, cmd_bytes, i).is_err() {
                         all_ok = false;
                         break;
                     }
                 }
 
                 if all_ok {
-                    let _ = logger.log_info_fmt(|buf| {
-                        writeln!(
-                            buf,
-                            "[explorer] Successfully executed sequence on 0x{:02X}",
-                            addr
-                        )
-                    });
+                    writeln!(
+                        writer,
+                        "[explorer] Successfully executed sequence on 0x{:02X}",
+                        addr
+                    ).ok();
                     if found_addrs.push(addr).is_err() {
-                        let _ = logger.log_error_fmt(|buf| {
-                            writeln!(buf, "[error] Buffer overflow in found_addrs")
-                        });
+                        writeln!(writer, "[error] Buffer overflow in found_addrs").ok();
                         return Err(ExplorerError::BufferOverflow);
                     }
                     solved_addrs[addr as usize] = true;
                 } else {
-                    let _ = logger.log_info_fmt(|buf| {
-                        writeln!(
-                            buf,
-                            "[explorer] Failed to execute sequence on 0x{:02X}",
-                            addr
-                        )
-                    });
+                    writeln!(
+                        writer,
+                        "[explorer] Failed to execute sequence on 0x{:02X}",
+                        addr
+                    ).ok();
                 }
             }
 
@@ -284,7 +268,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
     pub fn get_one_topological_sort_buf(
         &self,
-        _serial: &mut impl core::fmt::Write,
+        _writer: &mut impl core::fmt::Write,
         failed_nodes: &[bool; N],
     ) -> Result<(heapless::Vec<&'a [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
         let len = self.sequence.len();
