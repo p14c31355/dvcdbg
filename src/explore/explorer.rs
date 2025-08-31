@@ -206,10 +206,9 @@ where
         if self.buffer_len + cmd.len() > CMD_BUFFER_SIZE {
             return Err(ExecutorError::BufferOverflow);
         }
-        for (i, &b) in cmd.iter().enumerate() {
-            self.buffer[self.buffer_len + i] = b;
-        }
-        self.buffer_len += cmd.len();
+        let end = self.buffer_len + cmd.len();
+        self.buffer[self.buffer_len..end].copy_from_slice(cmd);
+        self.buffer_len = end;
 
         Self::write_with_retry(i2c, addr, &self.buffer[..self.buffer_len], writer)
             .map_err(ExecutorError::I2cError)
