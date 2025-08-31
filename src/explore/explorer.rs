@@ -500,7 +500,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             };
             if !used && self.in_degree[i] == 0 {
                 // Mark node 'i' as used
-                self.used.set(i).unwrap_or_else(|_| self.is_done = true);
+                self.used.set(i).unwrap();
                 if self.current_permutation_len < N as u8 {
                     self.current_permutation[self.current_permutation_len as usize] =
                         self.explorer.sequence[i].bytes;
