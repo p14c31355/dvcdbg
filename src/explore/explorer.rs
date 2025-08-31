@@ -1,6 +1,7 @@
 // explorer.rs
 
 use crate::compat::err_compat::HalErrorExt;
+use crate::compat::util;
 use crate::error::{ExecutorError, ExplorerError};
 use core::fmt::Write;
 
@@ -136,14 +137,15 @@ where
         let addr_idx = addr as usize;
 
         if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
-            writeln!(writer, "[Info] I2C initializing for 0x{addr:02X}...").ok();
+            write!(writer, "[Info] I2C initializing for ").ok();
+            util::write_bytes_hex_fmt(writer, &[addr]).ok();
+            writeln!(writer, "...").ok();
             let ack_ok = Self::write_with_retry(i2c, addr, &[addr], writer).is_ok();
             if ack_ok {
                 // self.prefix = addr; // Removed this line as it mutates the fixed prefix
-                writeln!(
-                    writer,
-                    "[Info] Device found at 0x{addr:02X}, sending init sequence..."
-                ).ok();
+                write!(writer, "[Info] Device found at ").ok();
+                util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                writeln!(writer, ", sending init sequence...").ok();
                 for &c in self.init_sequence.iter() {
                     let command = [self.prefix, c]; // Uses the original self.prefix
                     Self::write_with_retry(i2c, addr, &command, writer)
@@ -151,7 +153,9 @@ where
                     Self::short_delay();
                 }
                 self.initialized_addrs[addr_idx] = true;
-                writeln!(writer, "[Info] I2C initialized for 0x{addr:02X}").ok();
+                write!(writer, "[Info] I2C initialized for ").ok();
+                util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                writeln!(writer).ok();
             }
         }
         let prefix = self.prefix; // Changed to use the instance's prefix
@@ -221,11 +225,9 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     continue;
                 }
 
-                writeln!(
-                    writer,
-                    "[explorer] Trying sequence on 0x{:02X} (permutation {})",
-                    addr, permutations_tested
-                ).ok();
+                write!(writer, "[explorer] Trying sequence on ").ok();
+                util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                writeln!(writer, " (permutation {})", permutations_tested).ok();
 
                 let mut all_ok = true;
                 for i in 0..self.sequence.len() {
@@ -237,22 +239,18 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 }
 
                 if all_ok {
-                    writeln!(
-                        writer,
-                        "[explorer] Successfully executed sequence on 0x{:02X}",
-                        addr
-                    ).ok();
+                    write!(writer, "[explorer] Successfully executed sequence on ").ok();
+                    util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                    writeln!(writer).ok();
                     if found_addrs.push(addr).is_err() {
                         writeln!(writer, "[error] Buffer overflow in found_addrs").ok();
                         return Err(ExplorerError::BufferOverflow);
                     }
                     solved_addrs[addr as usize] = true;
                 } else {
-                    writeln!(
-                        writer,
-                        "[explorer] Failed to execute sequence on 0x{:02X}",
-                        addr
-                    ).ok();
+                    write!(writer, "[explorer] Failed to execute sequence on ").ok();
+                    util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                    writeln!(writer).ok();
                 }
             }
 

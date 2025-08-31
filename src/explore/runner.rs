@@ -1,12 +1,9 @@
 // runner.rs
 
 use crate::compat::util;
-// use crate::compat::util::ERROR_STRING_BUFFER_SIZE;
 use crate::error::ExplorerError;
 use crate::explore::explorer::*;
-// use crate::explore::logger::*;
 use crate::scanner::I2C_MAX_DEVICES;
-use core::fmt::Write; // Import the const fn
 
 
 pub fn run_explorer<
@@ -154,7 +151,9 @@ where
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
         for (addr_idx, &addr) in found_addrs.iter().enumerate() {
-            writeln!(serial, "Sending commands to 0x{:02X}", addr).ok();
+            write!(serial, "Sending commands to ").ok();
+            util::write_bytes_hex_fmt(serial, &[addr]).ok();
+            writeln!(serial).ok();
 
             let mut all_ok = true;
 
@@ -174,7 +173,9 @@ where
                 )
                 .is_err()
                 {
-                    writeln!(serial, "[warn] Command {} failed on 0x{:02X}", i, addr).ok();
+                    write!(serial, "[warn] Command {} failed on ", i).ok();
+                    util::write_bytes_hex_fmt(serial, &[addr]).ok();
+                    writeln!(serial).ok();
                     all_ok = false;
                     if i >= successful_seq_len {
                         failed_nodes[i] = true;
@@ -225,10 +226,9 @@ where
 
     let sequence_len = explorer.sequence.len();
 
-    writeln!(
-        serial,
-        "[explorer] Obtained one topological sort. Executing on 0x{target_addr:02X}..."
-    ).ok();
+    write!(serial, "[explorer] Obtained one topological sort. Executing on ").ok();
+    util::write_bytes_hex_fmt(serial, &[target_addr]).ok();
+    writeln!(serial, "...").ok();
 
     let mut executor =
         PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, heapless::Vec::new()); // Use calculated size
@@ -244,10 +244,9 @@ where
         )?;
     }
 
-    writeln!(
-        serial,
-        "[explorer] Single sequence execution complete for 0x{target_addr:02X}."
-    ).ok();
+    write!(serial, "[explorer] Single sequence execution complete for ").ok();
+    util::write_bytes_hex_fmt(serial, &[target_addr]).ok();
+    writeln!(serial, ".").ok();
 
     Ok(())
 }
