@@ -113,19 +113,24 @@ where
     E: CmdExecutor<I2C, MAX_BYTES_PER_CMD>,
     W: core::fmt::Write,
 {
-    writeln!(
+    // Replaced writeln! with prevent_garbled
+    util::prevent_garbled(
         writer,
-        "[explorer] Sending node {} bytes: {:02X?} ...",
-        cmd_idx, cmd_bytes
-    ).ok();
+        format_args!(
+            "[explorer] Sending node {} bytes: {:02X?} ...",
+            cmd_idx, cmd_bytes
+        ),
+    );
 
     match executor.exec(i2c, addr, cmd_bytes, writer) {
         Ok(_) => {
-            writeln!(writer, "[explorer] OK").ok();
+            // Replaced writeln! with prevent_garbled
+            util::prevent_garbled(writer, format_args!("[explorer] OK"));
             Ok(())
         }
         Err(e) => {
-            writeln!(writer, "[explorer] FAILED: {}", e).ok();
+            // Replaced writeln! with prevent_garbled
+            util::prevent_garbled(writer, format_args!("[explorer] FAILED: {}", e));
             Err(e.into())
         }
     }
