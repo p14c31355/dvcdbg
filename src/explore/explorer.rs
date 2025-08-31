@@ -141,32 +141,27 @@ where
         if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
             let _ = logger
                 .log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
-
             let ack_ok = Self::write_with_retry(i2c, addr, &[addr], logger).is_ok();
-
             if ack_ok {
-                self.prefix = addr;
+                // self.prefix = addr; // Removed this line as it mutates the fixed prefix
                 let _ = logger.log_info_fmt(|buf| {
                     writeln!(
                         buf,
                         "[Info] Device found at 0x{addr:02X}, sending init sequence..."
                     )
                 });
-
                 for &c in self.init_sequence.iter() {
-                    let command = [self.prefix, c];
+                    let command = [self.prefix, c]; // Uses the original self.prefix
                     Self::write_with_retry(i2c, addr, &command, logger)
                         .map_err(ExecutorError::I2cError)?;
                     Self::short_delay();
                 }
-
                 self.initialized_addrs[addr_idx] = true;
                 let _ = logger
                     .log_info_fmt(|buf| writeln!(buf, "[Info] I2C initialized for 0x{addr:02X}"));
             }
         }
-
-        let prefix = addr;
+        let prefix = self.prefix; // Changed to use the instance's prefix
         self.buffer.clear();
         self.buffer
             .push(prefix)
@@ -174,7 +169,6 @@ where
         self.buffer
             .extend_from_slice(cmd)
             .map_err(|_| ExecutorError::BufferOverflow)?;
-
         Self::write_with_retry(i2c, addr, &self.buffer, logger).map_err(ExecutorError::I2cError)
     }
 }
@@ -309,23 +303,27 @@ impl<'a, const N: usize> Explorer<'a, N> {
             }
             in_degree[i] = node.deps.len() as u8; // node.deps.len() is usize, cast to u8
             for &dep_idx in node.deps.iter() {
+                let dep_idx_usize = dep_idx as usize;
+                if dep_idx_usize >= len {
+                    return Err(ExplorerError::InvalidDependencyIndex);
+                }
                 // dep_idx is u8, i is usize. adj_list_rev expects u8 for its inner Vec.
-                adj_list_rev[dep_idx as usize]
+                adj_list_rev[dep_idx_usize]
                     .push(i as u8)
                     .map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-        }
-
-        let mut q: heapless::Vec<u8, N> = heapless::Vec::new(); // Changed to u8
-        for (i, &degree) in in_degree.iter().enumerate().take(len) {
-            if !failed_nodes[i] && degree == 0 {
-                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?; // Cast i to u8
             }
         }
 
         let mut result_sequence: heapless::Vec<&'a [u8], N> = heapless::Vec::new(); // Changed type
         let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new(); // Changed type to u8
         let mut visited_count = 0;
+
+        let mut q = heapless::Vec::<u8, N>::new(); // Initialize the queue 'q'
+        for i in 0..len {
+            if in_degree[i] == 0 && !failed_nodes[i] {
+                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+        }
 
         while let Some(u_u8) = q.pop() {
             // u_u8 is u8
