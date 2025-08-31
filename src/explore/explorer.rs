@@ -4,7 +4,6 @@ use crate::compat::err_compat::HalErrorExt;
 use crate::error::{ExecutorError, ExplorerError};
 use core::fmt::Write;
 
-use crate::compat::util::calculate_cmd_buffer_size;
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 use heapless::Vec;
 const I2C_ADDRESS_COUNT: usize = 128;
@@ -360,16 +359,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         Ok((result_sequence, result_len_per_node))
     }
 }
-pub struct PermutationIter<'a, const N: usize> {
-    pub explorer: &'a Explorer<'a, N>,
-    pub total_nodes: usize,
-    pub current_permutation: Vec<&'a [u8], N>,
-    // pub used: Vec<bool, N>, // REMOVE THIS LINE
-    pub used_mask: u32, // ADD THIS LINE: Use a u32 bitmask for 'used' nodes
-    pub in_degree: Vec<u8, N>,
-        Ok((result_sequence, result_len_per_node))
-    }
-}
+
 pub struct PermutationIter<'a, const N: usize> {
     pub explorer: &'a Explorer<'a, N>,
     pub total_nodes: usize,
@@ -391,8 +381,10 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         }
 
         let mut in_degree: Vec<u8, N> = Vec::new();
-        let mut adj_list_rev: [heapless::Vec<u8, N>; N] =
-            core::array::from_fn(|_| heapless::Vec::new());
+        let mut adj_list_rev: Vec<heapless::Vec<u8, N>, N> = Vec::new();
+        adj_list_rev
+            .resize(total_nodes, heapless::Vec::new())
+            .map_err(|_| ExplorerError::BufferOverflow)?;
 
         in_degree
             .resize(total_nodes, 0)

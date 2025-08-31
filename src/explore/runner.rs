@@ -1,9 +1,7 @@
 // runner.rs
 
-use crate::compat::err_compat::HalErrorExt;
 use crate::compat::util;
 use crate::compat::util::ERROR_STRING_BUFFER_SIZE;
-use crate::compat::util::calculate_cmd_buffer_size;
 use crate::error::ExplorerError;
 use crate::explore::explorer::*;
 use crate::explore::logger::*;
