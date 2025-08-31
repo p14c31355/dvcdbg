@@ -363,7 +363,7 @@ pub struct PermutationIter<'a, const N: usize> {
     pub total_nodes: usize,
     pub current_permutation: Vec<&'a [u8], N>,
     // pub used: Vec<bool, N>, // REMOVE THIS LINE
-    pub used_mask: u32, // ADD THIS LINE: Use a u32 bitmask for 'used' nodes
+    pub used: Vec<bool, N>,
     pub in_degree: Vec<u8, N>,
     pub adj_list_rev: Vec<heapless::Vec<u8, N>, N>,
     pub path_stack: Vec<u8, N>,
