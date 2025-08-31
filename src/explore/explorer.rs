@@ -30,7 +30,7 @@ pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
 pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> {
     buffer: [u8; CMD_BUFFER_SIZE],
     buffer_len: usize,
-    initialized_addrs: util::BitFlags<I2C_ADDRESS_COUNT, I2C_ADDRESS_BITFLAGS_SIZE>,
+    initialized_addrs: util::BitFlags<I2C_ADDRESS_COUNT>,
     prefix: u8,
     init_sequence: [u8; INIT_SEQUENCE_LEN],
     init_sequence_len: usize,
