@@ -104,14 +104,24 @@ pub fn prevent_garbled<W: core::fmt::Write>(serial: &mut W, args: core::fmt::Arg
     let mut buffer = heapless::String::<512>::new();
     core::fmt::Write::write_fmt(&mut buffer, args).ok();
 
-    let start = 0;
+    let mut start = 0;
     while start < buffer.len() {
         let mut end = (start + UART_CHUNK_SIZE).min(buffer.len());
         if end < buffer.len() {
-            while !buffer.is_char_boundary(end) {
+            while end > start && !buffer.is_char_boundary(end) {
                 end -= 1;
             }
         }
-        writeln!(serial, "{}", &buffer[start..end]).ok();
+
+        // If no boundary was found, end could be equal to start.
+        // To prevent an infinite loop, if end == start, we must send something.
+        if end == start {
+            end = (start + UART_CHUNK_SIZE).min(buffer.len());
+        }
+
+        if start < end {
+            writeln!(serial, "{}", &buffer[start..end]).ok();
+        }
+        start = end;
     }
 }

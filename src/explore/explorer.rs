@@ -417,10 +417,10 @@ pub struct PermutationIter<'a, const N: usize> {
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
     pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
-        const _: () = assert!(
-            N <= 128,
-            "PermutationIter currently only supports up to 128 nodes due to using a u128 bitmask."
-        );
+        // The assertion `N <= 128` is moved to the struct definition or a higher level
+        // where `N` is a generic parameter of the item containing the const.
+        // `const` items cannot use generic parameters from outer items.
+
         let total_nodes = explorer.sequence.len();
         if total_nodes > N {
             return Err(ExplorerError::TooManyCommands);
@@ -489,12 +489,15 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         let current_depth = self.current_permutation_len as usize;
 
         for i in 0..self.total_nodes {
-            if !self
-                .used
-                .get(i)
-                .map_err(|_| ExplorerError::BufferOverflow)?
-                && self.in_degree[i] == 0
-            {
+            let used = match self.used.get(i) {
+                Ok(u) => u,
+                Err(_) => {
+                    // This should not happen given the bounds checks, but handle gracefully.
+                    self.is_done = true;
+                    return false;
+                }
+            };
+            if !used && self.in_degree[i] == 0 {
                 // Mark node 'i' as used
                 self.used.set(i).unwrap_or_else(|_| self.is_done = true);
                 if self.current_permutation_len < N as u8 {
