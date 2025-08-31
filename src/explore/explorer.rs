@@ -145,7 +145,8 @@ where
             self.prefix = addr;
             let _ = logger.log_info_fmt(|buf| {
                 writeln!(buf, "[Info] Device found at 0x{addr:02X}, sending init sequence...")
-        });}
+            });
+        }
             
             for &c in self.init_sequence.iter() {
                 let command = [self.prefix, c];
