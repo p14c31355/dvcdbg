@@ -5,32 +5,34 @@ use crate::error::ExplorerError;
 use crate::explore::explorer::*;
 use crate::scanner::I2C_MAX_DEVICES;
 
-
 pub fn run_explorer<
     I2C,
     S,
     const N: usize,
     const INIT_SEQUENCE_LEN: usize,
-    const CMD_BUFFER_SIZE: usize, // Add CMD_BUFFER_SIZE
+    const CMD_BUFFER_SIZE: usize,
 >(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
     prefix: u8,
-    init_sequence: &[u8; INIT_SEQUENCE_LEN], // Use INIT_SEQUENCE_LEN
+    init_sequence: &[u8; INIT_SEQUENCE_LEN],
 ) -> Result<(), ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    writeln!(serial, "[explorer] Running full exploration...").ok();
+    util::prevent_garbled(
+        serial,
+        format_args!("[explorer] Running full exploration..."),
+    );
 
     let found_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addrs) => addrs,
         Err(e) => {
-            writeln!(serial, "[error] Failed to scan I2C: {}", e).ok();
-            return Err(ExplorerError::ExecutionFailed(e.into()));
+            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e}"));
+            return Err(ExplorerError::ExecutionFailed(e));
         }
     };
     if found_addrs.is_empty() {
@@ -38,7 +40,6 @@ where
     }
 
     let successful_seq = match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(
-        // Use INIT_SEQUENCE_LEN
         i2c,
         serial,
         prefix,
@@ -46,31 +47,36 @@ where
     ) {
         Ok(seq) => seq,
         Err(e) => {
-            writeln!(serial, "[error] Failed to scan init sequence: {}", e).ok();
+            util::prevent_garbled(
+                serial,
+                format_args!("[error] Failed to scan init sequence: {e}"),
+            );
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
-    writeln!(serial, "[scan] initial sequence scan completed").ok();
-    writeln!(serial, "[log] Start driver safe init").ok();
+    util::prevent_garbled(
+        serial,
+        format_args!("[scan] initial sequence scan completed"),
+    );
+    util::prevent_garbled(serial, format_args!("[log] Start driver safe init"));
 
     let mut executor =
-        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, successful_seq); // Use calculated size
+        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, &successful_seq);
 
     let exploration_result =
-        explorer.explore::<_, _, _, CMD_BUFFER_SIZE>(i2c, &mut executor, serial)?; // Use CMD_BUFFER_SIZE
+        explorer.explore::<_, _, _, CMD_BUFFER_SIZE>(i2c, &mut executor, serial)?;
 
-    for addr in exploration_result.found_addrs.iter() {
-        write!(serial, "[driver] Found device at ").ok();
-        util::write_bytes_hex_fmt(serial, &[*addr]).ok();
-        writeln!(serial).ok();
+    for addr in exploration_result.found_addrs[..exploration_result.found_addrs_len].iter() {
+        util::prevent_garbled(serial, format_args!("[driver] Found device at {addr:02X}"));
     }
 
-    writeln!(
+    util::prevent_garbled(
         serial,
-        "[explorer] Exploration complete. {} addresses found across {} permutations.",
-        exploration_result.found_addrs.len(),
-        exploration_result.permutations_tested
-    ).ok();
+        format_args!(
+            "[explorer] Exploration complete. {} addresses found across {} permutations.",
+            exploration_result.found_addrs_len, exploration_result.permutations_tested
+        ),
+    );
 
     Ok(())
 }
@@ -80,13 +86,13 @@ pub fn run_pruned_explorer<
     S,
     const N: usize,
     const INIT_SEQUENCE_LEN: usize,
-    const CMD_BUFFER_SIZE: usize, // Add CMD_BUFFER_SIZE
+    const CMD_BUFFER_SIZE: usize,
 >(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
     prefix: u8,
-    init_sequence: &[u8; INIT_SEQUENCE_LEN], // Use INIT_SEQUENCE_LEN
+    init_sequence: &[u8; INIT_SEQUENCE_LEN],
 ) -> Result<(), ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
@@ -96,54 +102,61 @@ where
     let mut found_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addrs) => addrs,
         Err(e) => {
-            writeln!(serial, "[error] Failed to scan I2C: {:?}", e).ok();
-            return Err(ExplorerError::ExecutionFailed(e.into()));
+            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}"));
+            return Err(ExplorerError::ExecutionFailed(e));
         }
     };
     if found_addrs.is_empty() {
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
-    let successful_seq: heapless::Vec<u8, INIT_SEQUENCE_LEN> = // Use INIT_SEQUENCE_LEN
-        match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(i2c, serial, prefix, init_sequence) { // Use INIT_SEQUENCE_LEN
+    let successful_seq: heapless::Vec<u8, INIT_SEQUENCE_LEN> =
+        match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(
+            i2c,
+            serial,
+            prefix,
+            init_sequence,
+        ) {
             Ok(seq) => seq,
             Err(e) => {
-                writeln!(serial, "Failed to scan init sequence: {}", e).ok();
-                return Err(ExplorerError::ExecutionFailed(e.into()));
+                util::prevent_garbled(serial, format_args!("Failed to scan init sequence: {e}"));
+                return Err(ExplorerError::ExecutionFailed(e));
             }
         };
 
     let successful_seq_len = successful_seq.len();
 
-    writeln!(serial, "[scan] initial sequence scan completed").ok();
+    util::prevent_garbled(
+        serial,
+        format_args!("[scan] initial sequence scan completed"),
+    );
 
     let mut executor =
         crate::explore::explorer::PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(
-            // Use calculated size
             found_addrs[0],
-            successful_seq,
+            &successful_seq,
         );
 
     let mut failed_nodes = [false; N];
 
     loop {
-        let (sequence_bytes, _sequence_len) = match explorer
-        .get_one_topological_sort_buf(serial, &failed_nodes) // No generic needed here
-    {
+        let (sequence_bytes, _sequence_len) =
+            match explorer.get_one_topological_sort_buf(serial, &failed_nodes) {
                 Ok(seq) => seq,
                 Err(ExplorerError::DependencyCycle) => {
-                    writeln!(
+                    util::prevent_garbled(
                         serial,
-                        "[error] Dependency cycle detected, stopping exploration"
-                    ).ok();
+                        format_args!("[error] Dependency cycle detected, stopping exploration"),
+                    );
                     break;
                 }
                 Err(e) => {
-                    writeln!(
+                    util::prevent_garbled(
                         serial,
-                        "[error] Failed to generate topological sort: {}. Aborting.",
-                        e
-                    ).ok();
+                        format_args!(
+                            "[error] Failed to generate topological sort: {e}. Aborting."
+                        ),
+                    );
                     return Err(e);
                 }
             };
@@ -151,9 +164,7 @@ where
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
         for (addr_idx, &addr) in found_addrs.iter().enumerate() {
-            write!(serial, "Sending commands to ").ok();
-            util::write_bytes_hex_fmt(serial, &[addr]).ok();
-            writeln!(serial).ok();
+            util::prevent_garbled(serial, format_args!("Sending commands to {addr:02X}"));
 
             let mut all_ok = true;
 
@@ -163,19 +174,12 @@ where
                 }
                 let cmd_bytes = &sequence_bytes[i];
 
-                if execute_and_log_command(
-                    i2c,
-                    &mut executor,
-                    serial,
-                    addr,
-                    cmd_bytes,
-                    i,
-                )
-                .is_err()
+                if execute_and_log_command(i2c, &mut executor, serial, addr, cmd_bytes, i).is_err()
                 {
-                    write!(serial, "[warn] Command {} failed on ", i).ok();
-                    util::write_bytes_hex_fmt(serial, &[addr]).ok();
-                    writeln!(serial).ok();
+                    util::prevent_garbled(
+                        serial,
+                        format_args!("[warn] Command {i} failed on {addr:02X}"),
+                    );
                     all_ok = false;
                     if i >= successful_seq_len {
                         failed_nodes[i] = true;
@@ -198,7 +202,7 @@ where
         }
     }
 
-    writeln!(serial, "[I] Explorer finished").ok();
+    util::prevent_garbled(serial, format_args!("[I] Explorer finished"));
     Ok(())
 }
 
@@ -207,7 +211,7 @@ pub fn run_single_sequence_explorer<
     S,
     const N: usize,
     const INIT_SEQUENCE_LEN: usize,
-    const CMD_BUFFER_SIZE: usize, // Add CMD_BUFFER_SIZE
+    const CMD_BUFFER_SIZE: usize,
 >(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
@@ -220,18 +224,24 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    writeln!(serial, "[explorer] Attempting to get one topological sort...").ok();
+    util::prevent_garbled(
+        serial,
+        format_args!("[explorer] Attempting to get one topological sort..."),
+    );
 
-    let single_sequence = explorer.get_one_topological_sort_buf(serial, &[false; N])?; // No generic needed here
+    let single_sequence = explorer.get_one_topological_sort_buf(serial, &[false; N])?;
 
     let sequence_len = explorer.sequence.len();
 
-    write!(serial, "[explorer] Obtained one topological sort. Executing on ").ok();
-    util::write_bytes_hex_fmt(serial, &[target_addr]).ok();
-    writeln!(serial, "...").ok();
+    util::prevent_garbled(
+        serial,
+        format_args!(
+            "[explorer] Obtained one topological sort. Executing on {target_addr:02X}..."
+        ),
+    );
 
-    let mut executor =
-        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, heapless::Vec::new()); // Use calculated size
+    let empty_seq: &[u8] = &[];
+    let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, empty_seq);
 
     for i in 0..sequence_len {
         execute_and_log_command(
@@ -239,14 +249,17 @@ where
             &mut executor,
             serial,
             target_addr,
-            &single_sequence.0[i],
+            single_sequence.0[i],
             i,
         )?;
     }
 
-    write!(serial, "[explorer] Single sequence execution complete for ").ok();
-    util::write_bytes_hex_fmt(serial, &[target_addr]).ok();
-    writeln!(serial, ".").ok();
+    util::prevent_garbled(
+        serial,
+        format_args!(
+            "[explorer] Single sequence execution complete for {target_addr:02X}."
+        ),
+    );
 
     Ok(())
 }

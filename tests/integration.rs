@@ -20,11 +20,10 @@ impl SerialCompat for DummySerial {
 impl core::fmt::Write for DummySerial {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         // For testing purposes, we can print to stdout to see what would be logged
-        print!("{}", s);
+        print!("{s}");
         Ok(())
     }
 }
-
 
 struct DummyI2c;
 impl I2cCompat for DummyI2c {

@@ -2,7 +2,6 @@
 
 use crate::compat::HalErrorExt;
 use crate::compat::util;
-use core::fmt::Write;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -45,7 +44,7 @@ where
                 }
                 write!(writer, "Write failed at ").ok();
                 util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                writeln!(writer, ": {}", error_kind).ok();
+                writeln!(writer, ": {error_kind}").ok();
                 last_error = Some(error_kind);
             }
         }
@@ -127,7 +126,10 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     W: core::fmt::Write,
 {
-    writeln!(writer, "Starting I2C bus scan with initialization sequence...").ok();
+    util::prevent_garbled(
+        writer,
+        format_args!("Starting I2C bus scan with initialization sequence..."),
+    );
     write!(writer, "Initializing scan with control byte ").ok();
     util::write_bytes_hex_fmt(writer, &[ctrl_byte]).ok();
     writeln!(writer).ok();
@@ -135,7 +137,7 @@ where
     let found_addrs = match crate::scanner::scan_i2c(i2c, writer, ctrl_byte) {
         Ok(addrs) => addrs,
         Err(e) => {
-            writeln!(writer, "Failed to scan I2C: {:?}\r\n", e).ok();
+            writeln!(writer, "Failed to scan I2C: {e:?}\r\n").ok();
             return Err(e);
         }
     };
@@ -212,7 +214,7 @@ where
                     util::write_bytes_hex_fmt(writer, &[cmd]).ok();
                     write!(writer, " at ").ok();
                     util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                    writeln!(writer, ": {}", error_kind).ok();
+                    writeln!(writer, ": {error_kind}").ok();
                     last_error = Some(error_kind);
                 }
             }
@@ -247,7 +249,7 @@ fn log_sequence_summary<W, const N: usize>(
     write!(writer, "Expected Commands:").ok();
     for &cmd in expected_sequence {
         write!(writer, " ").ok();
-    util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
     }
     writeln!(writer).ok();
 
