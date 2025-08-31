@@ -118,7 +118,6 @@ pub fn scan_init_sequence<I2C, L, const MAX_CMD_LEN: usize>(
     logger: &mut L,
     ctrl_byte: u8,
     init_sequence: &[u8; MAX_CMD_LEN],
-    found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
 ) -> Result<heapless::Vec<u8, MAX_CMD_LEN>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
@@ -134,8 +133,21 @@ where
         )
     });
 
+    let found_addrs = match crate::scanner::scan_i2c(i2c, logger, ctrl_byte) {
+        Ok(addrs) => addrs,
+        Err(e) => {
+            logger.log_error_fmt(|buf| write!(buf, "Failed to scan I2C: {:?}\r\n", e));
+            loop {} 
+        }
+    };
+
+    if found_addrs.is_empty() {
+        logger.log_error_fmt(|buf| write!(buf, "No I2C devices found.\r\n"));
+        loop {}
+    }
+
     let mut detected_cmds =
-        check_init_sequence(i2c, logger, ctrl_byte, init_sequence, found_addrs)?;
+        check_init_sequence(i2c, logger, ctrl_byte, init_sequence, &found_addrs)?;
 
     logger.log_info_fmt(|buf| write!(buf, "I2C scan with init sequence complete."));
     log_sequence_summary(logger, init_sequence, &mut detected_cmds);

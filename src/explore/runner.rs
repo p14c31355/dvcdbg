@@ -80,7 +80,7 @@ where
     }
 
     let successful_seq =
-        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence, &found_addrs) {
+        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence) {
             Ok(seq) => seq,
             Err(e) => {
                 runner_log_error(&mut serial_logger, |buf| {
@@ -146,7 +146,7 @@ where
     }
 
     let successful_seq: heapless::Vec<u8, MAX_CMD_LEN> =
-        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence, &found_addrs) {
+        match crate::scanner::scan_init_sequence(i2c, &mut serial_logger, prefix, init_sequence) {
             Ok(seq) => seq,
             Err(e) => {
                 serial_logger
