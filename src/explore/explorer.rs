@@ -200,16 +200,16 @@ impl<'a, const N: usize> Explorer<'a, N> {
         max_len
     }
 
-    pub fn explore<I2C, E, L, const MAX_BYTES_PER_CMD: usize>(
+    pub fn explore<I2C, E, L, const BUF_CAP: usize>(
         &self,
         i2c: &mut I2C,
         executor: &mut E,
         logger: &mut L,
-    ) -> Result<ExplorationResult, ExplorerError>
+    ) -> Result<ExploreResult, ExplorerError>
     where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-        E: CmdExecutor<I2C, { calculate_cmd_buffer_size(1, MAX_BYTES_PER_CMD) }>, // Use calculated size
+        E: CmdExecutor<I2C, BUF_CAP>,
         L: crate::explore::logger::Logger + core::fmt::Write,
     {
         if self.sequence.is_empty() {
@@ -284,7 +284,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         })
     }
 
-    pub fn get_one_topological_sort_buf<const MAX_BYTES_PER_CMD: usize>(
+    pub fn get_one_topological_sort_buf(
         &self,
         _serial: &mut impl core::fmt::Write,
         failed_nodes: &[bool; N],
