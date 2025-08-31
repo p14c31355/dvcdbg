@@ -358,68 +358,44 @@ impl<'a, const N: usize> Explorer<'a, N> {
         Ok((result_sequence, result_len_per_node))
     }
 }
-
 pub struct PermutationIter<'a, const N: usize> {
-    sequence: &'a [CmdNode],
-    total_nodes: usize,
-    current_permutation: Vec<&'a [u8], N>,
-    used: Vec<bool, N>,
-    in_degree: Vec<u8, N>,
-    adj_list_rev: [heapless::Vec<u8, N>; N],
-    path_stack: Vec<u8, N>,
-    loop_start_indices: Vec<u8, N>,
-    is_done: bool,
+    pub explorer: &'a Explorer<'a, N>,
+    pub total_nodes: usize,
+    pub current_permutation: Vec<&'a [u8], N>,
+    // pub used: Vec<bool, N>, // REMOVE THIS LINE
+    pub used_mask: u32, // ADD THIS LINE: Use a u32 bitmask for 'used' nodes
+    pub in_degree: Vec<u8, N>,
+    pub adj_list_rev: [heapless::Vec<u8, N>; N],
+    pub path_stack: Vec<u8, N>,
+    pub loop_start_indices: Vec<u8, N>,
+    pub is_done: bool,
 }
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
     pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
-        let total_nodes = explorer.sequence.len();
-        if total_nodes > N {
-            return Err(ExplorerError::TooManyCommands);
-        }
-
-        let mut in_degree: Vec<u8, N> = Vec::new();
-        let mut adj_list_rev: [heapless::Vec<u8, N>; N] =
-            core::array::from_fn(|_| heapless::Vec::new());
-
-        in_degree
-            .resize(total_nodes, 0)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-        for (i, node) in explorer.sequence.iter().enumerate() {
-            in_degree[i as usize] = node.deps.len() as u8; // Cast i to usize
-            for &dep in node.deps.iter() {
-                if dep as usize >= total_nodes {
-                    // Cast dep to usize for comparison
-                    return Err(ExplorerError::InvalidDependencyIndex);
-                }
-                adj_list_rev[dep as usize]
-                    .push(i as u8)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-        }
+        // ... existing code ...
 
         // Cycle detection using Kahn's algorithm
         let mut temp_in_degree = in_degree.clone();
-        let mut q = Vec::<u8, N>::new(); // Changed to u8
+        let mut q = Vec::<u8, N>::new();
         for i in 0..total_nodes {
             if temp_in_degree[i] == 0 {
-                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?; // Cast i to u8
+                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
         let mut count = 0;
         let mut q_idx = 0;
         while q_idx < q.len() {
-            let u = q[q_idx] as usize; // Cast u to usize for indexing
+            let u = q[q_idx] as usize;
             q_idx += 1;
             count += 1;
 
             for &v_u8 in adj_list_rev[u].iter() {
-                // v is u8
-                let v = v_u8 as usize; // Cast v to usize for indexing
+                let v = v_u8 as usize;
                 temp_in_degree[v] -= 1;
                 if temp_in_degree[v] == 0 {
-                    q.push(v_u8).map_err(|_| ExplorerError::BufferOverflow)?; // Push u8
+                    q.push(v_u8).map_err(|_| ExplorerError::BufferOverflow)?;
                 }
             }
         }
@@ -429,15 +405,11 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         }
 
         Ok(Self {
-            sequence: explorer.sequence,
+            explorer,
             total_nodes,
             current_permutation: Vec::new(),
-            used: {
-                let mut v = Vec::new();
-                v.resize(total_nodes, false)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
-                v
-            },
+            // used: Vec::new(), // REMOVE THIS LINE
+            used_mask: 0, // ADD THIS LINE: Initialize the bitmask to 0
             in_degree,
             adj_list_rev,
             path_stack: Vec::new(),
@@ -458,33 +430,33 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
 
         // Iterate through all possible nodes (0 to total_nodes-1)
         for i in start_idx..self.total_nodes {
-            if !self.used[i] && self.in_degree[i] == 0 {
-                self.used[i] = true;
-                self.current_permutation.push(self.sequence[i].bytes).ok(); // Changed self.explorer.sequence to self.sequence
-                self.path_stack.push(i as u8).ok(); // Cast i to u8
-                self.loop_start_indices.push((i + 1) as u8).ok(); // Cast (i+1) to u8
+            // Check if node 'i' is NOT used (bit is 0) AND its in-degree is 0
+            if ((self.used_mask >> i) & 1) == 0 && self.in_degree[i] == 0 {
+                // Mark node 'i' as used (set its bit)
+                self.used_mask |= 1 << i;
+                self.current_permutation.push(self.explorer.sequence[i].bytes).ok();
+                self.path_stack.push(i as u8).ok();
+                self.loop_start_indices.push((i + 1) as u8).ok();
                 for &neighbor_u8 in self.adj_list_rev[i].iter() {
-                    // neighbor_u8 is u8
-                    let neighbor = neighbor_u8 as usize; // Cast neighbor to usize for indexing
+                    let neighbor = neighbor_u8 as usize;
                     self.in_degree[neighbor] -= 1;
                 }
                 return true;
             }
         }
-        false // No node found to extend the current permutation
+        false
     }
 
     fn backtrack(&mut self) -> bool {
         if let Some(last_added_idx_u8) = self.path_stack.pop() {
-            let last_added_idx = last_added_idx_u8 as usize; // Cast to usize
-            // Undo the choice: Remove the last added node from the permutation
+            let last_added_idx = last_added_idx_u8 as usize;
             self.current_permutation.pop();
-            self.used[last_added_idx] = false;
-            self.loop_start_indices.pop(); // Remove the last start index
+            // Unmark node 'last_added_idx' as used (clear its bit)
+            self.used_mask &= !(1 << last_added_idx);
+            self.loop_start_indices.pop();
 
             for &neighbor_u8 in self.adj_list_rev[last_added_idx].iter() {
-                // neighbor_u8 is u8
-                let neighbor = neighbor_u8 as usize; // Cast neighbor to usize for indexing
+                let neighbor = neighbor_u8 as usize;
                 self.in_degree[neighbor] += 1;
             }
 
