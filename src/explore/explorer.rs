@@ -450,23 +450,19 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             }
         }
 
-        let mut count = 0;
-        // q_head and q_tail are already defined and initialized in the new() method
-        while q_head < q_tail {
-            let u = self.q[q_head as usize] as usize;
-            q_head += 1;
+                let mut count = 0;
+        let mut q_idx = 0;
+        while q_idx < q.len() {
+            let u = q[q_idx] as usize;
+            q_idx += 1;
             count += 1;
 
             // Iterate through bits in adj_list_rev[u]
             for v in 0..total_nodes {
-                if (self.adj_list_rev[u] >> v) & 1 != 0 {
+                if (adj_list_rev[u] >> v) & 1 != 0 {
                     temp_in_degree[v] -= 1;
                     if temp_in_degree[v] == 0 {
-                        if q_tail as usize >= N {
-                            return Err(ExplorerError::BufferOverflow);
-                        }
-                        self.q[q_tail as usize] = v as u8;
-                        q_tail += 1;
+                        q.push(v as u8).map_err(|_| ExplorerError::BufferOverflow)?;
                     }
                 }
             }
