@@ -118,7 +118,8 @@ pub fn scan_init_sequence<I2C, L, const INIT_SEQUENCE_LEN: usize>(
     logger: &mut L,
     ctrl_byte: u8,
     init_sequence: &[u8; INIT_SEQUENCE_LEN], // Use INIT_SEQUENCE_LEN
-) -> Result<heapless::Vec<u8, INIT_SEQUENCE_LEN>, crate::error::ErrorKind> // Use INIT_SEQUENCE_LEN
+) -> Result<heapless::Vec<u8, INIT_SEQUENCE_LEN>, crate::error::ErrorKind>
+// Use INIT_SEQUENCE_LEN
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,

@@ -1,14 +1,14 @@
 // runner.rs
 
-use crate::explore::explorer::*;
-use crate::explore::logger::*;
 use crate::compat::err_compat::HalErrorExt;
 use crate::compat::util;
-use crate::error::ExplorerError;
-use core::fmt::Write;
 use crate::compat::util::ERROR_STRING_BUFFER_SIZE;
-use crate::scanner::I2C_MAX_DEVICES;
 use crate::compat::util::calculate_cmd_buffer_size;
+use crate::error::ExplorerError;
+use crate::explore::explorer::*;
+use crate::explore::logger::*;
+use crate::scanner::I2C_MAX_DEVICES;
+use core::fmt::Write;
 
 // Helper for logging info with the [explorer] prefix
 pub fn explorer_log_info<S, F>(logger: &mut SerialLogger<S>, f: F)
@@ -46,7 +46,13 @@ where
     });
 }
 
-pub fn run_explorer<I2C, S, const N: usize, const INIT_SEQUENCE_LEN: usize, const MAX_BYTES_PER_CMD: usize>(
+pub fn run_explorer<
+    I2C,
+    S,
+    const N: usize,
+    const INIT_SEQUENCE_LEN: usize,
+    const CMD_BUFFER_SIZE: usize,
+>(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -77,23 +83,29 @@ where
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
-    let successful_seq =
-        match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(i2c, &mut serial_logger, prefix, init_sequence) { // Use INIT_SEQUENCE_LEN
-            Ok(seq) => seq,
-            Err(e) => {
-                runner_log_error(&mut serial_logger, |buf| {
-                    writeln!(buf, "Failed to scan init sequence: {:?}", e)
-                });
-                return Err(ExplorerError::ExecutionFailed(e));
-            }
-        };
+    let successful_seq = match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(
+        i2c,
+        &mut serial_logger,
+        prefix,
+        init_sequence,
+    ) {
+        // Use INIT_SEQUENCE_LEN
+        Ok(seq) => seq,
+        Err(e) => {
+            runner_log_error(&mut serial_logger, |buf| {
+                writeln!(buf, "Failed to scan init sequence: {:?}", e)
+            });
+            return Err(ExplorerError::ExecutionFailed(e));
+        }
+    };
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[log] Start driver safe init"));
 
-    let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, { calculate_cmd_buffer_size(1, MAX_BYTES_PER_CMD) }>::new(prefix, successful_seq); // Use calculated size
+    let mut executor =
+        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, successful_seq); // Use calculated size
 
     let exploration_result =
-        explorer.explore::<_, _, _, MAX_CMD_LEN>(i2c, &mut executor, &mut serial_logger)?;
+        explorer.explore::<_, _, _, CMD_BUFFER_SIZE>(i2c, &mut executor, &mut serial_logger)?;
 
     for addr in exploration_result.found_addrs.iter() {
         serial_logger.log_info_fmt(|buf| {
@@ -115,7 +127,13 @@ where
     Ok(())
 }
 
-pub fn run_pruned_explorer<I2C, S, const N: usize, const INIT_SEQUENCE_LEN: usize, const MAX_BYTES_PER_CMD: usize>(
+pub fn run_pruned_explorer<
+    I2C,
+    S,
+    const N: usize,
+    const INIT_SEQUENCE_LEN: usize,
+    const CMD_BUFFER_SIZE: usize,
+>(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -157,38 +175,39 @@ where
 
     serial_logger.log_info_fmt(|buf| writeln!(buf, "[scan] initial sequence scan completed"));
 
-    let mut executor = crate::explore::explorer::PrefixExecutor::<INIT_SEQUENCE_LEN, { calculate_cmd_buffer_size(1, MAX_BYTES_PER_CMD) }>::new( // Use calculated size
-        found_addrs[0],
-        successful_seq,
-    );
+    let mut executor =
+        crate::explore::explorer::PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(
+            // Use calculated size
+            found_addrs[0],
+            successful_seq,
+        );
 
     let mut failed_nodes = [false; N];
 
     loop {
-        let (sequence_bytes, _sequence_len) = match explorer
-        .get_one_topological_sort_buf::<MAX_BYTES_PER_CMD>(&mut serial_logger, &failed_nodes) // Use MAX_BYTES_PER_CMD
-    {
-            Ok(seq) => seq,
-            Err(ExplorerError::DependencyCycle) => {
-                serial_logger.log_error_fmt(|buf| {
-                    writeln!(
-                        buf,
-                        "[error] Dependency cycle detected, stopping exploration"
-                    )
-                });
-                break;
-            }
-            Err(e) => {
-                serial_logger.log_error_fmt(|buf| {
-                    writeln!(
-                        buf,
-                        "[error] Failed to generate topological sort: {:?}. Aborting.",
-                        e
-                    )
-                });
-                return Err(e);
-            }
-        };
+        let (sequence_bytes, _sequence_len) =
+            match explorer.get_one_topological_sort_buf(&mut serial_logger, &failed_nodes) {
+                Ok(seq) => seq,
+                Err(ExplorerError::DependencyCycle) => {
+                    serial_logger.log_error_fmt(|buf| {
+                        writeln!(
+                            buf,
+                            "[error] Dependency cycle detected, stopping exploration"
+                        )
+                    });
+                    break;
+                }
+                Err(e) => {
+                    serial_logger.log_error_fmt(|buf| {
+                        writeln!(
+                            buf,
+                            "[error] Failed to generate topological sort: {:?}. Aborting.",
+                            e
+                        )
+                    });
+                    return Err(e);
+                }
+            };
 
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
@@ -242,7 +261,13 @@ where
     Ok(())
 }
 
-pub fn run_single_sequence_explorer<I2C, S, const N: usize, const INIT_SEQUENCE_LEN: usize, const MAX_BYTES_PER_CMD: usize>(
+pub fn run_single_sequence_explorer<
+    I2C,
+    S,
+    const N: usize,
+    const INIT_SEQUENCE_LEN: usize,
+    const CMD_BUFFER_SIZE: usize,
+>(
     explorer: &Explorer<'_, N>,
     i2c: &mut I2C,
     serial: &mut S,
@@ -260,8 +285,7 @@ where
         writeln!(buf, "Attempting to get one topological sort...")
     });
 
-    let single_sequence =
-        explorer.get_one_topological_sort_buf::<MAX_BYTES_PER_CMD>(&mut serial_logger, &[false; N])?; // Use MAX_BYTES_PER_CMD
+    let single_sequence = explorer.get_one_topological_sort_buf(&mut serial_logger, &[false; N])?;
 
     let sequence_len = explorer.sequence.len();
 
@@ -273,7 +297,8 @@ where
         Ok(())
     });
 
-    let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, { calculate_cmd_buffer_size(1, MAX_BYTES_PER_CMD) }>::new(prefix, heapless::Vec::new()); // Use calculated size
+    let mut executor =
+        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, heapless::Vec::new()); // Use calculated size
 
     for i in 0..sequence_len {
         execute_and_log_command(
