@@ -163,7 +163,7 @@ where
             &successful_seq,
         );
 
-    let mut failed_nodes = [false; N];
+    let mut failed_nodes = util::BitFlags::new();
 
     loop {
         let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
@@ -192,7 +192,7 @@ where
                         format_args!("[warn] Command {cmd_idx} failed on {addr:02X}"),
                     );
                     all_ok = false;
-                    failed_nodes[cmd_idx] = true;
+                    failed_nodes.set(cmd_idx).ok();
                     break;
                 }
             }
@@ -211,7 +211,8 @@ where
             target_addrs.swap_remove(idx);
         }
 
-        if target_addrs.is_empty() || failed_nodes.iter().all(|&x| x) {
+        let all_failed = (0..num_nodes).all(|i| failed_nodes.get(i).unwrap_or(false));
+        if target_addrs.is_empty() || all_failed {
             break;
         }
     }

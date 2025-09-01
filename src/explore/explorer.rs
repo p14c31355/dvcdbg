@@ -40,7 +40,7 @@ impl<'a, const N: usize> TopologicalIter<'a, N> {
     // within the impl.
     const _ASSERT_N_LE_128: () = assert!(N <= 128, "TopologicalIter uses a u128 bitmask, so N cannot exceed 128");
 
-    pub fn new(explorer: &'a Explorer<N>, failed_nodes: &[bool; N]) -> Result<Self, ExplorerError> {
+    pub fn new(explorer: &'a Explorer<N>, failed_nodes: &util::BitFlags) -> Result<Self, ExplorerError> {
         let len = explorer.nodes.len();
         if len > N {
             return Err(ExplorerError::TooManyCommands);
@@ -51,9 +51,7 @@ impl<'a, const N: usize> TopologicalIter<'a, N> {
         let mut total_non_failed = 0;
 
         for (i, node) in explorer.nodes.iter().enumerate().take(len) {
-            if failed_nodes[i] {
-                continue;
-            }
+            if failed_nodes.get(i).unwrap_or(false) { continue; }
             total_non_failed += 1;
             in_degree[i] = node.deps.len() as u8;
             for &dep_idx in node.deps.iter() {
@@ -363,7 +361,7 @@ impl<const N: usize> Explorer<N> {
 
     pub fn topological_iter<'a>(
         &'a self,
-        failed_nodes: &[bool; N],
+        failed_nodes: &'a util::BitFlags,
     ) -> Result<TopologicalIter<'a, N>, ExplorerError> {
         TopologicalIter::new(self, failed_nodes)
     }
