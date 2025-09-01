@@ -25,23 +25,24 @@ pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
 
 /// A stateful iterator for generating a single topological sort using Kahn's algorithm.
 /// This avoids allocating the entire sorted sequence in memory at once.
-pub struct TopologicalIter<'a, const N: usize, const MAX_DEPS: usize> {
+pub struct TopologicalIter<'a, const N: usize, const MAX_DEPS_TOTAL: usize> {
     nodes: &'a [CmdNode],
     in_degree: [u8; N],
-    adj_list_rev: [heapless::Vec<u8, MAX_DEPS>; N],
+    adj_list_rev_flat: [u8; MAX_DEPS_TOTAL],
+    adj_list_rev_offsets: [u16; N],
     queue: heapless::Vec<u8, N>,
     visited_count: usize,
     total_non_failed: usize,
 }
 
-impl<'a, const N: usize, const MAX_DEPS: usize> TopologicalIter<'a, N, MAX_DEPS> {
+impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX_DEPS_TOTAL> {
     const _ASSERT_N_LE_256: () = assert!(
         N <= 256,
         "TopologicalIter uses a u8 bitmask, so N cannot exceed 256"
     );
 
     pub fn new(
-        explorer: &'a Explorer<N, MAX_DEPS>,
+        explorer: &'a Explorer<N, MAX_DEPS_TOTAL>,
         failed_nodes: &util::BitFlags,
     ) -> Result<Self, ExplorerError> {
         let len = explorer.nodes.len();
@@ -50,8 +51,9 @@ impl<'a, const N: usize, const MAX_DEPS: usize> TopologicalIter<'a, N, MAX_DEPS>
         }
 
         let mut in_degree: [u8; N] = [0; N];
-        let mut adj_list_rev: [heapless::Vec<u8, MAX_DEPS>; N] =
-            core::array::from_fn(|_| heapless::Vec::new());
+        let mut adj_list_rev_flat: [u8; MAX_DEPS_TOTAL] = [0; MAX_DEPS_TOTAL];
+        let mut adj_list_rev_offsets: [u16; N] = [0; N];
+        let mut flat_idx: usize = 0;
         let mut total_non_failed = 0;
 
         for (i, node) in explorer.nodes.iter().enumerate().take(len) {
@@ -65,9 +67,22 @@ impl<'a, const N: usize, const MAX_DEPS: usize> TopologicalIter<'a, N, MAX_DEPS>
                 if dep_idx_usize >= len {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_list_rev[dep_idx_usize]
-                    .push(i as u8)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
+                if flat_idx >= MAX_DEPS_TOTAL {
+                    return Err(ExplorerError::BufferOverflow);
+                }
+                adj_list_rev_flat[flat_idx] = i as u8;
+                flat_idx += 1;
+            }
+        }
+
+        let mut current_offset = 0;
+        for i in 0..len {
+            adj_list_rev_offsets[i] = current_offset as u16;
+            for &dep_idx in explorer.nodes[i].deps.iter() {
+                let dep_idx_usize = dep_idx as usize;
+                if dep_idx_usize < len {
+                    current_offset += 1;
+                }
             }
         }
 
@@ -83,7 +98,8 @@ impl<'a, const N: usize, const MAX_DEPS: usize> TopologicalIter<'a, N, MAX_DEPS>
         Ok(Self {
             nodes: explorer.nodes,
             in_degree,
-            adj_list_rev,
+            adj_list_rev_flat,
+            adj_list_rev_offsets,
             queue,
             visited_count: 0,
             total_non_failed,
@@ -96,7 +112,9 @@ impl<'a, const N: usize, const MAX_DEPS: usize> TopologicalIter<'a, N, MAX_DEPS>
     }
 }
 
-impl<'a, const N: usize, const MAX_DEPS: usize> Iterator for TopologicalIter<'a, N, MAX_DEPS> {
+impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
+    for TopologicalIter<'a, N, MAX_DEPS_TOTAL>
+{
     type Item = usize; // Return the index of the next node
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -108,8 +126,15 @@ impl<'a, const N: usize, const MAX_DEPS: usize> Iterator for TopologicalIter<'a,
         let u = u_u8 as usize;
         self.visited_count += 1;
 
+        let start_offset = self.adj_list_rev_offsets[u] as usize;
+        let end_offset = if u + 1 < self.adj_list_rev_offsets.len() {
+            self.adj_list_rev_offsets[u + 1] as usize
+        } else {
+            MAX_DEPS_TOTAL
+        };
+
         // Process neighbors of 'u'
-        for &v_u8 in self.adj_list_rev[u].iter() {
+        for &v_u8 in &self.adj_list_rev_flat[start_offset..end_offset] {
             let v = v_u8 as usize;
             self.in_degree[v] = self.in_degree[v].saturating_sub(1);
             if self.in_degree[v] == 0 {
@@ -340,8 +365,17 @@ macro_rules! nodes {
             }
             max_len
         };
+        const MAX_DEPS_TOTAL_INTERNAL: usize = {
+            let mut total_deps = 0;
+            let mut i = 0;
+            while i < NODES.len() {
+                total_deps += NODES[i].deps.len();
+                i += 1;
+            }
+            total_deps
+        };
 
-        static EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}, {MAX_DEPS_PER_NODE_INTERNAL}> =
+        static EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}, {MAX_DEPS_TOTAL_INTERNAL}> =
             $crate::explore::explorer::Explorer::new(NODES);
 
         (
@@ -358,7 +392,7 @@ macro_rules! count_exprs {
     ($x:expr $(, $xs:expr)*) => (1usize + $crate::count_exprs!($($xs),*));
 }
 
-pub struct Explorer<const N: usize, const MAX_DEPS: usize> {
+pub struct Explorer<const N: usize, const MAX_DEPS_TOTAL: usize> {
     pub(crate) nodes: &'static [CmdNode],
 }
 
@@ -368,11 +402,11 @@ pub struct ExploreResult {
     pub permutations_tested: usize,
 }
 
-impl<const N: usize, const MAX_DEPS: usize> Explorer<N, MAX_DEPS> {
+impl<const N: usize, const MAX_DEPS_TOTAL: usize> Explorer<N, MAX_DEPS_TOTAL> {
     pub fn topological_iter<'a>(
         &'a self,
         failed_nodes: &'a util::BitFlags,
-    ) -> Result<TopologicalIter<'a, N, MAX_DEPS>, ExplorerError> {
+    ) -> Result<TopologicalIter<'a, N, MAX_DEPS_TOTAL>, ExplorerError> {
         TopologicalIter::new(self, failed_nodes)
     }
 
