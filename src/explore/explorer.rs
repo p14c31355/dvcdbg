@@ -214,11 +214,9 @@ where
 macro_rules! nodes {
     (
         prefix = $prefix:expr,
-        [
-            $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)?
-        ]
+        [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ]
     ) => {{
-        const NODES: &'static [$crate::explore::explorer::CmdNode] = &[
+        static NODES: &[$crate::explore::explorer::CmdNode] = &[
             $(
                 $crate::explore::explorer::CmdNode {
                     bytes: &[ $( $b ),* ],
@@ -227,7 +225,7 @@ macro_rules! nodes {
             ),*
         ];
 
-        const EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}> =
+        static EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}> =
             $crate::explore::explorer::Explorer::new(NODES);
 
         const CMD_BUFFER_SIZE_INTERNAL: usize = {
@@ -240,7 +238,7 @@ macro_rules! nodes {
                 }
                 i += 1;
             }
-            1 + max_len
+            max_len
         };
 
         (
@@ -249,6 +247,7 @@ macro_rules! nodes {
         )
     }};
 }
+
 
 /// simple macro to count comma-separated expressions at compile time
 #[macro_export]
