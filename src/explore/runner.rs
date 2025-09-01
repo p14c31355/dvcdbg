@@ -7,8 +7,8 @@ use crate::scanner::I2C_MAX_DEVICES;
 
 #[macro_export]
 macro_rules! factorial_sort {
-    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
-        $crate::explore::runner::factorial_explorer::<_, _, $n, $init_len, $cmd_buf>(
+    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $d:expr, $init_len:expr, $cmd_buf:expr) => {
+        $crate::explore::runner::factorial_explorer::<_, _, $n, $d, $init_len, $cmd_buf>(
             $explorer,
             $i2c,
             $serial,
@@ -21,11 +21,13 @@ macro_rules! factorial_sort {
 pub fn factorial_explorer<
     I2C,
     S,
-    const N: usize,
+    const NODE_COUNT: usize,
+    const BYTES_MAX: usize,
+    const DEPS_MAX: usize,
     const INIT_SEQUENCE_LEN: usize,
     const CMD_BUFFER_SIZE: usize,
 >(
-    explorer: &Explorer<N>,
+    explorer: &Explorer<NODE_COUNT, BYTES_MAX, DEPS_MAX>,
     i2c: &mut I2C,
     serial: &mut S,
     prefix: u8,
@@ -96,8 +98,8 @@ where
 
 #[macro_export]
 macro_rules! pruning_sort {
-    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
-        $crate::explore::runner::pruning_explorer::<_, _, $n, $init_len, $cmd_buf>(
+    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $d:expr, $init_len:expr, $cmd_buf:expr) => {
+        $crate::explore::runner::pruning_explorer::<_, _, $n, $d, $init_len, $cmd_buf>(
             $explorer,
             $i2c,
             $serial,
@@ -111,10 +113,11 @@ pub fn pruning_explorer<
     I2C,
     S,
     const N: usize,
+    const D: usize, // Dを追加
     const INIT_SEQUENCE_LEN: usize,
     const CMD_BUFFER_SIZE: usize,
 >(
-    explorer: &Explorer<N>,
+    explorer: &Explorer<N, N, D>, // NODE_COUNTはNと同じ
     i2c: &mut I2C,
     serial: &mut S,
     prefix: u8,
@@ -230,8 +233,8 @@ where
 
 #[macro_export]
 macro_rules! get_one_sort {
-    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
-        $crate::explore::runner::one_topological_explorer::<_, _, $n, $init_len, $cmd_buf>(
+    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $n:expr, $bytes_max:expr, $d:expr, $init_len:expr, $cmd_buf:expr) => {
+        $crate::explore::runner::one_topological_explorer::<_, _, $n, $bytes_max, $d, $init_len, $cmd_buf>(
             $explorer, $i2c, $serial, $prefix,
         )
     };
@@ -240,11 +243,13 @@ macro_rules! get_one_sort {
 pub fn one_topological_explorer<
     I2C,
     S,
-    const N: usize,
+    const NODE_COUNT: usize,
+    const BYTES_MAX: usize,
+    const DEPS_MAX: usize,
     const INIT_SEQUENCE_LEN: usize,
     const CMD_BUFFER_SIZE: usize,
 >(
-    explorer: &Explorer<N>,
+    explorer: &Explorer<NODE_COUNT, BYTES_MAX, DEPS_MAX>,
     i2c: &mut I2C,
     serial: &mut S,
     prefix: u8,
@@ -270,7 +275,7 @@ where
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
-    let single_sequence = explorer.get_one_sort(serial, &[false; N])?;
+    let single_sequence = explorer.get_one_sort(serial, &[false; NODE_COUNT])?;
 
     let sequence_len = explorer.nodes.len();
 

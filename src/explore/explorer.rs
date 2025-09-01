@@ -7,10 +7,11 @@ use crate::error::{ExecutorError, ExplorerError};
 use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 const I2C_ADDRESS_COUNT: usize = 128;
 
-#[derive(Copy, Clone)]
-pub struct CmdNode {
-    pub bytes: &'static [u8],
-    pub deps: &'static [u8],
+pub struct CmdNode<const N: usize, const D: usize> {
+    pub bytes: [u8; N],
+    pub bytes_len: u8,
+    pub deps: [u8; D],
+    pub deps_len: u8,
 }
 
 pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
@@ -214,40 +215,50 @@ where
 macro_rules! nodes {
     (
         prefix = $prefix:expr,
-        [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ]
+        bytes_max = $bytes_max:expr,
+        deps_max = $deps_max:expr,
+        [
+            $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)?
+        ]
     ) => {{
-        static NODES: &[$crate::explore::explorer::CmdNode] = &[
+        const NODE_COUNT: usize = $crate::count_exprs!($( [ $( $b ),* ] ),*);
+        
+        const NODES: [$crate::explore::explorer::CmdNode<$bytes_max, $deps_max>; NODE_COUNT] = [
             $(
                 $crate::explore::explorer::CmdNode {
-                    bytes: &[ $( $b ),* ],
-                    deps: &[ $( $( $d ),* )? ],
+                    bytes: {
+                        let mut arr = [0u8; $bytes_max];
+                        let mut i = 0;
+                        $(
+                            arr[i] = $b;
+                            i += 1;
+                        )*
+                        arr
+                    },
+                    bytes_len: $crate::count_exprs!($($b),*) as u8,
+                    deps: {
+                        let mut arr = [0u8; $deps_max];
+                        let mut i = 0;
+                        $(
+                            $(
+                                arr[i] = $d;
+                                i += 1;
+                            )*
+                        )?
+                        arr
+                    },
+                    deps_len: $crate::count_exprs!($($($d),*)?) as u8,
                 }
             ),*
         ];
 
-        static EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}> =
-            $crate::explore::explorer::Explorer::new(NODES);
-
-        const CMD_BUFFER_SIZE_INTERNAL: usize = {
-            let mut max_len = 0;
-            let mut i = 0;
-            while i < NODES.len() {
-                let len = NODES[i].bytes.len();
-                if len > max_len {
-                    max_len = len;
-                }
-                i += 1;
-            }
-            max_len
+        const EXPLORER: $crate::explore::explorer::Explorer<NODE_COUNT, $bytes_max, $deps_max> = $crate::explore::explorer::Explorer {
+            nodes: &NODES,
         };
 
-        (
-            &EXPLORER,
-            $crate::explore::explorer::PrefixExecutor::<0, CMD_BUFFER_SIZE_INTERNAL>::new($prefix, &[])
-        )
+        EXPLORER
     }};
 }
-
 
 /// simple macro to count comma-separated expressions at compile time
 #[macro_export]
@@ -256,8 +267,8 @@ macro_rules! count_exprs {
     ($x:expr $(, $xs:expr)*) => (1usize + $crate::count_exprs!($($xs),*));
 }
 
-pub struct Explorer<const N: usize> {
-    pub(crate) nodes: &'static [CmdNode],
+pub struct Explorer<'a, const NODE_COUNT: usize, const N: usize, const D: usize> {
+    pub nodes: &'a [CmdNode<N, D>; NODE_COUNT],
 }
 
 pub struct ExploreResult {
@@ -266,7 +277,7 @@ pub struct ExploreResult {
     pub permutations_tested: usize,
 }
 
-impl<const N: usize> Explorer<N> {
+impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Explorer<'a, NODE_COUNT, N, D> {
     // This function calculates the max length of a single command's byte array
     pub const fn max_cmd_len(&self) -> usize {
         let mut max_len = 0;
@@ -281,7 +292,7 @@ impl<const N: usize> Explorer<N> {
         max_len
     }
 
-    pub const fn new(nodes: &'static [CmdNode]) -> Self {
+    pub const fn new(nodes: &'a [CmdNode<N, D>; NODE_COUNT]) -> Self {
         Self { nodes }
     }
 
@@ -368,10 +379,10 @@ impl<const N: usize> Explorer<N> {
     }
 
     pub fn get_one_sort(
-        &self,
+        &'a self,
         _writer: &mut impl core::fmt::Write,
-        failed_nodes: &[bool; N],
-    ) -> Result<(heapless::Vec<&'static [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
+        failed_nodes: &[bool; NODE_COUNT], // This is fine, it's a reference to a fixed-size array
+    ) -> Result<(heapless::Vec<&'a [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
         let len = self.nodes.len();
         let mut in_degree: [u8; N] = [0; N];
         let mut adj_list_rev: [u128; N] = [0; N];
@@ -381,7 +392,7 @@ impl<const N: usize> Explorer<N> {
 
 
         // Ensure N is large enough for the sequence
-        if len > N {
+        if len > NODE_COUNT {
             return Err(ExplorerError::TooManyCommands);
         }
 
@@ -409,7 +420,7 @@ impl<const N: usize> Explorer<N> {
         // Use a fixed-size array as a queue to avoid heap allocation.
         // `q_head` and `q_tail` manage the queue's state.
         let mut q: [u8; N] = [0; N];
-        let mut q_head: usize = 0;
+        let mut q_head: usize = 0; // Changed from `usize` to `u8`
         let mut q_tail: usize = 0;
 
         // Initialize the queue with nodes that have an in-degree of 0.
@@ -430,9 +441,9 @@ impl<const N: usize> Explorer<N> {
             let u = u_u8 as usize;
             visited_count += 1;
 
-            let cmd_bytes = self.nodes[u].bytes;
-            result_len_per_node
-                .push(cmd_bytes.len() as u8)
+            let cmd_bytes = &self.nodes[u].bytes[..self.nodes[u].bytes_len as usize];
+            result_len_per_node // This is fine, it's a copy of the length
+                .push(self.nodes[u].bytes_len)
                 .map_err(|_| ExplorerError::BufferOverflow)?;
             result_sequence
                 .push(cmd_bytes)
@@ -475,8 +486,8 @@ impl<const N: usize> Explorer<N> {
     }
 }
 
-pub struct PermutationIter<'a, const N: usize> {
-    pub explorer: &'a Explorer<N>,
+pub struct PermutationIter<'a, const NODE_COUNT: usize, const N: usize, const D: usize> { // Added NODE_COUNT
+    pub explorer: &'a Explorer<'a, NODE_COUNT, N, D>,
     pub total_nodes: usize,
     pub current_permutation: [&'a [u8]; N],
     pub current_permutation_len: u8,
@@ -488,8 +499,8 @@ pub struct PermutationIter<'a, const N: usize> {
     pub is_done: bool,
 }
 
-impl<'a, const N: usize> PermutationIter<'a, N> {
-    pub fn new(explorer: &'a Explorer<N>) -> Result<Self, ExplorerError> {
+impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> PermutationIter<'a, NODE_COUNT, N, D> {
+    pub fn new(explorer: &'a Explorer<'a, NODE_COUNT, N, D>) -> Result<Self, ExplorerError> {
         const {
             assert!(
                 N <= 128,
@@ -605,7 +616,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 self.used.set(i).unwrap();
                 if self.current_permutation_len < N as u8 {
                     self.current_permutation[self.current_permutation_len as usize] =
-                        self.explorer.nodes[i].bytes;
+                        &self.explorer.nodes[i].bytes[..self.explorer.nodes[i].bytes_len as usize];
                     self.current_permutation_len += 1;
                 } else {
                     self.is_done = true;
@@ -656,7 +667,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
     }
 }
 
-impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
+impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Iterator for PermutationIter<'a, NODE_COUNT, N, D> {
     type Item = [&'a [u8]; N];
 
     fn next(&mut self) -> Option<Self::Item> {
