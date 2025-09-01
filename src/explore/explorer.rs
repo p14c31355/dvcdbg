@@ -376,7 +376,7 @@ impl<const N: usize> Explorer<N> {
         &self,
         _writer: &mut impl core::fmt::Write,
         failed_nodes: &[bool; N],
-    ) -> Result<(heapless::Vec<&'a [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
+    ) -> Result<(heapless::Vec<&'static [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
         let len = self.nodes.len();
         let mut in_degree: [u8; N] = [0; N];
         let mut adj_list_rev: [u128; N] = [0; N];
