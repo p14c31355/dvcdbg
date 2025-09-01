@@ -447,11 +447,24 @@ impl<const N: usize> Explorer<N> {
             }
         }
 
-        if visited_count != len - failed_nodes.iter().filter(|&&f| f).count() {
-            return Err(ExplorerError::DependencyCycle);
+        if visited_count != len {
+            // Cycle detected
+            writeln!(
+                _writer,
+                "[error] Dependency cycle detected. Nodes involved (or reachable from cycle):"
+            )
+            .ok();
+            for i in 0..len {
+                // A node is part of a cycle if its in-degree is still > 0 after the topological sort
+                // and it wasn't already marked as failed.
+                if in_degree[i] > 0 && !failed_nodes[i] {
+                    writeln!(_writer, "  - Node index: {i}").ok();
+                }
+            }
+            Err(ExplorerError::DependencyCycle)
+        } else {
+            Ok((result_sequence, result_len_per_node))
         }
-
-        Ok((result_sequence, result_len_per_node))
     }
 }
 
