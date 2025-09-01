@@ -403,7 +403,7 @@ impl<const N: usize> Explorer<N> {
             }
         }
 
-        let mut result_sequence: heapless::Vec<&'a [u8], N> = heapless::Vec::new();
+        let mut result_sequence: heapless::Vec<&[u8], N> = heapless::Vec::new();
         let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new();
         let mut visited_count = 0;
 
