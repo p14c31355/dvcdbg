@@ -92,7 +92,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
     }
 }
 
-pub fn execute_and_log_command<I2C, E, W, const MAX_BYTES_PER_CMD: usize>(
+pub fn exec_logger<I2C, E, W, const MAX_BYTES_PER_CMD: usize>(
     i2c: &mut I2C,
     executor: &mut E,
     writer: &mut W,
@@ -210,8 +210,59 @@ where
     }
 }
 
-pub struct Explorer<'a, const N: usize> {
-    pub sequence: &'a [CmdNode],
+#[macro_export]
+macro_rules! nodes {
+    ( [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ] ) => {
+        [
+            $(
+                $crate::CmdNode {
+                    bytes: &[ $( $b ),* ],
+                    deps: &[ $( $( $d ),* )? ],
+                }
+            ),*
+        ]
+    };
+}
+
+#[macro_export]
+macro_rules! new_explorer {
+    (
+        prefix = $prefix:expr,
+        nodes = [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ]
+    ) => {{
+        const NODES: [$crate::CmdNode; count_exprs!($( [ $( $b ),* ] ),*)] = [
+            $(
+                $crate::CmdNode {
+                    bytes: &[ $( $b ),* ],
+                    deps: &[ $( $( $d ),* )? ],
+                }
+            ),*
+        ];
+
+        const EXPLORER: $crate::Explorer<{NODES.len()}> = $crate::Explorer::new(&NODES);
+
+        const CMD_BUFFER_SIZE: usize = 1 + {
+            let mut max_len = 0;
+            let mut i = 0;
+            while i < NODES.len() {
+                let len = NODES[i].bytes.len();
+                if len > max_len {
+                    max_len = len;
+                }
+                i += 1;
+            }
+            max_len
+        };
+
+        (
+            &EXPLORER,
+            $crate::PrefixExecutor::<0, CMD_BUFFER_SIZE>::new($prefix, &[])
+        )
+    }};
+}
+
+pub struct Explorer<const N: usize> {
+    pub(crate) nodes: &'static [CmdNode],
 }
 
 pub struct ExploreResult {
@@ -220,19 +271,23 @@ pub struct ExploreResult {
     pub permutations_tested: usize,
 }
 
-impl<'a, const N: usize> Explorer<'a, N> {
+impl<'a, const N: usize> Explorer<N> {
     // This function calculates the max length of a single command's byte array
     pub const fn max_cmd_len(&self) -> usize {
         let mut max_len = 0;
         let mut i = 0;
         while i < N {
-            let len = self.sequence[i].bytes.len();
+            let len = self.nodes[i].bytes.len();
             if len > max_len {
                 max_len = len;
             }
             i += 1;
         }
         max_len
+    }
+
+    pub const fn new(nodes: &'static [CmdNode]) -> Self {
+        Self { nodes }
     }
 
     pub fn explore<I2C, E, W, const CMD_BUFFER_SIZE: usize>(
@@ -248,7 +303,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         E: CmdExecutor<I2C, CMD_BUFFER_SIZE>,
         W: core::fmt::Write,
     {
-        if self.sequence.is_empty() {
+        if self.nodes.is_empty() {
             writeln!(writer, "[explorer] No commands provided.").ok();
             return Err(ExplorerError::NoValidAddressesFound);
         }
@@ -277,8 +332,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
                 let mut all_ok = true;
 
-                for (i, &cmd_bytes) in sequence.iter().enumerate().take(self.sequence.len()) {
-                    if execute_and_log_command(i2c, executor, writer, addr, cmd_bytes, i).is_err() {
+                for (i, &cmd_bytes) in sequence.iter().enumerate().take(self.nodes.len()) {
+                    if exec_logger(i2c, executor, writer, addr, cmd_bytes, i).is_err() {
                         all_ok = false;
                         break;
                     }
@@ -317,12 +372,12 @@ impl<'a, const N: usize> Explorer<'a, N> {
         })
     }
 
-    pub fn get_one_topological_sort_buf(
+    pub fn get_one_sort(
         &self,
         _writer: &mut impl core::fmt::Write,
         failed_nodes: &[bool; N],
     ) -> Result<(heapless::Vec<&'a [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
-        let len = self.sequence.len();
+        let len = self.nodes.len();
         let mut in_degree: [u8; N] = [0; N];
         let mut adj_list_rev: [u128; N] = [0; N];
 
@@ -332,7 +387,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         }
 
         // Build the graph representation using fixed-size arrays
-        for (i, node) in self.sequence.iter().enumerate().take(len) {
+        for (i, node) in self.nodes.iter().enumerate().take(len) {
             if failed_nodes[i] {
                 continue;
             }
@@ -376,7 +431,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
             let u = u_u8 as usize;
             visited_count += 1;
 
-            let cmd_bytes = self.sequence[u].bytes;
+            let cmd_bytes = self.nodes[u].bytes;
             result_len_per_node
                 .push(cmd_bytes.len() as u8)
                 .map_err(|_| ExplorerError::BufferOverflow)?;
@@ -408,7 +463,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
 }
 
 pub struct PermutationIter<'a, const N: usize> {
-    pub explorer: &'a Explorer<'a, N>,
+    pub explorer: &'a Explorer<N>,
     pub total_nodes: usize,
     pub current_permutation: [&'a [u8]; N],
     pub current_permutation_len: u8,
@@ -421,7 +476,7 @@ pub struct PermutationIter<'a, const N: usize> {
 }
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
-    pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
+    pub fn new(explorer: &'a Explorer<N>) -> Result<Self, ExplorerError> {
         const {
             assert!(
                 N <= 128,
@@ -429,7 +484,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             );
         };
 
-        let total_nodes = explorer.sequence.len();
+        let total_nodes = explorer.nodes.len();
         if total_nodes > N {
             return Err(ExplorerError::TooManyCommands);
         }
@@ -437,7 +492,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         let mut in_degree: [u8; N] = [0; N];
         let mut adj_list_rev: [u128; N] = [0; N];
 
-        for (i, node) in explorer.sequence.iter().enumerate() {
+        for (i, node) in explorer.nodes.iter().enumerate() {
             in_degree[i] = node.deps.len() as u8;
             for &dep in node.deps.iter() {
                 if dep as usize >= total_nodes {
@@ -537,7 +592,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 self.used.set(i).unwrap();
                 if self.current_permutation_len < N as u8 {
                     self.current_permutation[self.current_permutation_len as usize] =
-                        self.explorer.sequence[i].bytes;
+                        self.explorer.nodes[i].bytes;
                     self.current_permutation_len += 1;
                 } else {
                     self.is_done = true;
