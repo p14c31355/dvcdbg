@@ -212,23 +212,9 @@ where
 
 #[macro_export]
 macro_rules! nodes {
-    ( [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ] ) => {
-        [
-            $(
-                $crate::CmdNode {
-                    bytes: &[ $( $b ),* ],
-                    deps: &[ $( $( $d ),* )? ],
-                }
-            ),*
-        ]
-    };
-}
-
-#[macro_export]
-macro_rules! new_explorer {
     (
         prefix = $prefix:expr,
-        nodes = [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ]
+        [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ]
     ) => {{
         const NODES: [$crate::CmdNode; count_exprs!($( [ $( $b ),* ] ),*)] = [
             $(
