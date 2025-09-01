@@ -52,12 +52,12 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
         }
 
         let mut in_degree: [u8; N] = [0; N];
-        let mut adj_list_rev_offsets: [u16; N] = [0; N];
         let mut adj_list_rev_flat: [u8; MAX_DEPS_TOTAL] = [0; MAX_DEPS_TOTAL];
+        // Reuse this buffer for both counts and offsets
+        let mut rev_adj_offsets: [u16; N] = [0; N];
         let mut total_non_failed = 0;
 
-        // Pass 1: Calculate in-degrees and build the offsets for the flat array.
-        let mut rev_adj_counts = [0u16; N];
+        // Pass 1: Count dependencies and in-degrees
         for (i, node) in explorer.nodes.iter().enumerate().take(len) {
             if !failed_nodes.get(i).unwrap_or(false) {
                 total_non_failed += 1;
@@ -67,22 +67,25 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
                         return Err(ExplorerError::InvalidDependencyIndex);
                     }
                     in_degree[i] = in_degree[i].saturating_add(1);
-                    rev_adj_counts[dep_idx_usize] = rev_adj_counts[dep_idx_usize].saturating_add(1);
+                    rev_adj_offsets[dep_idx_usize] =
+                        rev_adj_offsets[dep_idx_usize].saturating_add(1);
                 }
             }
         }
 
+        // Pass 2: Convert counts to cumulative offsets and populate the flat array
         let mut current_offset: u16 = 0;
         for i in 0..len {
-            adj_list_rev_offsets[i] = current_offset;
-            current_offset = current_offset.saturating_add(rev_adj_counts[i]);
+            let count = rev_adj_offsets[i];
+            rev_adj_offsets[i] = current_offset;
+            current_offset = current_offset.saturating_add(count);
         }
         if current_offset as usize > MAX_DEPS_TOTAL {
             return Err(ExplorerError::BufferOverflow);
         }
 
-        // Pass 2: Populate the flat array using the pre-calculated offsets.
-        let mut write_pointers = adj_list_rev_offsets.clone();
+        // Re-use `rev_adj_offsets` as write pointers
+        let mut write_pointers = rev_adj_offsets.clone();
         for (i, node) in explorer.nodes.iter().enumerate().take(len) {
             if failed_nodes.get(i).unwrap_or(false) {
                 continue;
@@ -108,7 +111,7 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
             nodes: explorer.nodes,
             in_degree,
             adj_list_rev_flat,
-            adj_list_rev_offsets,
+            adj_list_rev_offsets: rev_adj_offsets, // Use the final offsets
             queue,
             visited_count: 0,
             total_non_failed,
@@ -158,21 +161,21 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
 }
 
 /// A command executor that prepends a prefix to each command.
-pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> {
+pub struct PrefixExecutor<const INIT_SEQUENCE_LENGTH: usize, const CMD_BUFFER_SIZE: usize> {
     buffer: [u8; CMD_BUFFER_SIZE],
     buffer_len: usize,
     initialized_addrs: util::BitFlags,
     prefix: u8,
-    init_sequence: [u8; INIT_SEQUENCE_LEN],
+    init_sequence: [u8; INIT_SEQUENCE_LENGTH],
     init_sequence_len: usize,
 }
 
-impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
-    PrefixExecutor<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>
+impl<const INIT_SEQUENCE_LENGTH: usize, const CMD_BUFFER_SIZE: usize>
+    PrefixExecutor<INIT_SEQUENCE_LENGTH, CMD_BUFFER_SIZE>
 {
     pub fn new(prefix: u8, init_sequence: &[u8]) -> Self {
-        let mut init_seq_arr = [0u8; INIT_SEQUENCE_LEN];
-        let init_seq_len = init_sequence.len().min(INIT_SEQUENCE_LEN);
+        let mut init_seq_arr = [0u8; INIT_SEQUENCE_LENGTH];
+        let init_seq_len = init_sequence.len().min(INIT_SEQUENCE_LENGTH);
         if init_seq_len > 0 {
             init_seq_arr[..init_seq_len].copy_from_slice(&init_sequence[..init_seq_len]);
         }
