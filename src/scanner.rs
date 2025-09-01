@@ -127,8 +127,6 @@ fn log_sequence_summary<W, const N: usize>(
 ) where
     W: core::fmt::Write,
 {
-    let mut missing_cmds = heapless::Vec::<u8, N>::new();
-
     util::prevent_garbled(writer, format_args!("\n--- I2C Sequence Scan Summary ---"));
 
     util::prevent_garbled(writer, format_args!("Commands That Responded:"));
@@ -139,12 +137,6 @@ fn log_sequence_summary<W, const N: usize>(
 
     detected_cmds.sort_unstable();
 
-    for &cmd in expected_sequence.iter() {
-        if detected_cmds.binary_search(&cmd).is_err() {
-            missing_cmds.push(cmd).ok();
-        }
-    }
-
     util::prevent_garbled(writer, format_args!("Expected Commands:"));
     for &cmd in expected_sequence {
         util::prevent_garbled(writer, format_args!(" {:02X}", cmd));
@@ -152,12 +144,16 @@ fn log_sequence_summary<W, const N: usize>(
     util::prevent_garbled(writer, format_args!(""));
 
     util::prevent_garbled(writer, format_args!("Commands Not Found:"));
-    if missing_cmds.is_empty() {
-        util::prevent_garbled(writer, format_args!(" (None)"));
-    } else {
-        for &cmd in missing_cmds.iter() {
+    let mut found_missing = false;
+    for &cmd in expected_sequence.iter() {
+        if detected_cmds.binary_search(&cmd).is_err() {
             util::prevent_garbled(writer, format_args!(" {:02X}", cmd));
+            found_missing = true;
         }
-        util::prevent_garbled(writer, format_args!(""));
     }
+
+    if !found_missing {
+        util::prevent_garbled(writer, format_args!(" (None)"));
+    }
+    util::prevent_garbled(writer, format_args!(""));
 }
