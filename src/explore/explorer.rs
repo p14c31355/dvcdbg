@@ -3,7 +3,6 @@
 use crate::compat::err_compat::HalErrorExt;
 use crate::compat::util;
 use crate::error::{ExecutorError, ExplorerError};
-use heapless::Vec;
 
 const I2C_ADDRESS_COUNT: usize = 128;
 
@@ -67,11 +66,12 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
                         return Err(ExplorerError::InvalidDependencyIndex);
                     }
                     in_degree[i] = in_degree[i].saturating_add(1);
-                    rev_adj_offsets[dep_idx_usize] = rev_adj_offsets[dep_idx_usize].saturating_add(1);
+                    rev_adj_offsets[dep_idx_usize] =
+                        rev_adj_offsets[dep_idx_usize].saturating_add(1);
                 }
             }
         }
-        
+
         // Pass 2: Convert counts to cumulative offsets and populate the flat array
         let mut current_offset: u16 = 0;
         for i in 0..len {
@@ -82,9 +82,9 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
         if current_offset as usize > MAX_DEPS_TOTAL {
             return Err(ExplorerError::BufferOverflow);
         }
-        
+
         // Re-use `rev_adj_offsets` as write pointers
-        let mut write_pointers = rev_adj_offsets.clone();
+        let mut write_pointers = rev_adj_offsets;
         for (i, node) in explorer.nodes.iter().enumerate().take(len) {
             if failed_nodes.get(i).unwrap_or(false) {
                 continue;
@@ -123,7 +123,9 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
     }
 }
 
-impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator for TopologicalIter<'a, N, MAX_DEPS_TOTAL> {
+impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
+    for TopologicalIter<'a, N, MAX_DEPS_TOTAL>
+{
     type Item = usize; // Return the index of the next node
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -141,18 +143,17 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator for TopologicalIt
         } else {
             MAX_DEPS_TOTAL
         };
-        
+
         // Process neighbors of 'u'
         for &v_u8 in &self.adj_list_rev_flat[start_offset..end_offset] {
             let v = v_u8 as usize;
             self.in_degree[v] = self.in_degree[v].saturating_sub(1);
-            if self.in_degree[v] == 0 {
-                if self.queue.push(v_u8).is_err() {
+            if self.in_degree[v] == 0
+                && self.queue.push(v_u8).is_err() {
                     unreachable!("TopologicalIter queue overflowed");
                 }
-            }
         }
-        
+
         Some(u)
     }
 }
@@ -371,7 +372,7 @@ macro_rules! nodes {
             }
             total_deps
         };
-        
+
         static EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}, {MAX_DEPS_TOTAL_INTERNAL}> =
             $crate::explore::explorer::Explorer::new(NODES);
 

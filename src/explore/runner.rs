@@ -41,7 +41,7 @@ where
         Ok(addrs) => addrs,
         Err(e) => {
             util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}"));
-            return Err(ExplorerError::ExecutionFailed(e));
+            return Err(e);
         }
     };
     if target_addrs.is_empty() {
@@ -52,7 +52,6 @@ where
         match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(
             i2c,
             serial,
-            prefix,
             init_sequence,
         ) {
             Ok(seq) => seq,
@@ -182,7 +181,7 @@ where
         Ok(addr) => addr,
         Err(e) => {
             util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}\n"));
-            return Err(ExplorerError::ExecutionFailed(e));
+            return Err(e);
         }
     };
     if target_addr.is_empty() {

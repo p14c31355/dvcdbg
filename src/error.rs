@@ -146,6 +146,12 @@ impl From<ExecutorError> for ExplorerError {
     }
 }
 
+impl From<ErrorKind> for ExplorerError {
+    fn from(error: ErrorKind) -> Self {
+        ExplorerError::DeviceNotFound(error)
+    }
+}
+
 impl fmt::Display for ExecutorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

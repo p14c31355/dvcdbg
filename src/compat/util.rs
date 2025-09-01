@@ -121,10 +121,10 @@ impl BitFlags {
     }
 }
 
-const UART_CHUNK_SIZE: usize = 64;
+const UART_CHUNK_SIZE: usize = 32;
 
 pub fn prevent_garbled<W: core::fmt::Write>(serial: &mut W, args: core::fmt::Arguments) {
-    let mut buffer = heapless::String::<128>::new();
+    let mut buffer = heapless::String::<64>::new();
     core::fmt::Write::write_fmt(&mut buffer, args).ok();
 
     let mut start = 0;
