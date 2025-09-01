@@ -198,12 +198,18 @@ where
                 }
             }
 
+            let is_cycle_detected = if all_ok {
+                sort_iter.is_cycle_detected()
+            } else {
+                false
+            };
+
             // Now that `sort_iter` is out of scope, we can mutably borrow failed_nodes.
             if let Some(cmd_idx) = command_to_fail {
                 failed_nodes.set(cmd_idx).ok();
             }
 
-            if all_ok && sort_iter.is_cycle_detected() {
+            if is_cycle_detected {
                 util::prevent_garbled(
                     serial,
                     format_args!("[error] Dependency cycle detected on {addr:02X}, stopping exploration for this address"),

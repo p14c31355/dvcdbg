@@ -102,12 +102,11 @@ impl<'a, const N: usize> Iterator for TopologicalIter<'a, N> {
         for v in 0..self.nodes.len() {
             if (self.adj_list_rev[u] >> v) & 1 != 0 {
                 self.in_degree[v] = self.in_degree[v].saturating_sub(1);
-                if self.in_degree[v] == 0 {
-                    if self.queue.push(v as u8).is_err() {
+                if self.in_degree[v] == 0
+                    && self.queue.push(v as u8).is_err() {
                         // This case should be handled by capacity checks in `new`.
                         return None;
                     }
-                }
             }
         }
 
