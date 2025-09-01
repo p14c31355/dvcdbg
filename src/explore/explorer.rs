@@ -271,7 +271,7 @@ pub struct ExploreResult {
     pub permutations_tested: usize,
 }
 
-impl<'a, const N: usize> Explorer<N> {
+impl<const N: usize> Explorer<N> {
     // This function calculates the max length of a single command's byte array
     pub const fn max_cmd_len(&self) -> usize {
         let mut max_len = 0;
