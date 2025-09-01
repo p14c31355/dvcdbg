@@ -38,9 +38,15 @@ pub struct TopologicalIter<'a, const N: usize> {
 impl<'a, const N: usize> TopologicalIter<'a, N> {
     // This assert is a non-item in item list, so it's moved to a const block
     // within the impl.
-    const _ASSERT_N_LE_128: () = assert!(N <= 128, "TopologicalIter uses a u128 bitmask, so N cannot exceed 128");
+    const _ASSERT_N_LE_128: () = assert!(
+        N <= 128,
+        "TopologicalIter uses a u128 bitmask, so N cannot exceed 128"
+    );
 
-    pub fn new(explorer: &'a Explorer<N>, failed_nodes: &util::BitFlags) -> Result<Self, ExplorerError> {
+    pub fn new(
+        explorer: &'a Explorer<N>,
+        failed_nodes: &util::BitFlags,
+    ) -> Result<Self, ExplorerError> {
         let len = explorer.nodes.len();
         if len > N {
             return Err(ExplorerError::TooManyCommands);
@@ -51,7 +57,9 @@ impl<'a, const N: usize> TopologicalIter<'a, N> {
         let mut total_non_failed = 0;
 
         for (i, node) in explorer.nodes.iter().enumerate().take(len) {
-            if failed_nodes.get(i).unwrap_or(false) { continue; }
+            if failed_nodes.get(i).unwrap_or(false) {
+                continue;
+            }
             total_non_failed += 1;
             in_degree[i] = node.deps.len() as u8;
             for &dep_idx in node.deps.iter() {
@@ -66,7 +74,9 @@ impl<'a, const N: usize> TopologicalIter<'a, N> {
         let mut queue: heapless::Vec<u8, N> = heapless::Vec::new();
         for i in 0..len {
             if in_degree[i] == 0 && !failed_nodes.get(i).unwrap_or(false) {
-                queue.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
+                queue
+                    .push(i as u8)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
@@ -102,11 +112,12 @@ impl<'a, const N: usize> Iterator for TopologicalIter<'a, N> {
         for v in 0..self.nodes.len() {
             if (self.adj_list_rev[u] >> v) & 1 != 0 {
                 self.in_degree[v] = self.in_degree[v].saturating_sub(1);
-                if self.in_degree[v] == 0
-                    && self.queue.push(v as u8).is_err() {
-                        // This case should be handled by capacity checks in `new`.
-                        return None;
+                if self.in_degree[v] == 0 {
+                    if self.queue.push(v as u8).is_err() {
+                        // This case should be impossible due to capacity checks in `new`.
+                        unreachable!("TopologicalIter queue overflowed");
                     }
+                }
             }
         }
 
@@ -338,7 +349,6 @@ macro_rules! nodes {
     }};
 }
 
-
 /// simple macro to count comma-separated expressions at compile time
 #[macro_export]
 macro_rules! count_exprs {
@@ -357,7 +367,6 @@ pub struct ExploreResult {
 }
 
 impl<const N: usize> Explorer<N> {
-
     pub fn topological_iter<'a>(
         &'a self,
         failed_nodes: &'a util::BitFlags,

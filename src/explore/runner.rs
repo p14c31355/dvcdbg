@@ -212,7 +212,9 @@ where
             if is_cycle_detected {
                 util::prevent_garbled(
                     serial,
-                    format_args!("[error] Dependency cycle detected on {addr:02X}, stopping exploration for this address"),
+                    format_args!(
+                        "[error] Dependency cycle detected on {addr:02X}, stopping exploration for this address"
+                    ),
                 );
             } else if all_ok {
                 addrs_to_remove.push(addr_idx).ok();
@@ -274,7 +276,7 @@ where
     if target_addr.is_empty() {
         return Err(ExplorerError::NoValidAddressesFound);
     }
-    
+
     let failed_nodes = util::BitFlags::new();
     let mut sort_iter = explorer.topological_iter(&failed_nodes)?;
 
@@ -298,6 +300,10 @@ where
             explorer.nodes[cmd_idx].bytes,
             cmd_idx,
         )?;
+    }
+    if sort_iter.is_cycle_detected() {
+        util::prevent_garbled(serial, format_args!("[error] Dependency cycle detected!"));
+        return Err(ExplorerError::DependencyCycle);
     }
 
     util::prevent_garbled(
