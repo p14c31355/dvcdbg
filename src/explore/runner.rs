@@ -98,8 +98,8 @@ where
 
 #[macro_export]
 macro_rules! pruning_sort {
-    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $d:expr, $init_len:expr, $cmd_buf:expr) => {
-        $crate::explore::runner::pruning_explorer::<_, _, $n, $d, $init_len, $cmd_buf>(
+    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $node_count:expr, $bytes_max:expr, $deps_max:expr, $init_len:expr, $cmd_buf:expr) => {
+        $crate::explore::runner::pruning_explorer::<_, _, $node_count, $bytes_max, $deps_max, $init_len, $cmd_buf>(
             $explorer,
             $i2c,
             $serial,
@@ -112,12 +112,13 @@ macro_rules! pruning_sort {
 pub fn pruning_explorer<
     I2C,
     S,
-    const N: usize,
-    const D: usize, // Dを追加
+    const NODE_COUNT: usize,
+    const BYTES_MAX: usize,
+    const DEPS_MAX: usize,
     const INIT_SEQUENCE_LEN: usize,
     const CMD_BUFFER_SIZE: usize,
 >(
-    explorer: &Explorer<N, N, D>, // NODE_COUNTはNと同じ
+    explorer: &Explorer<NODE_COUNT, BYTES_MAX, DEPS_MAX>,
     i2c: &mut I2C,
     serial: &mut S,
     prefix: u8,
@@ -166,7 +167,7 @@ where
             &successful_seq,
         );
 
-    let mut failed_nodes = [false; N];
+    let mut failed_nodes = [false; NODE_COUNT];
 
     loop {
         let (sequence_bytes, _sequence_len) = match explorer.get_one_sort(serial, &failed_nodes) {

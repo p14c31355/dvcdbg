@@ -387,8 +387,11 @@ impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Explorer<'a, N
         let mut in_degree: [u8; N] = [0; N];
         let mut adj_list_rev: [u128; N] = [0; N];
         for (i, node) in self.nodes.iter().enumerate().take(len) {
-    writeln!(_writer, "node {i}: deps={:?}", node.deps).ok();
+    write!(_writer, "node {i}: deps=").ok();
+    util::write_bytes_hex_fmt(_writer, &node.deps[..node.deps_len as usize]).ok();
+    writeln!(_writer).ok();
 }
+
 
 
         // Ensure N is large enough for the sequence
