@@ -25,22 +25,27 @@ where
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-        util::prevent_garbled(
-            writer,
-            format_args!("Scanning {:02X?}...", addr),
-        );
+        write!(writer, "Scanning ").ok();
+        util::write_bytes_hex_fmt(writer, &[addr]).ok();
+        writeln!(writer, "...").ok();
 
         match i2c.write(addr, data) {
             Ok(_) => {
                 found_addrs.push(addr).map_err(|_| {
                     crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
                 })?;
-                util::prevent_garbled(writer, format_args!(" OK."));
+                writeln!(writer, "Found").ok();
             }
             Err(e) => {
                 let error_kind = e.to_compat(Some(addr));
+                if error_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
+                    writeln!(writer, "No response (NACK)").ok();
+                    continue;
+                }
+                write!(writer, "Write failed at ").ok();
+                util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                writeln!(writer, ": {error_kind}").ok();
                 last_error = Some(error_kind);
-                util::prevent_garbled(writer, format_args!(" FAILED: {error_kind:?}"));
             }
         }
     }
@@ -63,21 +68,100 @@ where
 pub fn scan_i2c<I2C, W>(
     i2c: &mut I2C,
     writer: &mut W,
-    prefix: u8,
-) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, crate::error::ExplorerError>
+    ctrl_byte: u8,
+) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     W: core::fmt::Write,
 {
-    let prefix_slice = [prefix];
-    internal_scan(i2c, writer, &prefix_slice).map_err(|e| e.into())
+    writeln!(writer, "Scanning I2C bus with a single control byte...").ok();
+    internal_scan(i2c, writer, &[ctrl_byte])
 }
 
-pub fn scan_init_sequence<I2C, W, const N: usize>(
+/// Scans the I2C bus for devices that respond to a given initialization sequence.
+///
+/// This function first performs an initial scan to find all responding devices,
+/// then iterates through the `init_sequence` to find which commands elicit a response
+/// from those found devices.
+///
+/// # Parameters
+///
+/// - `i2c`: The I2C bus instance.
+/// - `serial`: The serial writer for logging.
+/// - `ctrl_byte`: The control byte to be sent before each command in the sequence.
+/// - `init_sequence`: The sequence of bytes to test.
+/// - `log_level`: The desired logging level.
+///
+/// # Returns
+///
+/// A `heapless::Vec<u8, N>` containing the bytes from `init_sequence` that elicited a response.
+/// Scans the I2C bus for devices that respond to a given initialization sequence.
+///
+/// This function first performs an initial scan to find all responding devices,
+/// then iterates through the `init_sequence` to find which commands elicit a response
+/// from those found devices.
+///
+/// # Parameters
+///
+/// - `i2c`: The I2C bus instance.
+/// - `serial`: The serial writer for logging.
+/// - `ctrl_byte`: The control byte to be sent before each command in the sequence.
+/// - `init_sequence`: The sequence of bytes to test.
+/// - `log_level`: The desired logging level.
+///
+/// # Returns
+///
+/// A `heapless::Vec<u8, N>` containing the bytes from `init_sequence` that elicited a response.
+pub fn scan_init_sequence<I2C, W, const INIT_SEQUENCE_LEN: usize>(
+    // Use INIT_SEQUENCE_LEN
     i2c: &mut I2C,
     writer: &mut W,
+    ctrl_byte: u8,
+    init_sequence: &[u8; INIT_SEQUENCE_LEN], // Use INIT_SEQUENCE_LEN
+) -> Result<heapless::Vec<u8, INIT_SEQUENCE_LEN>, crate::error::ErrorKind>
+// Use INIT_SEQUENCE_LEN
+where
+    I2C: crate::compat::I2cCompat,
+    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
+    W: core::fmt::Write,
+{
+    util::prevent_garbled(
+        writer,
+        format_args!("Starting I2C bus scan with initialization sequence..."),
+    );
+    write!(writer, "Initializing scan with control byte ").ok();
+    util::write_bytes_hex_fmt(writer, &[ctrl_byte]).ok();
+    writeln!(writer).ok();
+
+    let found_addrs = match crate::scanner::scan_i2c(i2c, writer, ctrl_byte) {
+        Ok(addrs) => addrs,
+        Err(e) => {
+            writeln!(writer, "Failed to scan I2C: {e:?}\r\n").ok();
+            return Err(e);
+        }
+    };
+
+    if found_addrs.is_empty() {
+        writeln!(writer, "No I2C devices found.\r\n").ok();
+        return Err(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack));
+    }
+
+    let mut detected_cmds =
+        check_init_sequence(i2c, writer, ctrl_byte, init_sequence, &found_addrs)?;
+
+    writeln!(writer, "I2C scan with init sequence complete.").ok();
+    log_sequence_summary(writer, init_sequence, &mut detected_cmds);
+
+    Ok(detected_cmds)
+}
+
+fn check_init_sequence<I2C, W, const N: usize>(
+    i2c: &mut I2C,
+    writer: &mut W,
+    ctrl_byte: u8,
     init_sequence: &[u8; N],
+    found_addrs: &heapless::Vec<u8, I2C_MAX_DEVICES>,
 ) -> Result<heapless::Vec<u8, N>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
@@ -87,31 +171,55 @@ where
     let mut detected_cmds = heapless::Vec::<u8, N>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
-    for (i, &cmd) in init_sequence.iter().enumerate() {
-        util::prevent_garbled(
-            writer,
-            format_args!("Scanning for init command {i}: {cmd:02X?}"),
-        );
-        let cmd_slice = [cmd];
-        match internal_scan(i2c, writer, &cmd_slice) {
-            Ok(found_addrs) => {
-                util::prevent_garbled(
-                    writer,
-                    format_args!(" -> Found on addresses: {found_addrs:02X?}"),
-                );
-                detected_cmds.push(cmd).ok();
-            }
-            Err(error_kind) => {
-                util::prevent_garbled(
-                    writer,
-                    format_args!(" -> Not found. Error: {error_kind:?}"),
-                );
-                last_error = Some(error_kind);
+    for &addr in found_addrs.iter() {
+        write!(writer, "Testing init sequence on ").ok();
+        util::write_bytes_hex_fmt(writer, &[addr]).ok();
+        writeln!(writer, "...").ok();
+
+        for &cmd in init_sequence.iter() {
+            let mut command_data = heapless::Vec::<u8, 2>::new(); // ctrl_byte + cmd
+            command_data.push(ctrl_byte).map_err(|_| {
+                crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+            })?;
+            command_data.push(cmd).map_err(|_| {
+                crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+            })?;
+
+            write!(writer, "  Sending command ").ok();
+            util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+            write!(writer, " to ").ok();
+            util::write_bytes_hex_fmt(writer, &[addr]).ok();
+            writeln!(writer, "...").ok();
+
+            match i2c.write(addr, &command_data) {
+                Ok(_) => {
+                    if !detected_cmds.contains(&cmd) {
+                        detected_cmds.push(cmd).map_err(|_| {
+                            crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
+                        })?;
+                    }
+                    write!(writer, "  Command ").ok();
+                    util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+                    writeln!(writer, " responded.").ok();
+                }
+                Err(e) => {
+                    let error_kind = e.to_compat(Some(addr));
+                    if error_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
+                        write!(writer, "  Command ").ok();
+                        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+                        writeln!(writer, " no response (NACK).").ok();
+                        continue;
+                    }
+                    write!(writer, "  Write failed for ").ok();
+                    util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+                    write!(writer, " at ").ok();
+                    util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                    writeln!(writer, ": {error_kind}").ok();
+                    last_error = Some(error_kind);
+                }
             }
         }
     }
-    
-    log_sequence_summary(writer, init_sequence, &mut detected_cmds);
 
     if detected_cmds.is_empty() {
         Err(last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)))
@@ -127,33 +235,37 @@ fn log_sequence_summary<W, const N: usize>(
 ) where
     W: core::fmt::Write,
 {
-    util::prevent_garbled(writer, format_args!("\n--- I2C Sequence Scan Summary ---"));
+    let mut missing_cmds = heapless::Vec::<u8, N>::new();
+    let mut sorted_detected_cmds = detected_cmds.clone();
+    sorted_detected_cmds.sort_unstable();
 
-    util::prevent_garbled(writer, format_args!("Commands That Responded:"));
-    for &cmd in detected_cmds.iter() {
-        util::prevent_garbled(writer, format_args!(" {:02X}", cmd));
-    }
-    util::prevent_garbled(writer, format_args!(""));
-
-    detected_cmds.sort_unstable();
-
-    util::prevent_garbled(writer, format_args!("Expected Commands:"));
-    for &cmd in expected_sequence {
-        util::prevent_garbled(writer, format_args!(" {:02X}", cmd));
-    }
-    util::prevent_garbled(writer, format_args!(""));
-
-    util::prevent_garbled(writer, format_args!("Commands Not Found:"));
-    let mut found_missing = false;
     for &cmd in expected_sequence.iter() {
-        if detected_cmds.binary_search(&cmd).is_err() {
-            util::prevent_garbled(writer, format_args!(" {:02X}", cmd));
-            found_missing = true;
+        if sorted_detected_cmds.binary_search(&cmd).is_err() {
+            missing_cmds.push(cmd).ok();
         }
     }
 
-    if !found_missing {
-        util::prevent_garbled(writer, format_args!(" (None)"));
+    writeln!(writer, "\n--- I2C Sequence Scan Summary ---").ok();
+    write!(writer, "Expected Commands:").ok();
+    for &cmd in expected_sequence {
+        write!(writer, " ").ok();
+        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
     }
-    util::prevent_garbled(writer, format_args!(""));
+    writeln!(writer).ok();
+
+    write!(writer, "Commands That Responded:").ok();
+    for &cmd in detected_cmds.iter() {
+        write!(writer, " ").ok();
+        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+    }
+    writeln!(writer).ok();
+
+    write!(writer, "Commands With No Response:").ok();
+    for &cmd in missing_cmds.iter() {
+        write!(writer, " ").ok();
+        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+    }
+    writeln!(writer).ok();
+
+    writeln!(writer, "--- End Summary ---\n").ok();
 }
