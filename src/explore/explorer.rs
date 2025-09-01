@@ -67,12 +67,11 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
                         return Err(ExplorerError::InvalidDependencyIndex);
                     }
                     in_degree[i] = in_degree[i].saturating_add(1);
-                    rev_adj_offsets[dep_idx_usize] =
-                        rev_adj_offsets[dep_idx_usize].saturating_add(1);
+                    rev_adj_offsets[dep_idx_usize] = rev_adj_offsets[dep_idx_usize].saturating_add(1);
                 }
             }
         }
-
+        
         // Pass 2: Convert counts to cumulative offsets and populate the flat array
         let mut current_offset: u16 = 0;
         for i in 0..len {
@@ -83,7 +82,7 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
         if current_offset as usize > MAX_DEPS_TOTAL {
             return Err(ExplorerError::BufferOverflow);
         }
-
+        
         // Re-use `rev_adj_offsets` as write pointers
         let mut write_pointers = rev_adj_offsets.clone();
         for (i, node) in explorer.nodes.iter().enumerate().take(len) {
@@ -124,9 +123,7 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
     }
 }
 
-impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
-    for TopologicalIter<'a, N, MAX_DEPS_TOTAL>
-{
+impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator for TopologicalIter<'a, N, MAX_DEPS_TOTAL> {
     type Item = usize; // Return the index of the next node
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -144,7 +141,7 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
         } else {
             MAX_DEPS_TOTAL
         };
-
+        
         // Process neighbors of 'u'
         for &v_u8 in &self.adj_list_rev_flat[start_offset..end_offset] {
             let v = v_u8 as usize;
@@ -155,27 +152,27 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
                 }
             }
         }
-
+        
         Some(u)
     }
 }
 
 /// A command executor that prepends a prefix to each command.
-pub struct PrefixExecutor<const INIT_SEQUENCE_LENGTH: usize, const CMD_BUFFER_SIZE: usize> {
+pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> {
     buffer: [u8; CMD_BUFFER_SIZE],
     buffer_len: usize,
     initialized_addrs: util::BitFlags,
     prefix: u8,
-    init_sequence: [u8; INIT_SEQUENCE_LENGTH],
+    init_sequence: [u8; INIT_SEQUENCE_LEN],
     init_sequence_len: usize,
 }
 
-impl<const INIT_SEQUENCE_LENGTH: usize, const CMD_BUFFER_SIZE: usize>
-    PrefixExecutor<INIT_SEQUENCE_LENGTH, CMD_BUFFER_SIZE>
+impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
+    PrefixExecutor<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>
 {
     pub fn new(prefix: u8, init_sequence: &[u8]) -> Self {
-        let mut init_seq_arr = [0u8; INIT_SEQUENCE_LENGTH];
-        let init_seq_len = init_sequence.len().min(INIT_SEQUENCE_LENGTH);
+        let mut init_seq_arr = [0u8; INIT_SEQUENCE_LEN];
+        let init_seq_len = init_sequence.len().min(INIT_SEQUENCE_LEN);
         if init_seq_len > 0 {
             init_seq_arr[..init_seq_len].copy_from_slice(&init_sequence[..init_seq_len]);
         }
@@ -191,7 +188,7 @@ impl<const INIT_SEQUENCE_LENGTH: usize, const CMD_BUFFER_SIZE: usize>
     }
 
     fn short_delay() {
-        for _ in 0..1_000 {
+        for _in in 0..1_000 {
             core::hint::spin_loop();
         }
     }
@@ -374,7 +371,7 @@ macro_rules! nodes {
             }
             total_deps
         };
-
+        
         static EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}, {MAX_DEPS_TOTAL_INTERNAL}> =
             $crate::explore::explorer::Explorer::new(NODES);
 
