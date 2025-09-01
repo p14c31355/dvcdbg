@@ -382,7 +382,7 @@ impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Explorer<'a, N
         &'a self,
         _writer: &mut impl core::fmt::Write,
         failed_nodes: &[bool; NODE_COUNT], // This is fine, it's a reference to a fixed-size array
-    ) -> Result<(heapless::Vec<&'a [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
+    ) -> Result<(heapless::Vec<&'a [u8], NODE_COUNT>, heapless::Vec<u8, NODE_COUNT>), ExplorerError> {
         let len = self.nodes.len();
         let mut in_degree: [u8; N] = [0; N];
         let mut adj_list_rev: [u128; N] = [0; N];
