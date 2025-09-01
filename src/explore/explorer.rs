@@ -214,32 +214,25 @@ where
 macro_rules! nodes {
     (
         prefix = $prefix:expr,
-        [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ]
+        [
+            $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)?
+        ]
     ) => {{
-        const COUNT: usize = $crate::count_exprs!($( [ $( $b ),* ] ),*);
-
-        const NODES: [$crate::explore::explorer::CmdNode; COUNT] = [
+        const NODES: &'static [$crate::explore::explorer::CmdNode] = &[
             $(
                 $crate::explore::explorer::CmdNode {
-    bytes: {
-        const BYTES: [u8; $crate::count_exprs!($( $b ),*)] = [ $( $b ),* ];
-        &BYTES
-    },
-    deps: {
-        const DEPS: [u8; $crate::count_exprs!($( $( $d ),* )? )] = [ $( $( $d ),* )? ];
-        &DEPS
-    },
-}
-
+                    bytes: &[ $( $b ),* ],
+                    deps: &[ $( $( $d ),* )? ],
+                }
             ),*
         ];
 
-        const EXPLORER: $crate::explore::explorer::Explorer<{ NODES.len() }> =
-            $crate::explore::explorer::Explorer::new(&NODES);
+        const EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}> =
+            $crate::explore::explorer::Explorer::new(NODES);
 
-        const CMD_BUFFER_SIZE_INTERNAL: usize = 1 + {
-            let mut max_len = 0usize;
-            let mut i = 0usize;
+        const CMD_BUFFER_SIZE_INTERNAL: usize = {
+            let mut max_len = 0;
+            let mut i = 0;
             while i < NODES.len() {
                 let len = NODES[i].bytes.len();
                 if len > max_len {
@@ -247,7 +240,7 @@ macro_rules! nodes {
                 }
                 i += 1;
             }
-            max_len
+            1 + max_len
         };
 
         (
