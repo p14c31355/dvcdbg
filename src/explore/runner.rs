@@ -173,6 +173,7 @@ where
             util::prevent_garbled(serial, format_args!("Sending commands to {addr:02X}"));
 
             let mut all_ok = true;
+            let mut command_to_fail: Option<usize> = None;
 
             let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
                 Ok(iter) => iter,
@@ -192,9 +193,14 @@ where
                         format_args!("[warn] Command {cmd_idx} failed on {addr:02X}"),
                     );
                     all_ok = false;
-                    failed_nodes.set(cmd_idx).ok();
+                    command_to_fail = Some(cmd_idx);
                     break;
                 }
+            }
+
+            // Now that `sort_iter` is out of scope, we can mutably borrow failed_nodes.
+            if let Some(cmd_idx) = command_to_fail {
+                failed_nodes.set(cmd_idx).ok();
             }
 
             if all_ok && sort_iter.is_cycle_detected() {
