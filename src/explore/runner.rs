@@ -117,14 +117,14 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut target_addr = match crate::scanner::scan_i2c(i2c, serial, prefix) {
-        Ok(addr) => addr,
+    let mut target_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
+        Ok(addrs) => addrs,
         Err(e) => {
             util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}"));
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
-    if target_addr.is_empty() {
+    if target_addrs.is_empty() {
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
@@ -151,7 +151,7 @@ where
 
     let mut executor =
         crate::explore::explorer::PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(
-            target_addr[0],
+            target_addrs[0],
             &successful_seq,
         );
 
@@ -179,7 +179,7 @@ where
 
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
-        for (addr_idx, &addr) in target_addr.iter().enumerate() {
+        for (addr_idx, &addr) in target_addrs.iter().enumerate() {
             util::prevent_garbled(serial, format_args!("Sending commands to {addr:02X}"));
 
             let mut all_ok = true;
@@ -210,10 +210,10 @@ where
         }
 
         for &idx in addrs_to_remove.iter().rev() {
-            target_addr.swap_remove(idx);
+            target_addrs.swap_remove(idx);
         }
 
-        if target_addr.is_empty() || failed_nodes.iter().all(|&x| x) {
+        if target_addrs.is_empty() || failed_nodes.iter().all(|&x| x) {
             break;
         }
     }
