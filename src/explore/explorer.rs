@@ -54,38 +54,44 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
         let mut in_degree: [u8; N] = [0; N];
         let mut adj_list_rev_offsets: [u16; N] = [0; N];
         let mut adj_list_rev_flat: [u8; MAX_DEPS_TOTAL] = [0; MAX_DEPS_TOTAL];
-        let mut adj_temp_storage: [Vec<u8, 16>; N] = core::array::from_fn(|_| Vec::new());
         let mut total_non_failed = 0;
 
-        // Pass 1: Build in-degree counts and temporary reverse adjacency lists
+        // Pass 1: Calculate in-degrees and build the offsets for the flat array.
+        let mut rev_adj_counts = [0u16; N];
+        for (i, node) in explorer.nodes.iter().enumerate().take(len) {
+            if !failed_nodes.get(i).unwrap_or(false) {
+                total_non_failed += 1;
+                for &dep_idx in node.deps.iter() {
+                    let dep_idx_usize = dep_idx as usize;
+                    if dep_idx_usize >= N {
+                        return Err(ExplorerError::InvalidDependencyIndex);
+                    }
+                    in_degree[i] = in_degree[i].saturating_add(1);
+                    rev_adj_counts[dep_idx_usize] = rev_adj_counts[dep_idx_usize].saturating_add(1);
+                }
+            }
+        }
+
+        let mut current_offset: u16 = 0;
+        for i in 0..len {
+            adj_list_rev_offsets[i] = current_offset;
+            current_offset = current_offset.saturating_add(rev_adj_counts[i]);
+        }
+        if current_offset as usize > MAX_DEPS_TOTAL {
+            return Err(ExplorerError::BufferOverflow);
+        }
+
+        // Pass 2: Populate the flat array using the pre-calculated offsets.
+        let mut write_pointers = adj_list_rev_offsets.clone();
         for (i, node) in explorer.nodes.iter().enumerate().take(len) {
             if failed_nodes.get(i).unwrap_or(false) {
                 continue;
             }
-            total_non_failed += 1;
-
             for &dep_idx in node.deps.iter() {
                 let dep_idx_usize = dep_idx as usize;
-                if dep_idx_usize >= len {
-                    return Err(ExplorerError::InvalidDependencyIndex);
-                }
-                in_degree[i] = in_degree[i].saturating_add(1);
-                adj_temp_storage[dep_idx_usize]
-                    .push(i as u8)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-        }
-
-        // Pass 2: Calculate cumulative offsets and flatten the temporary storage
-        let mut current_offset = 0;
-        for i in 0..len {
-            adj_list_rev_offsets[i] = current_offset as u16;
-            for &node_idx in adj_temp_storage[i].iter() {
-                if current_offset >= MAX_DEPS_TOTAL {
-                    return Err(ExplorerError::BufferOverflow);
-                }
-                adj_list_rev_flat[current_offset] = node_idx;
-                current_offset += 1;
+                let write_pos = write_pointers[dep_idx_usize] as usize;
+                adj_list_rev_flat[write_pos] = i as u8;
+                write_pointers[dep_idx_usize] = write_pointers[dep_idx_usize].saturating_add(1);
             }
         }
 
@@ -349,18 +355,6 @@ macro_rules! nodes {
             let mut i = 0;
             while i < NODES.len() {
                 let len = NODES[i].bytes.len();
-                if len > max_len {
-                    max_len = len;
-                }
-                i += 1;
-            }
-            max_len
-        };
-        const MAX_DEPS_PER_NODE_INTERNAL: usize = {
-            let mut max_len = 0;
-            let mut i = 0;
-            while i < NODES.len() {
-                let len = NODES[i].deps.len();
                 if len > max_len {
                     max_len = len;
                 }
