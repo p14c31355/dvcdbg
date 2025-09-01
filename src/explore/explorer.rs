@@ -92,7 +92,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
     }
 }
 
-pub fn execute_and_log_command<I2C, E, W, const MAX_BYTES_PER_CMD: usize>(
+pub fn exec_log_cmd<I2C, E, W, const MAX_BYTES_PER_CMD: usize>(
     i2c: &mut I2C,
     executor: &mut E,
     writer: &mut W,
@@ -210,8 +210,52 @@ where
     }
 }
 
-pub struct Explorer<'a, const N: usize> {
-    pub sequence: &'a [CmdNode],
+#[macro_export]
+macro_rules! nodes {
+    (
+        prefix = $prefix:expr,
+        [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ]
+    ) => {{
+        const NODES: [$crate::CmdNode; count_exprs!($( [ $( $b ),* ] ),*)] = [
+            $(
+                $crate::CmdNode {
+                    bytes: &[ $( $b ),* ],
+                    deps: &[ $( $( $d ),* )? ],
+                }
+            ),*
+        ];
+
+        const EXPLORER: $crate::Explorer<{NODES.len()}> = $crate::Explorer::new(&NODES);
+
+        const CMD_BUFFER_SIZE: usize = 1 + {
+            let mut max_len = 0;
+            let mut i = 0;
+            while i < NODES.len() {
+                let len = NODES[i].bytes.len();
+                if len > max_len {
+                    max_len = len;
+                }
+                i += 1;
+            }
+            max_len
+        };
+
+        (
+            &EXPLORER,
+            $crate::PrefixExecutor::<0, CMD_BUFFER_SIZE>::new($prefix, &[])
+        )
+    }};
+}
+
+/// simple macro to count comma-separated expressions at compile time
+#[macro_export]
+macro_rules! count_exprs {
+    () => (0usize);
+    ($x:expr $(, $xs:expr)*) => (1usize + $crate::count_exprs!($($xs),*));
+}
+
+pub struct Explorer<const N: usize> {
+    pub(crate) nodes: &'static [CmdNode],
 }
 
 pub struct ExploreResult {
@@ -220,19 +264,23 @@ pub struct ExploreResult {
     pub permutations_tested: usize,
 }
 
-impl<'a, const N: usize> Explorer<'a, N> {
+impl<const N: usize> Explorer<N> {
     // This function calculates the max length of a single command's byte array
     pub const fn max_cmd_len(&self) -> usize {
         let mut max_len = 0;
         let mut i = 0;
         while i < N {
-            let len = self.sequence[i].bytes.len();
+            let len = self.nodes[i].bytes.len();
             if len > max_len {
                 max_len = len;
             }
             i += 1;
         }
         max_len
+    }
+
+    pub const fn new(nodes: &'static [CmdNode]) -> Self {
+        Self { nodes }
     }
 
     pub fn explore<I2C, E, W, const CMD_BUFFER_SIZE: usize>(
@@ -248,7 +296,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
         E: CmdExecutor<I2C, CMD_BUFFER_SIZE>,
         W: core::fmt::Write,
     {
-        if self.sequence.is_empty() {
+        if self.nodes.is_empty() {
             writeln!(writer, "[explorer] No commands provided.").ok();
             return Err(ExplorerError::NoValidAddressesFound);
         }
@@ -277,8 +325,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
 
                 let mut all_ok = true;
 
-                for (i, &cmd_bytes) in sequence.iter().enumerate().take(self.sequence.len()) {
-                    if execute_and_log_command(i2c, executor, writer, addr, cmd_bytes, i).is_err() {
+                for (i, &cmd_bytes) in sequence.iter().enumerate().take(self.nodes.len()) {
+                    if exec_log_cmd(i2c, executor, writer, addr, cmd_bytes, i).is_err() {
                         all_ok = false;
                         break;
                     }
@@ -317,84 +365,112 @@ impl<'a, const N: usize> Explorer<'a, N> {
         })
     }
 
-    pub fn get_one_topological_sort_buf(
+    pub fn get_one_sort(
         &self,
         _writer: &mut impl core::fmt::Write,
         failed_nodes: &[bool; N],
-    ) -> Result<(heapless::Vec<&'a [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
-        let len = self.sequence.len();
-        let mut in_degree: heapless::Vec<u8, N> = heapless::Vec::new();
-        in_degree
-            .resize(len, 0)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-        let mut adj_list_rev: heapless::Vec<heapless::Vec<u8, N>, N> = heapless::Vec::new();
-        adj_list_rev
-            .resize(len, heapless::Vec::new())
-            .map_err(|_| ExplorerError::BufferOverflow)?;
+    ) -> Result<(heapless::Vec<&'static [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
+        let len = self.nodes.len();
+        let mut in_degree: [u8; N] = [0; N];
+        let mut adj_list_rev: [u128; N] = [0; N];
 
-        for (i, node) in self.sequence.iter().enumerate() {
+        // Ensure N is large enough for the sequence
+        if len > N {
+            return Err(ExplorerError::TooManyCommands);
+        }
+
+        // Build the graph representation using fixed-size arrays
+        for (i, node) in self.nodes.iter().enumerate().take(len) {
             if failed_nodes[i] {
                 continue;
             }
-            in_degree[i] = node.deps.len() as u8; // node.deps.len() is usize, cast to u8
+            in_degree[i] = node.deps.len() as u8;
             for &dep_idx in node.deps.iter() {
                 let dep_idx_usize = dep_idx as usize;
                 if dep_idx_usize >= len {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                // dep_idx is u8, i is usize. adj_list_rev expects u8 for its inner Vec.
-                adj_list_rev[dep_idx_usize]
-                    .push(i as u8)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
+                // Use a bitmask (u128) to represent the adjacency list.
+                // This replaces the heapless::Vec<heapless::Vec<u8, N>, N> from the original.
+                adj_list_rev[dep_idx_usize] |= 1 << i;
             }
         }
 
-        let mut result_sequence: heapless::Vec<&'a [u8], N> = heapless::Vec::new(); // Changed type
-        let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new(); // Changed type to u8
+        let mut result_sequence: heapless::Vec<&[u8], N> = heapless::Vec::new();
+        let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new();
         let mut visited_count = 0;
 
-        let mut q = heapless::Vec::<u8, N>::new(); // Initialize the queue 'q'
+        // Use a fixed-size array as a queue to avoid heap allocation.
+        // `q_head` and `q_tail` manage the queue's state.
+        let mut q: [u8; N] = [0; N];
+        let mut q_head: usize = 0;
+        let mut q_tail: usize = 0;
+
+        // Initialize the queue with nodes that have an in-degree of 0.
         for i in 0..len {
             if in_degree[i] == 0 && !failed_nodes[i] {
-                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
+                if q_tail >= N {
+                    return Err(ExplorerError::BufferOverflow);
+                }
+                q[q_tail] = i as u8;
+                q_tail += 1;
             }
         }
 
-        while let Some(u_u8) = q.pop() {
-            // u_u8 is u8
-            let u = u_u8 as usize; // Cast to usize for indexing
+        // Main topological sort loop
+        while q_head < q_tail {
+            let u_u8 = q[q_head];
+            q_head += 1;
+            let u = u_u8 as usize;
             visited_count += 1;
 
-            let cmd_bytes = self.sequence[u].bytes;
+            let cmd_bytes = self.nodes[u].bytes;
             result_len_per_node
-                .push(cmd_bytes.len() as u8) // Push u8
+                .push(cmd_bytes.len() as u8)
                 .map_err(|_| ExplorerError::BufferOverflow)?;
             result_sequence
                 .push(cmd_bytes)
                 .map_err(|_| ExplorerError::BufferOverflow)?;
 
-            for &v_u8 in adj_list_rev[u].iter() {
-                // v_u8 is u8
-                let v = v_u8 as usize; // Cast to usize for indexing
-                if !failed_nodes[v] {
+            // Iterate through neighbors of 'u' using the bitmask
+            for v in 0..len {
+                if (adj_list_rev[u] >> v) & 1 != 0 && !failed_nodes[v] {
                     in_degree[v] -= 1;
                     if in_degree[v] == 0 {
-                        q.push(v_u8).map_err(|_| ExplorerError::BufferOverflow)?; // Push u8
+                        if q_tail >= N {
+                            return Err(ExplorerError::BufferOverflow);
+                        }
+                        q[q_tail] = v as u8;
+                        q_tail += 1;
                     }
                 }
             }
         }
 
-        if visited_count != len - failed_nodes.iter().filter(|&&f| f).count() {
-            return Err(ExplorerError::DependencyCycle);
+        let non_failed_count = len - failed_nodes.iter().filter(|&&f| f).count();
+        if visited_count != non_failed_count {
+            // Cycle detected
+            writeln!(
+                _writer,
+                "[error] Dependency cycle detected. Nodes involved (or reachable from cycle):"
+            )
+            .ok();
+            for i in 0..len {
+                // A node is part of a cycle if its in-degree is still > 0 after the topological sort
+                // and it wasn't already marked as failed.
+                if in_degree[i] > 0 && !failed_nodes[i] {
+                    writeln!(_writer, "  - Node index: {i}").ok();
+                }
+            }
+            Err(ExplorerError::DependencyCycle)
+        } else {
+            Ok((result_sequence, result_len_per_node))
         }
-
-        Ok((result_sequence, result_len_per_node))
     }
 }
 
 pub struct PermutationIter<'a, const N: usize> {
-    pub explorer: &'a Explorer<'a, N>,
+    pub explorer: &'a Explorer<N>,
     pub total_nodes: usize,
     pub current_permutation: [&'a [u8]; N],
     pub current_permutation_len: u8,
@@ -407,7 +483,7 @@ pub struct PermutationIter<'a, const N: usize> {
 }
 
 impl<'a, const N: usize> PermutationIter<'a, N> {
-    pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
+    pub fn new(explorer: &'a Explorer<N>) -> Result<Self, ExplorerError> {
         const {
             assert!(
                 N <= 128,
@@ -415,7 +491,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             );
         };
 
-        let total_nodes = explorer.sequence.len();
+        let total_nodes = explorer.nodes.len();
         if total_nodes > N {
             return Err(ExplorerError::TooManyCommands);
         }
@@ -423,7 +499,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         let mut in_degree: [u8; N] = [0; N];
         let mut adj_list_rev: [u128; N] = [0; N];
 
-        for (i, node) in explorer.sequence.iter().enumerate() {
+        for (i, node) in explorer.nodes.iter().enumerate() {
             in_degree[i] = node.deps.len() as u8;
             for &dep in node.deps.iter() {
                 if dep as usize >= total_nodes {
@@ -523,7 +599,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 self.used.set(i).unwrap();
                 if self.current_permutation_len < N as u8 {
                     self.current_permutation[self.current_permutation_len as usize] =
-                        self.explorer.sequence[i].bytes;
+                        self.explorer.nodes[i].bytes;
                     self.current_permutation_len += 1;
                 } else {
                     self.is_done = true;
