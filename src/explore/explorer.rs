@@ -216,18 +216,18 @@ macro_rules! nodes {
         prefix = $prefix:expr,
         [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ]
     ) => {{
-        const NODES: [$crate::CmdNode; count_exprs!($( [ $( $b ),* ] ),*)] = [
+        const NODES: [$crate::explore::explorer::CmdNode; $crate::count_exprs!($( [ $( $b ),* ] ),*)] = [
             $(
-                $crate::CmdNode {
+                $crate::explore::explorer::CmdNode {
                     bytes: &[ $( $b ),* ],
                     deps: &[ $( $( $d ),* )? ],
                 }
             ),*
         ];
 
-        const EXPLORER: $crate::Explorer<{NODES.len()}> = $crate::Explorer::new(&NODES);
+        const EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}> = $crate::explore::explorer::Explorer::new(&NODES);
 
-        const CMD_BUFFER_SIZE: usize = 1 + {
+        const CMD_BUFFER_SIZE_INTERNAL: usize = 1 + {
             let mut max_len = 0;
             let mut i = 0;
             while i < NODES.len() {
@@ -242,7 +242,7 @@ macro_rules! nodes {
 
         (
             &EXPLORER,
-            $crate::PrefixExecutor::<0, CMD_BUFFER_SIZE>::new($prefix, &[])
+            $crate::explore::explorer::PrefixExecutor::<0, CMD_BUFFER_SIZE_INTERNAL>::new($prefix, &[])
         )
     }};
 }
