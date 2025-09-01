@@ -24,6 +24,95 @@ pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
     ) -> Result<(), ExecutorError>;
 }
 
+/// A stateful iterator for generating a single topological sort using Kahn's algorithm.
+/// This avoids allocating the entire sorted sequence in memory at once.
+pub struct TopologicalIter<'a, const N: usize> {
+    nodes: &'a [CmdNode],
+    in_degree: [u8; N],
+    adj_list_rev: [u128; N],
+    queue: heapless::Vec<u8, N>,
+    visited_count: usize,
+    total_non_failed: usize,
+}
+
+impl<'a, const N: usize> TopologicalIter<'a, N> {
+    pub fn new(explorer: &'a Explorer<N>, failed_nodes: &[bool; N]) -> Result<Self, ExplorerError> {
+        let len = explorer.nodes.len();
+        if len > N {
+            return Err(ExplorerError::TooManyCommands);
+        }
+
+        let mut in_degree: [u8; N] = [0; N];
+        let mut adj_list_rev: [u128; N] = [0; N];
+        let mut total_non_failed = 0;
+
+        for (i, node) in explorer.nodes.iter().enumerate().take(len) {
+            if failed_nodes[i] {
+                continue;
+            }
+            total_non_failed += 1;
+            in_degree[i] = node.deps.len() as u8;
+            for &dep_idx in node.deps.iter() {
+                let dep_idx_usize = dep_idx as usize;
+                if dep_idx_usize >= len {
+                    return Err(ExplorerError::InvalidDependencyIndex);
+                }
+                adj_list_rev[dep_idx_usize] |= 1 << i;
+            }
+        }
+
+        let mut queue: heapless::Vec<u8, N> = heapless::Vec::new();
+        for i in 0..len {
+            if in_degree[i] == 0 && !failed_nodes[i] {
+                queue.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+        }
+
+        Ok(Self {
+            nodes: explorer.nodes,
+            in_degree,
+            adj_list_rev,
+            queue,
+            visited_count: 0,
+            total_non_failed,
+        })
+    }
+
+    /// Checks if a cycle was detected after the iteration is complete.
+    pub fn is_cycle_detected(&self) -> bool {
+        self.visited_count != self.total_non_failed
+    }
+}
+
+impl<'a, const N: usize> Iterator for TopologicalIter<'a, N> {
+    type Item = usize; // Return the index of the next node
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.queue.is_empty() {
+            return None;
+        }
+
+        let u_u8 = self.queue.remove(0);
+        let u = u_u8 as usize;
+        self.visited_count += 1;
+
+        // Process neighbors of 'u'
+        for v in 0..self.nodes.len() {
+            if (self.adj_list_rev[u] >> v) & 1 != 0 {
+                self.in_degree[v] = self.in_degree[v].saturating_sub(1);
+                if self.in_degree[v] == 0 {
+                    if self.queue.push(v as u8).is_err() {
+                        // This case should be handled by capacity checks in `new`.
+                        return None;
+                    }
+                }
+            }
+        }
+
+        Some(u)
+    }
+}
+
 /// A command executor that prepends a prefix to each command.
 pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> {
     buffer: [u8; CMD_BUFFER_SIZE],
@@ -267,6 +356,14 @@ pub struct ExploreResult {
 }
 
 impl<const N: usize> Explorer<N> {
+
+    pub fn topological_iter<'a>(
+        &'a self,
+        failed_nodes: &[bool; N],
+    ) -> Result<TopologicalIter<'a, N>, ExplorerError> {
+        TopologicalIter::new(self, failed_nodes)
+    }
+
     // This function calculates the max length of a single command's byte array
     pub const fn max_cmd_len(&self) -> usize {
         let mut max_len = 0;

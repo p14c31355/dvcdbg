@@ -150,7 +150,7 @@ where
             }
         };
 
-    let successful_seq_len = successful_seq.len();
+    let _successful_seq_len = successful_seq.len();
 
     util::prevent_garbled(
         serial,
@@ -166,15 +166,8 @@ where
     let mut failed_nodes = [false; N];
 
     loop {
-        let (sequence_bytes, _sequence_len) = match explorer.get_one_sort(serial, &failed_nodes) {
-            Ok(seq) => seq,
-            Err(ExplorerError::DependencyCycle) => {
-                util::prevent_garbled(
-                    serial,
-                    format_args!("[error] Dependency cycle detected, stopping exploration"),
-                );
-                break;
-            }
+        let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
+            Ok(iter) => iter,
             Err(e) => {
                 util::prevent_garbled(
                     serial,
@@ -190,27 +183,28 @@ where
             util::prevent_garbled(serial, format_args!("Sending commands to {addr:02X}"));
 
             let mut all_ok = true;
+            let mut completed_node_count = 0;
 
-            for i in 0..explorer.nodes.len() {
-                if failed_nodes[i] {
-                    continue;
-                }
-                let cmd_bytes = &sequence_bytes[i];
-
-                if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, i).is_err() {
+            for cmd_idx in sort_iter.by_ref() {
+                let cmd_bytes = explorer.nodes[cmd_idx].bytes;
+                if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, cmd_idx).is_err() {
                     util::prevent_garbled(
                         serial,
-                        format_args!("[warn] Command {i} failed on {addr:02X}"),
+                        format_args!("[warn] Command {cmd_idx} failed on {addr:02X}"),
                     );
                     all_ok = false;
-                    if i >= successful_seq_len {
-                        failed_nodes[i] = true;
-                    }
+                    failed_nodes[cmd_idx] = true;
                     break;
                 }
+                completed_node_count += 1;
             }
 
-            if all_ok {
+            if all_ok && sort_iter.is_cycle_detected() {
+                util::prevent_garbled(
+                    serial,
+                    format_args!("[error] Dependency cycle detected on {addr:02X}, stopping exploration for this address"),
+                );
+            } else if all_ok {
                 addrs_to_remove.push(addr_idx).ok();
             }
         }
