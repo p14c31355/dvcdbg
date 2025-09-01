@@ -386,11 +386,12 @@ impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Explorer<'a, N
         let len = self.nodes.len();
         let mut in_degree: [u8; NODE_COUNT] = [0; NODE_COUNT];
         let mut adj_list_rev: [u128; NODE_COUNT] = [0; NODE_COUNT];
+
         for (i, node) in self.nodes.iter().enumerate().take(len) {
             util::write_node_deps(_writer, i, &node.deps[..node.deps_len as usize]).ok();
         }
 
-        // Ensure N is large enough for the sequence
+        // Ensure NODE_COUNT is large enough for the sequence
         if len > NODE_COUNT {
             return Err(ExplorerError::TooManyCommands);
         }
@@ -400,12 +401,12 @@ impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Explorer<'a, N
             if failed_nodes[i] {
                 continue;
             }
-            in_degree[i] = node.deps.len() as u8;
-            for &dep_idx in node.deps.iter() {
+            for &dep_idx in node.deps.iter().take(node.deps_len as usize) {
                 let dep_idx_usize = dep_idx as usize;
                 if dep_idx_usize >= len {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
+                in_degree[dep_idx_usize] += 1;
                 // Use a bitmask (u128) to represent the adjacency list.
                 // This replaces the heapless::Vec<heapless::Vec<u8, N>, N> from the original.
                 adj_list_rev[dep_idx_usize] |= 1u128 << (i as u128);
