@@ -216,35 +216,23 @@ macro_rules! nodes {
         prefix = $prefix:expr,
         [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ]
     ) => {{
-        const RAW_NODES: [(&[u8], &[u8]); $crate::count_exprs!($( [ $( $b ),* ] ),*)] = [
+        const COUNT: usize = $crate::count_exprs!($( [ $( $b ),* ] ),*);
+
+        const NODES: [$crate::explore::explorer::CmdNode; COUNT] = [
             $(
-                (
-                    &[ $( $b ),* ],
-                    &[ $( $( $d ),* )? ],
-                )
+                $crate::explore::explorer::CmdNode {
+                    bytes: &[ $( $b ),* ],
+                    deps: &[ $( $( $d ),* )? ],
+                }
             ),*
         ];
 
-        const NODES: [$crate::explore::explorer::CmdNode; RAW_NODES.len()] = {
-            let mut arr: [$crate::explore::explorer::CmdNode; RAW_NODES.len()] =
-                [ $crate::explore::explorer::CmdNode { bytes: &[], deps: &[] }; RAW_NODES.len() ];
-            let mut i = 0;
-            while i < RAW_NODES.len() {
-                arr[i] = $crate::explore::explorer::CmdNode {
-                    bytes: RAW_NODES[i].0,
-                    deps: RAW_NODES[i].1,
-                };
-                i += 1;
-            }
-            arr
-        };
-
-        const EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}> =
+        const EXPLORER: $crate::explore::explorer::Explorer<{ NODES.len() }> =
             $crate::explore::explorer::Explorer::new(&NODES);
 
         const CMD_BUFFER_SIZE_INTERNAL: usize = 1 + {
-            let mut max_len = 0;
-            let mut i = 0;
+            let mut max_len = 0usize;
+            let mut i = 0usize;
             while i < NODES.len() {
                 let len = NODES[i].bytes.len();
                 if len > max_len {
