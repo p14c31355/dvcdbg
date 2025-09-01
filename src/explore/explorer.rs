@@ -221,9 +221,16 @@ macro_rules! nodes {
         const NODES: [$crate::explore::explorer::CmdNode; COUNT] = [
             $(
                 $crate::explore::explorer::CmdNode {
-                    bytes: &[ $( $b ),* ],
-                    deps: &[ $( $( $d ),* )? ],
-                }
+    bytes: {
+        const BYTES: [u8; $crate::count_exprs!($( $b ),*)] = [ $( $b ),* ];
+        &BYTES
+    },
+    deps: {
+        const DEPS: [u8; $crate::count_exprs!($( $( $d ),* )? )] = [ $( $( $d ),* )? ];
+        &DEPS
+    },
+}
+
             ),*
         ];
 
