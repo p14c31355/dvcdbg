@@ -1,6 +1,7 @@
 //! Scanner utilities for I2C bus device discovery and analysis.
 
 use crate::compat::HalErrorExt;
+use crate::compat::SerialCompat;
 use crate::compat::util;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
@@ -19,32 +20,22 @@ fn internal_scan<I2C, W>(
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    W: core::fmt::Write,
 {
     let mut found_addrs = heapless::Vec::<u8, I2C_MAX_DEVICES>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-        write!(writer, "Scanning ").ok();
-        util::write_bytes_hex_fmt(writer, &[addr]).ok();
-        writeln!(writer, "...").ok();
-
         match i2c.write(addr, data) {
             Ok(_) => {
-                found_addrs.push(addr).map_err(|_| {
-                    crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
-                })?;
-                writeln!(writer, "Found").ok();
+                if found_addrs.push(addr).is_err() {
+                    return Err(crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow));
+                }
             }
             Err(e) => {
                 let error_kind = e.to_compat(Some(addr));
                 if error_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
-                    writeln!(writer, "No response (NACK)").ok();
                     continue;
                 }
-                write!(writer, "Write failed at ").ok();
-                util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                writeln!(writer, ": {error_kind}").ok();
                 last_error = Some(error_kind);
             }
         }

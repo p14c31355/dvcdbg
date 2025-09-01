@@ -237,21 +237,16 @@ where
     E: CmdExecutor<I2C, MAX_BYTES_PER_CMD>,
     W: core::fmt::Write,
 {
-    util::prevent_garbled(
-        writer,
-        format_args!("[explorer] Sending node {cmd_idx} bytes: {cmd_bytes:02X?} ..."),
-    );
-
     match executor.exec(i2c, addr, cmd_bytes, writer) {
-        Ok(_) => {
-            util::prevent_garbled(writer, format_args!("[explorer] OK"));
-            Ok(())
-        }
-        Err(e) => {
-            util::prevent_garbled(writer, format_args!("[explorer] FAILED: {e}"));
-            Err(e.into())
-        }
+    Ok(_) => {
+        util::prevent_garbled(writer, format_args!("[E] OK {cmd_idx}"));
+        Ok(())
     }
+    Err(e) => {
+        util::prevent_garbled(writer, format_args!("[E] FAIL {cmd_idx}: {e}"));
+        Err(e.into())
+    }
+}
 }
 
 impl<I2C, const INIT_SEQ_SIZE: usize, const CMD_BUFFER_SIZE: usize>

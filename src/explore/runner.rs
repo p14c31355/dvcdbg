@@ -40,7 +40,7 @@ where
     let mut target_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addrs) => addrs,
         Err(e) => {
-            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}"));
+            util::prevent_garbled(serial, format_args!("[E] SCAN FAIL: {e}"));
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
@@ -57,7 +57,7 @@ where
         ) {
             Ok(seq) => seq,
             Err(e) => {
-                util::prevent_garbled(serial, format_args!("Failed to scan init sequence: {e}"));
+                util::prevent_garbled(serial, format_args!("[E] Failed SCAN INIT: {e}"));
                 return Err(ExplorerError::ExecutionFailed(e));
             }
         };
@@ -66,7 +66,7 @@ where
 
     util::prevent_garbled(
         serial,
-        format_args!("[scan] initial sequence scan completed"),
+        format_args!("[I] Init scan OK"),
     );
 
     let mut executor =
@@ -82,7 +82,7 @@ where
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
         for (addr_idx, &addr) in target_addrs.iter().enumerate() {
-            util::prevent_garbled(serial, format_args!("Sending commands to {addr:02X}"));
+            util::prevent_garbled(serial, format_args!("[I] RUN ON {addr:02X}"));
 
             let mut all_ok = true;
             let mut command_to_fail: Option<usize> = None;
