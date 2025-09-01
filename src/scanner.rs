@@ -114,13 +114,11 @@ where
 ///
 /// A `heapless::Vec<u8, N>` containing the bytes from `init_sequence` that elicited a response.
 pub fn scan_init_sequence<I2C, W, const INIT_SEQUENCE_LEN: usize>(
-    // Use INIT_SEQUENCE_LEN
     i2c: &mut I2C,
     writer: &mut W,
     ctrl_byte: u8,
-    init_sequence: &[u8; INIT_SEQUENCE_LEN], // Use INIT_SEQUENCE_LEN
+    init_sequence: &[u8; INIT_SEQUENCE_LEN],
 ) -> Result<heapless::Vec<u8, INIT_SEQUENCE_LEN>, crate::error::ErrorKind>
-// Use INIT_SEQUENCE_LEN
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
@@ -147,11 +145,30 @@ where
         return Err(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack));
     }
 
-    let mut detected_cmds =
+    let detected_cmds =
         check_init_sequence(i2c, writer, ctrl_byte, init_sequence, &found_addrs)?;
 
-    writeln!(writer, "I2C scan with init sequence complete.").ok();
-    log_sequence_summary(writer, init_sequence, &mut detected_cmds);
+    let mut missing_cmds = heapless::Vec::<u8, INIT_SEQUENCE_LEN>::new();
+    let mut sorted_detected_cmds = detected_cmds.clone();
+    sorted_detected_cmds.sort_unstable();
+
+    for &cmd in init_sequence.iter() {
+        if sorted_detected_cmds.binary_search(&cmd).is_err() {
+            missing_cmds.push(cmd).ok();
+        }
+    }
+
+    write!(writer, "I2C Seq Scan Complete: Detected ").ok();
+    for &cmd in detected_cmds.iter() {
+        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+        write!(writer, " ").ok();
+    }
+    write!(writer, " | Missing ").ok();
+    for &cmd in missing_cmds.iter() {
+        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+        write!(writer, " ").ok();
+    }
+    writeln!(writer, "\r\n").ok();
 
     Ok(detected_cmds)
 }
@@ -226,46 +243,4 @@ where
     } else {
         Ok(detected_cmds)
     }
-}
-
-fn log_sequence_summary<W, const N: usize>(
-    writer: &mut W,
-    expected_sequence: &[u8; N],
-    detected_cmds: &mut heapless::Vec<u8, N>,
-) where
-    W: core::fmt::Write,
-{
-    let mut missing_cmds = heapless::Vec::<u8, N>::new();
-    let mut sorted_detected_cmds = detected_cmds.clone();
-    sorted_detected_cmds.sort_unstable();
-
-    for &cmd in expected_sequence.iter() {
-        if sorted_detected_cmds.binary_search(&cmd).is_err() {
-            missing_cmds.push(cmd).ok();
-        }
-    }
-
-    writeln!(writer, "\n--- I2C Sequence Scan Summary ---").ok();
-    write!(writer, "Expected Commands:").ok();
-    for &cmd in expected_sequence {
-        write!(writer, " ").ok();
-        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
-    }
-    writeln!(writer).ok();
-
-    write!(writer, "Commands That Responded:").ok();
-    for &cmd in detected_cmds.iter() {
-        write!(writer, " ").ok();
-        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
-    }
-    writeln!(writer).ok();
-
-    write!(writer, "Commands With No Response:").ok();
-    for &cmd in missing_cmds.iter() {
-        write!(writer, " ").ok();
-        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
-    }
-    writeln!(writer).ok();
-
-    writeln!(writer, "--- End Summary ---\n").ok();
 }
