@@ -447,7 +447,8 @@ impl<const N: usize> Explorer<N> {
             }
         }
 
-        if visited_count != len {
+        let non_failed_count = len - failed_nodes.iter().filter(|&&f| f).count();
+        if visited_count != non_failed_count {
             // Cycle detected
             writeln!(
                 _writer,
