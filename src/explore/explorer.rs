@@ -384,8 +384,8 @@ impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Explorer<'a, N
         failed_nodes: &[bool; NODE_COUNT], // This is fine, it's a reference to a fixed-size array
     ) -> Result<(heapless::Vec<&'a [u8], NODE_COUNT>, heapless::Vec<u8, NODE_COUNT>), ExplorerError> {
         let len = self.nodes.len();
-        let mut in_degree: [u8; N] = [0; N];
-        let mut adj_list_rev: [u128; N] = [0; N];
+        let mut in_degree: [u8; NODE_COUNT] = [0; NODE_COUNT];
+        let mut adj_list_rev: [u128; NODE_COUNT] = [0; NODE_COUNT];
         for (i, node) in self.nodes.iter().enumerate().take(len) {
             util::write_node_deps(_writer, i, &node.deps[..node.deps_len as usize]).ok();
         }
@@ -412,13 +412,13 @@ impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Explorer<'a, N
             }
         }
 
-        let mut result_sequence: heapless::Vec<&[u8], N> = heapless::Vec::new();
-        let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new();
+        let mut result_sequence: heapless::Vec<&[u8], NODE_COUNT> = heapless::Vec::new();
+        let mut result_len_per_node: heapless::Vec<u8, NODE_COUNT> = heapless::Vec::new();
         let mut visited_count = 0;
 
         // Use a fixed-size array as a queue to avoid heap allocation.
         // `q_head` and `q_tail` manage the queue's state.
-        let mut q: [u8; N] = [0; N];
+        let mut q: [u8; NODE_COUNT] = [0; NODE_COUNT];
         let mut q_head: usize = 0;
         let mut q_tail: usize = 0;
 
