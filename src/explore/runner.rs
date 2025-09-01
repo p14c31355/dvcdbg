@@ -99,13 +99,15 @@ where
 #[macro_export]
 macro_rules! pruning_sort {
     ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $node_count:expr, $bytes_max:expr, $deps_max:expr, $init_len:expr, $cmd_buf:expr) => {
-        $crate::explore::runner::pruning_explorer::<_, _, $node_count, $bytes_max, $deps_max, $init_len, $cmd_buf>(
-            $explorer,
-            $i2c,
-            $serial,
-            $prefix,
-            $init_sequence,
-        )
+        $crate::explore::runner::pruning_explorer::<
+            _,
+            _,
+            $node_count,
+            $bytes_max,
+            $deps_max,
+            $init_len,
+            $cmd_buf,
+        >($explorer, $i2c, $serial, $prefix, $init_sequence)
     };
 }
 
@@ -235,9 +237,15 @@ where
 #[macro_export]
 macro_rules! get_one_sort {
     ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $n:expr, $bytes_max:expr, $d:expr, $init_len:expr, $cmd_buf:expr) => {
-        $crate::explore::runner::one_topological_explorer::<_, _, $n, $bytes_max, $d, $init_len, $cmd_buf>(
-            $explorer, $i2c, $serial, $prefix,
-        )
+        $crate::explore::runner::one_topological_explorer::<
+            _,
+            _,
+            $n,
+            $bytes_max,
+            $d,
+            $init_len,
+            $cmd_buf,
+        >($explorer, $i2c, $serial, $prefix)
     };
 }
 

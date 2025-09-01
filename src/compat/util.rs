@@ -148,3 +148,23 @@ pub fn prevent_garbled<W: core::fmt::Write>(serial: &mut W, args: core::fmt::Arg
         start = end;
     }
 }
+
+pub fn write_node_deps<W: core::fmt::Write>(
+    w: &mut W,
+    index: usize,
+    deps: &[u8],
+) -> core::fmt::Result
+where
+    W: core::fmt::Write,
+{
+    write!(w, "node ").ok();
+    if index < 256 {
+        write!(w, "{:02X}", index as u8)?;
+    } else {
+        write!(w, "?"); // overflow fallback
+    }
+    write!(w, ": deps=").ok();
+    write_bytes_hex_fmt(w, deps)?;
+    writeln!(w).ok(); // Add a newline since write_bytes_hex_fmt doesn't include one
+    Ok(())
+}

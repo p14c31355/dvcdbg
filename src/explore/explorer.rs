@@ -222,7 +222,7 @@ macro_rules! nodes {
         ]
     ) => {{
         const NODE_COUNT: usize = $crate::count_exprs!($( [ $( $b ),* ] ),*);
-        
+
         const NODES: [$crate::explore::explorer::CmdNode<$bytes_max, $deps_max>; NODE_COUNT] = [
             $(
                 $crate::explore::explorer::CmdNode {
@@ -387,12 +387,8 @@ impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Explorer<'a, N
         let mut in_degree: [u8; N] = [0; N];
         let mut adj_list_rev: [u128; N] = [0; N];
         for (i, node) in self.nodes.iter().enumerate().take(len) {
-    write!(_writer, "node {i}: deps=").ok();
-    util::write_bytes_hex_fmt(_writer, &node.deps[..node.deps_len as usize]).ok();
-    writeln!(_writer).ok();
-}
-
-
+            util::write_node_deps(_writer, i, &node.deps[..node.deps_len as usize]).ok();
+        }
 
         // Ensure N is large enough for the sequence
         if len > NODE_COUNT {
@@ -412,7 +408,7 @@ impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Explorer<'a, N
                 }
                 // Use a bitmask (u128) to represent the adjacency list.
                 // This replaces the heapless::Vec<heapless::Vec<u8, N>, N> from the original.
-                adj_list_rev[dep_idx_usize] |= 1 << i;
+                adj_list_rev[dep_idx_usize] |= 1u128 << (i as u128);
             }
         }
 
@@ -489,7 +485,8 @@ impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Explorer<'a, N
     }
 }
 
-pub struct PermutationIter<'a, const NODE_COUNT: usize, const N: usize, const D: usize> { // Added NODE_COUNT
+pub struct PermutationIter<'a, const NODE_COUNT: usize, const N: usize, const D: usize> {
+    // Added NODE_COUNT
     pub explorer: &'a Explorer<'a, NODE_COUNT, N, D>,
     pub total_nodes: usize,
     pub current_permutation: [&'a [u8]; N],
@@ -502,7 +499,9 @@ pub struct PermutationIter<'a, const NODE_COUNT: usize, const N: usize, const D:
     pub is_done: bool,
 }
 
-impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> PermutationIter<'a, NODE_COUNT, N, D> {
+impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize>
+    PermutationIter<'a, NODE_COUNT, N, D>
+{
     pub fn new(explorer: &'a Explorer<'a, NODE_COUNT, N, D>) -> Result<Self, ExplorerError> {
         const {
             assert!(
@@ -670,7 +669,9 @@ impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> PermutationIte
     }
 }
 
-impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Iterator for PermutationIter<'a, NODE_COUNT, N, D> {
+impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Iterator
+    for PermutationIter<'a, NODE_COUNT, N, D>
+{
     type Item = [&'a [u8]; N];
 
     fn next(&mut self) -> Option<Self::Item> {
