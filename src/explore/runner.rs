@@ -7,10 +7,10 @@ use crate::scanner::I2C_MAX_DEVICES;
 
 #[macro_export]
 macro_rules! factorial_sort {
-    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr) => {
-        factorial_explorer::<
-            _, _, N, INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE
-        >($explorer, $i2c, $serial, $prefix, $init_sequence)
+    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
+        $crate::explore::runner::factorial_explorer::<_, _, $n, $init_len, $cmd_buf>(
+            $explorer, $i2c, $serial, $prefix, $init_sequence
+        )
     };
 }
 
@@ -92,10 +92,10 @@ where
 
 #[macro_export]
 macro_rules! pruning_sort {
-    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr) => {
-        pruning_explorer::<
-            _, _, N, INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE
-        >($explorer, $i2c, $serial, $prefix, $init_sequence)
+    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
+        $crate::explore::runner::pruning_explorer::<_, _, $n, $init_len, $cmd_buf>(
+            $explorer, $i2c, $serial, $prefix, $init_sequence
+        )
     };
 }
 
@@ -224,10 +224,10 @@ where
 
 #[macro_export]
 macro_rules! get_one_sort {
-    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr) => {
-        one_topological_explorer::<
-            _, _, INIT_SEQUENCE_LEN, INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE
-        >($explorer, $i2c, $serial, $prefix)
+    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
+        $crate::explore::runner::one_topological_explorer::<_, _, $n, $init_len, $cmd_buf>(
+            $explorer, $i2c, $serial, $prefix
+        )
     };
 }
 
