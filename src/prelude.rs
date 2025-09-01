@@ -5,7 +5,7 @@
 
 pub use crate::{
     adapt_serial, assert_log, get_one_sort, loop_with_delay, measure_cycles, pruning_sort,
-    quick_diag, write_bin, write_hex,
+    quick_diag, write_bin, write_hex, nodes,
 };
 
 pub use crate::compat::adapt::FmtWriteAdapter;
