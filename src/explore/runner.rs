@@ -164,19 +164,9 @@ where
         );
 
     let mut failed_nodes = util::BitFlags::new();
+    let num_nodes = explorer.nodes.len();
 
     loop {
-        let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
-            Ok(iter) => iter,
-            Err(e) => {
-                util::prevent_garbled(
-                    serial,
-                    format_args!("[error] Failed to generate topological sort: {e}. Aborting."),
-                );
-                return Err(e);
-            }
-        };
-
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
         for (addr_idx, &addr) in target_addrs.iter().enumerate() {
@@ -184,6 +174,16 @@ where
 
             let mut all_ok = true;
 
+            let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
+                Ok(iter) => iter,
+                Err(e) => {
+                    util::prevent_garbled(
+                        serial,
+                        format_args!("[error] Failed to generate topological sort: {e}. Aborting."),
+                    );
+                    return Err(e);
+                }
+            };
             for cmd_idx in sort_iter.by_ref() {
                 let cmd_bytes = explorer.nodes[cmd_idx].bytes;
                 if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, cmd_idx).is_err() {
@@ -255,17 +255,16 @@ where
     let target_addr = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addr) => addr,
         Err(e) => {
-            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}"));
+            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}\n"));
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
     if target_addr.is_empty() {
         return Err(ExplorerError::NoValidAddressesFound);
     }
-
-    let single_sequence = explorer.get_one_sort(serial, &[false; N])?;
-
-    let sequence_len = explorer.nodes.len();
+    
+    let failed_nodes = util::BitFlags::new();
+    let mut sort_iter = explorer.topological_iter(&failed_nodes)?;
 
     util::prevent_garbled(
         serial,
@@ -278,14 +277,14 @@ where
     let empty_seq: &[u8] = &[];
     let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, empty_seq);
 
-    for i in 0..sequence_len {
+    for cmd_idx in sort_iter.by_ref() {
         exec_log_cmd(
             i2c,
             &mut executor,
             serial,
             target_addr[0],
-            single_sequence.0[i],
-            i,
+            explorer.nodes[cmd_idx].bytes,
+            cmd_idx,
         )?;
     }
 

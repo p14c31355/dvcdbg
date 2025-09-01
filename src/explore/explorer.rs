@@ -65,7 +65,7 @@ impl<'a, const N: usize> TopologicalIter<'a, N> {
 
         let mut queue: heapless::Vec<u8, N> = heapless::Vec::new();
         for i in 0..len {
-            if in_degree[i] == 0 && !failed_nodes[i] {
+            if in_degree[i] == 0 && !failed_nodes.get(i).unwrap_or(false) {
                 queue.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
@@ -464,113 +464,6 @@ impl<const N: usize> Explorer<N> {
             found_addrs_len,
             permutations_tested,
         })
-    }
-
-    pub fn get_one_sort(
-        &self,
-        _writer: &mut impl core::fmt::Write,
-        failed_nodes: &[bool; N],
-    ) -> Result<(heapless::Vec<&'static [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
-        let len = self.nodes.len();
-        let mut in_degree: [u8; N] = [0; N];
-        let mut adj_list_rev: [u128; N] = [0; N];
-        for (i, node) in self.nodes.iter().enumerate().take(len) {
-    writeln!(_writer, "node {i}: deps={:?}", node.deps).ok();
-}
-
-
-        // Ensure N is large enough for the sequence
-        if len > N {
-            return Err(ExplorerError::TooManyCommands);
-        }
-
-        // Build the graph representation using fixed-size arrays
-        for (i, node) in self.nodes.iter().enumerate().take(len) {
-            if failed_nodes[i] {
-                continue;
-            }
-            in_degree[i] = node.deps.len() as u8;
-            for &dep_idx in node.deps.iter() {
-                let dep_idx_usize = dep_idx as usize;
-                if dep_idx_usize >= len {
-                    return Err(ExplorerError::InvalidDependencyIndex);
-                }
-                // Use a bitmask (u128) to represent the adjacency list.
-                // This replaces the heapless::Vec<heapless::Vec<u8, N>, N> from the original.
-                adj_list_rev[dep_idx_usize] |= 1 << i;
-            }
-        }
-
-        let mut result_sequence: heapless::Vec<&[u8], N> = heapless::Vec::new();
-        let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new();
-        let mut visited_count = 0;
-
-        // Use a fixed-size array as a queue to avoid heap allocation.
-        // `q_head` and `q_tail` manage the queue's state.
-        let mut q: [u8; N] = [0; N];
-        let mut q_head: usize = 0;
-        let mut q_tail: usize = 0;
-
-        // Initialize the queue with nodes that have an in-degree of 0.
-        for i in 0..len {
-            if in_degree[i] == 0 && !failed_nodes[i] {
-                if q_tail >= N {
-                    return Err(ExplorerError::BufferOverflow);
-                }
-                q[q_tail] = i as u8;
-                q_tail += 1;
-            }
-        }
-
-        // Main topological sort loop
-        while q_head < q_tail {
-            let u_u8 = q[q_head];
-            q_head += 1;
-            let u = u_u8 as usize;
-            visited_count += 1;
-
-            let cmd_bytes = self.nodes[u].bytes;
-            result_len_per_node
-                .push(cmd_bytes.len() as u8)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
-            result_sequence
-                .push(cmd_bytes)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
-
-            // Iterate through neighbors of 'u' using the bitmask
-            for v in 0..len {
-                if (adj_list_rev[u] >> v) & 1 != 0 && !failed_nodes[v] {
-                    in_degree[v] -= 1;
-                    if in_degree[v] == 0 {
-                        if q_tail >= N {
-                            return Err(ExplorerError::BufferOverflow);
-                        }
-                        q[q_tail] = v as u8;
-                        q_tail += 1;
-                    }
-                }
-            }
-        }
-
-        let non_failed_count = len - failed_nodes.iter().filter(|&&f| f).count();
-        if visited_count != non_failed_count {
-            // Cycle detected
-            writeln!(
-                _writer,
-                "[error] Dependency cycle detected. Nodes involved (or reachable from cycle):"
-            )
-            .ok();
-            for i in 0..len {
-                // A node is part of a cycle if its in-degree is still > 0 after the topological sort
-                // and it wasn't already marked as failed.
-                if in_degree[i] > 0 && !failed_nodes[i] {
-                    writeln!(_writer, "  - Node index: {i}").ok();
-                }
-            }
-            Err(ExplorerError::DependencyCycle)
-        } else {
-            Ok((result_sequence, result_len_per_node))
-        }
     }
 }
 
