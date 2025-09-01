@@ -216,18 +216,28 @@ macro_rules! nodes {
         prefix = $prefix:expr,
         [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ]
     ) => {{
-        const NODES: [$crate::explore::explorer::CmdNode; $crate::count_exprs!($( [ $( $b ),* ] ),*)] = [
+        const RAW_NODES: [(&[u8], &[u8]); $crate::count_exprs!($( [ $( $b ),* ] ),*)] = [
             $(
-                $crate::explore::explorer::CmdNode {
-                    bytes: &[ $( $b ),* ],
-                    deps: &[
-                        $(
-                            $( $d ),*
-                        )?
-                    ],
-                }
+                (
+                    &[ $( $b ),* ],
+                    &[ $( $( $d ),* )? ],
+                )
             ),*
         ];
+
+        const NODES: [$crate::explore::explorer::CmdNode; RAW_NODES.len()] = {
+            let mut arr: [$crate::explore::explorer::CmdNode; RAW_NODES.len()] =
+                [ $crate::explore::explorer::CmdNode { bytes: &[], deps: &[] }; RAW_NODES.len() ];
+            let mut i = 0;
+            while i < RAW_NODES.len() {
+                arr[i] = $crate::explore::explorer::CmdNode {
+                    bytes: RAW_NODES[i].0,
+                    deps: RAW_NODES[i].1,
+                };
+                i += 1;
+            }
+            arr
+        };
 
         const EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}> =
             $crate::explore::explorer::Explorer::new(&NODES);
