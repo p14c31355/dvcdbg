@@ -92,7 +92,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
     }
 }
 
-pub fn exec_logger<I2C, E, W, const MAX_BYTES_PER_CMD: usize>(
+pub fn exec_log_cmd<I2C, E, W, const MAX_BYTES_PER_CMD: usize>(
     i2c: &mut I2C,
     executor: &mut E,
     writer: &mut W,
@@ -326,7 +326,7 @@ impl<const N: usize> Explorer<N> {
                 let mut all_ok = true;
 
                 for (i, &cmd_bytes) in sequence.iter().enumerate().take(self.nodes.len()) {
-                    if exec_logger(i2c, executor, writer, addr, cmd_bytes, i).is_err() {
+                    if exec_log_cmd(i2c, executor, writer, addr, cmd_bytes, i).is_err() {
                         all_ok = false;
                         break;
                     }

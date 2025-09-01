@@ -9,7 +9,11 @@ use crate::scanner::I2C_MAX_DEVICES;
 macro_rules! factorial_sort {
     ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
         $crate::explore::runner::factorial_explorer::<_, _, $n, $init_len, $cmd_buf>(
-            $explorer, $i2c, $serial, $prefix, $init_sequence
+            $explorer,
+            $i2c,
+            $serial,
+            $prefix,
+            $init_sequence,
         )
     };
 }
@@ -94,7 +98,11 @@ where
 macro_rules! pruning_sort {
     ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
         $crate::explore::runner::pruning_explorer::<_, _, $n, $init_len, $cmd_buf>(
-            $explorer, $i2c, $serial, $prefix, $init_sequence
+            $explorer,
+            $i2c,
+            $serial,
+            $prefix,
+            $init_sequence,
         )
     };
 }
@@ -158,24 +166,23 @@ where
     let mut failed_nodes = [false; N];
 
     loop {
-        let (sequence_bytes, _sequence_len) =
-            match explorer.get_one_sort(serial, &failed_nodes) {
-                Ok(seq) => seq,
-                Err(ExplorerError::DependencyCycle) => {
-                    util::prevent_garbled(
-                        serial,
-                        format_args!("[error] Dependency cycle detected, stopping exploration"),
-                    );
-                    break;
-                }
-                Err(e) => {
-                    util::prevent_garbled(
-                        serial,
-                        format_args!("[error] Failed to generate topological sort: {e}. Aborting."),
-                    );
-                    return Err(e);
-                }
-            };
+        let (sequence_bytes, _sequence_len) = match explorer.get_one_sort(serial, &failed_nodes) {
+            Ok(seq) => seq,
+            Err(ExplorerError::DependencyCycle) => {
+                util::prevent_garbled(
+                    serial,
+                    format_args!("[error] Dependency cycle detected, stopping exploration"),
+                );
+                break;
+            }
+            Err(e) => {
+                util::prevent_garbled(
+                    serial,
+                    format_args!("[error] Failed to generate topological sort: {e}. Aborting."),
+                );
+                return Err(e);
+            }
+        };
 
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
@@ -190,8 +197,7 @@ where
                 }
                 let cmd_bytes = &sequence_bytes[i];
 
-                if exec_logger(i2c, &mut executor, serial, addr, cmd_bytes, i).is_err()
-                {
+                if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, i).is_err() {
                     util::prevent_garbled(
                         serial,
                         format_args!("[warn] Command {i} failed on {addr:02X}"),
@@ -226,7 +232,7 @@ where
 macro_rules! get_one_sort {
     ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
         $crate::explore::runner::one_topological_explorer::<_, _, $n, $init_len, $cmd_buf>(
-            $explorer, $i2c, $serial, $prefix
+            $explorer, $i2c, $serial, $prefix,
         )
     };
 }
@@ -270,14 +276,17 @@ where
 
     util::prevent_garbled(
         serial,
-        format_args!("[explorer] Obtained one topological sort. Executing on {:02X}...", target_addr[0]),
+        format_args!(
+            "[explorer] Obtained one topological sort. Executing on {:02X}...",
+            target_addr[0]
+        ),
     );
 
     let empty_seq: &[u8] = &[];
     let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, empty_seq);
 
     for i in 0..sequence_len {
-        exec_logger(
+        exec_log_cmd(
             i2c,
             &mut executor,
             serial,
@@ -289,7 +298,10 @@ where
 
     util::prevent_garbled(
         serial,
-        format_args!("[explorer] Single sequence execution complete for {:02X}.", target_addr[0]),
+        format_args!(
+            "[explorer] Single sequence execution complete for {:02X}.",
+            target_addr[0]
+        ),
     );
 
     Ok(())
