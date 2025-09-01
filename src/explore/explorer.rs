@@ -220,12 +220,17 @@ macro_rules! nodes {
             $(
                 $crate::explore::explorer::CmdNode {
                     bytes: &[ $( $b ),* ],
-                    deps: &[ $( $( $d ),* )? ],
+                    deps: &[
+                        $(
+                            $( $d ),*
+                        )?
+                    ],
                 }
             ),*
         ];
 
-        const EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}> = $crate::explore::explorer::Explorer::new(&NODES);
+        const EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}> =
+            $crate::explore::explorer::Explorer::new(&NODES);
 
         const CMD_BUFFER_SIZE_INTERNAL: usize = 1 + {
             let mut max_len = 0;
@@ -373,6 +378,10 @@ impl<const N: usize> Explorer<N> {
         let len = self.nodes.len();
         let mut in_degree: [u8; N] = [0; N];
         let mut adj_list_rev: [u128; N] = [0; N];
+        for (i, node) in self.nodes.iter().enumerate().take(len) {
+    writeln!(_writer, "node {i}: deps={:?}", node.deps).ok();
+}
+
 
         // Ensure N is large enough for the sequence
         if len > N {
