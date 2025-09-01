@@ -3,6 +3,7 @@
 use crate::compat::err_compat::HalErrorExt;
 use crate::compat::util;
 use crate::error::{ExecutorError, ExplorerError};
+use heapless::Vec;
 
 const I2C_ADDRESS_COUNT: usize = 128;
 
@@ -51,38 +52,40 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
         }
 
         let mut in_degree: [u8; N] = [0; N];
-        let mut adj_list_rev_flat: [u8; MAX_DEPS_TOTAL] = [0; MAX_DEPS_TOTAL];
         let mut adj_list_rev_offsets: [u16; N] = [0; N];
-        let mut flat_idx: usize = 0;
+        let mut adj_list_rev_flat: [u8; MAX_DEPS_TOTAL] = [0; MAX_DEPS_TOTAL];
+        let mut adj_temp_storage: [Vec<u8, 16>; N] = core::array::from_fn(|_| Vec::new());
         let mut total_non_failed = 0;
 
+        // Pass 1: Build in-degree counts and temporary reverse adjacency lists
         for (i, node) in explorer.nodes.iter().enumerate().take(len) {
             if failed_nodes.get(i).unwrap_or(false) {
                 continue;
             }
             total_non_failed += 1;
-            in_degree[i] = node.deps.len() as u8;
+
             for &dep_idx in node.deps.iter() {
                 let dep_idx_usize = dep_idx as usize;
                 if dep_idx_usize >= len {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                if flat_idx >= MAX_DEPS_TOTAL {
-                    return Err(ExplorerError::BufferOverflow);
-                }
-                adj_list_rev_flat[flat_idx] = i as u8;
-                flat_idx += 1;
+                in_degree[i] = in_degree[i].saturating_add(1);
+                adj_temp_storage[dep_idx_usize]
+                    .push(i as u8)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
+        // Pass 2: Calculate cumulative offsets and flatten the temporary storage
         let mut current_offset = 0;
         for i in 0..len {
             adj_list_rev_offsets[i] = current_offset as u16;
-            for &dep_idx in explorer.nodes[i].deps.iter() {
-                let dep_idx_usize = dep_idx as usize;
-                if dep_idx_usize < len {
-                    current_offset += 1;
+            for &node_idx in adj_temp_storage[i].iter() {
+                if current_offset >= MAX_DEPS_TOTAL {
+                    return Err(ExplorerError::BufferOverflow);
                 }
+                adj_list_rev_flat[current_offset] = node_idx;
+                current_offset += 1;
             }
         }
 
