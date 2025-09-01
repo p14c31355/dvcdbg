@@ -92,7 +92,7 @@ where
                 Err(e) => {
                     util::prevent_garbled(
                         serial,
-                        format_args!("[error] Failed to generate topological sort: {e}. Aborting."),
+                        format_args!("[E] Failed GEN topological sort: {e}. Aborting."),
                     );
                     return Err(e);
                 }
