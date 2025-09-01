@@ -26,25 +26,25 @@ pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
 
 /// A stateful iterator for generating a single topological sort using Kahn's algorithm.
 /// This avoids allocating the entire sorted sequence in memory at once.
-pub struct TopologicalIter<'a, const N: usize> {
+pub struct TopologicalIter<'a, const N: usize, const MAX_DEPS: usize> {
     nodes: &'a [CmdNode],
     in_degree: [u8; N],
-    adj_list_rev: [u128; N],
+    adj_list_rev: [heapless::Vec<u8, MAX_DEPS>; N],
     queue: heapless::Vec<u8, N>,
     visited_count: usize,
     total_non_failed: usize,
 }
 
-impl<'a, const N: usize> TopologicalIter<'a, N> {
+impl<'a, const N: usize, const MAX_DEPS: usize> TopologicalIter<'a, N, MAX_DEPS> {
     // This assert is a non-item in item list, so it's moved to a const block
     // within the impl.
-    const _ASSERT_N_LE_128: () = assert!(
-        N <= 128,
-        "TopologicalIter uses a u128 bitmask, so N cannot exceed 128"
+    const _ASSERT_N_LE_256: () = assert!(
+        N <= 256,
+        "TopologicalIter uses a u8 bitmask, so N cannot exceed 256"
     );
 
     pub fn new(
-        explorer: &'a Explorer<N>,
+        explorer: &'a Explorer<N, MAX_DEPS>,
         failed_nodes: &util::BitFlags,
     ) -> Result<Self, ExplorerError> {
         let len = explorer.nodes.len();
@@ -53,7 +53,9 @@ impl<'a, const N: usize> TopologicalIter<'a, N> {
         }
 
         let mut in_degree: [u8; N] = [0; N];
-        let mut adj_list_rev: [u128; N] = [0; N];
+        // Cannot initialize this in a const context, must be mutable
+        let mut adj_list_rev: [heapless::Vec<u8, MAX_DEPS>; N] =
+            core::array::from_fn(|_| heapless::Vec::new());
         let mut total_non_failed = 0;
 
         for (i, node) in explorer.nodes.iter().enumerate().take(len) {
@@ -67,7 +69,9 @@ impl<'a, const N: usize> TopologicalIter<'a, N> {
                 if dep_idx_usize >= len {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_list_rev[dep_idx_usize] |= 1 << i;
+                adj_list_rev[dep_idx_usize]
+                    .push(i as u8)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
@@ -96,7 +100,7 @@ impl<'a, const N: usize> TopologicalIter<'a, N> {
     }
 }
 
-impl<'a, const N: usize> Iterator for TopologicalIter<'a, N> {
+impl<'a, const N: usize, const MAX_DEPS: usize> Iterator for TopologicalIter<'a, N, MAX_DEPS> {
     type Item = usize; // Return the index of the next node
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -109,14 +113,12 @@ impl<'a, const N: usize> Iterator for TopologicalIter<'a, N> {
         self.visited_count += 1;
 
         // Process neighbors of 'u'
-        for v in 0..self.nodes.len() {
-            if (self.adj_list_rev[u] >> v) & 1 != 0 {
-                self.in_degree[v] = self.in_degree[v].saturating_sub(1);
-                if self.in_degree[v] == 0 {
-                    if self.queue.push(v as u8).is_err() {
-                        // This case should be impossible due to capacity checks in `new`.
-                        unreachable!("TopologicalIter queue overflowed");
-                    }
+        for &v_u8 in self.adj_list_rev[u].iter() {
+            let v = v_u8 as usize;
+            self.in_degree[v] = self.in_degree[v].saturating_sub(1);
+            if self.in_degree[v] == 0 {
+                if self.queue.push(v_u8).is_err() {
+                    unreachable!("TopologicalIter queue overflowed");
                 }
             }
         }
@@ -326,10 +328,7 @@ macro_rules! nodes {
             ),*
         ];
 
-        static EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}> =
-            $crate::explore::explorer::Explorer::new(NODES);
-
-        const CMD_BUFFER_SIZE_INTERNAL: usize = {
+        const MAX_CMD_LEN_INTERNAL: usize = {
             let mut max_len = 0;
             let mut i = 0;
             while i < NODES.len() {
@@ -341,10 +340,25 @@ macro_rules! nodes {
             }
             max_len
         };
+        const MAX_DEPS_PER_NODE_INTERNAL: usize = {
+            let mut max_len = 0;
+            let mut i = 0;
+            while i < NODES.len() {
+                let len = NODES[i].deps.len();
+                if len > max_len {
+                    max_len = len;
+                }
+                i += 1;
+            }
+            max_len
+        };
+
+        static EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}, {MAX_DEPS_PER_NODE_INTERNAL}> =
+            $crate::explore::explorer::Explorer::new(NODES);
 
         (
             &EXPLORER,
-            $crate::explore::explorer::PrefixExecutor::<0, CMD_BUFFER_SIZE_INTERNAL>::new($prefix, &[])
+            $crate::explore::explorer::PrefixExecutor::<0, MAX_CMD_LEN_INTERNAL>::new($prefix, &[])
         )
     }};
 }
@@ -356,7 +370,7 @@ macro_rules! count_exprs {
     ($x:expr $(, $xs:expr)*) => (1usize + $crate::count_exprs!($($xs),*));
 }
 
-pub struct Explorer<const N: usize> {
+pub struct Explorer<const N: usize, const MAX_DEPS: usize> {
     pub(crate) nodes: &'static [CmdNode],
 }
 
@@ -366,11 +380,11 @@ pub struct ExploreResult {
     pub permutations_tested: usize,
 }
 
-impl<const N: usize> Explorer<N> {
+impl<const N: usize, const MAX_DEPS: usize> Explorer<N, MAX_DEPS> {
     pub fn topological_iter<'a>(
         &'a self,
         failed_nodes: &'a util::BitFlags,
-    ) -> Result<TopologicalIter<'a, N>, ExplorerError> {
+    ) -> Result<TopologicalIter<'a, N, MAX_DEPS>, ExplorerError> {
         TopologicalIter::new(self, failed_nodes)
     }
 
@@ -475,25 +489,25 @@ impl<const N: usize> Explorer<N> {
     }
 }
 
-pub struct PermutationIter<'a, const N: usize> {
-    pub explorer: &'a Explorer<N>,
+pub struct PermutationIter<'a, const N: usize, const MAX_DEPS: usize> {
+    pub explorer: &'a Explorer<N, MAX_DEPS>,
     pub total_nodes: usize,
     pub current_permutation: [&'a [u8]; N],
     pub current_permutation_len: u8,
     pub used: util::BitFlags, // No generic parameter needed now
     pub in_degree: [u8; N],
-    pub adj_list_rev: [u128; N],
+    pub adj_list_rev: [heapless::Vec<u8, MAX_DEPS>; N],
     pub path_stack: [u8; N],
     pub path_stack_len: u8,
     pub is_done: bool,
 }
 
-impl<'a, const N: usize> PermutationIter<'a, N> {
-    pub fn new(explorer: &'a Explorer<N>) -> Result<Self, ExplorerError> {
+impl<'a, const N: usize, const MAX_DEPS: usize> PermutationIter<'a, N, MAX_DEPS> {
+    pub fn new(explorer: &'a Explorer<N, MAX_DEPS>) -> Result<Self, ExplorerError> {
         const {
             assert!(
-                N <= 128,
-                "PermutationIter uses a u128 bitmask, so N cannot exceed 128"
+                N <= 256,
+                "PermutationIter uses a u8 path_stack, so N cannot exceed 256"
             );
         };
 
@@ -503,7 +517,8 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         }
 
         let mut in_degree: [u8; N] = [0; N];
-        let mut adj_list_rev: [u128; N] = [0; N];
+        let mut adj_list_rev: [heapless::Vec<u8, MAX_DEPS>; N] =
+            core::array::from_fn(|_| heapless::Vec::new());
 
         for (i, node) in explorer.nodes.iter().enumerate() {
             in_degree[i] = node.deps.len() as u8;
@@ -511,7 +526,9 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 if dep as usize >= total_nodes {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                adj_list_rev[dep as usize] |= 1 << (i as u128);
+                adj_list_rev[dep as usize]
+                    .push(i as u8)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
@@ -536,16 +553,15 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             q_head += 1;
             _count += 1;
 
-            for v in 0..total_nodes {
-                if (adj_list_rev[u] >> v) & 1 != 0 {
-                    temp_in_degree[v] -= 1;
-                    if temp_in_degree[v] == 0 {
-                        if q_tail >= N {
-                            return Err(ExplorerError::BufferOverflow);
-                        }
-                        q[q_tail] = v as u8;
-                        q_tail += 1;
+            for &v_u8 in adj_list_rev[u].iter() {
+                let v = v_u8 as usize;
+                temp_in_degree[v] -= 1;
+                if temp_in_degree[v] == 0 {
+                    if q_tail >= N {
+                        return Err(ExplorerError::BufferOverflow);
                     }
+                    q[q_tail] = v_u8;
+                    q_tail += 1;
                 }
             }
         }
@@ -562,10 +578,9 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             q_idx += 1;
             _count += 1;
 
-            for v in 0..total_nodes {
-                if (adj_list_rev[u] >> v) & 1 != 0 {
-                    temp_in_degree[v] -= 1;
-                }
+            for &v_u8 in adj_list_rev[u].iter() {
+                let v = v_u8 as usize;
+                temp_in_degree[v] -= 1;
             }
         }
 
@@ -618,10 +633,8 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                     self.is_done = true;
                 }
 
-                for neighbor in 0..self.total_nodes {
-                    if (self.adj_list_rev[i] >> neighbor) & 1 != 0 {
-                        self.in_degree[neighbor] -= 1;
-                    }
+                for &neighbor in self.adj_list_rev[i].iter() {
+                    self.in_degree[neighbor as usize] -= 1;
                 }
                 return true;
             }
@@ -642,10 +655,8 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
 
             self.used.clear(last_added_idx).unwrap();
 
-            for neighbor in 0..self.total_nodes {
-                if (self.adj_list_rev[last_added_idx] >> neighbor) & 1 != 0 {
-                    self.in_degree[neighbor] += 1;
-                }
+            for &neighbor in self.adj_list_rev[last_added_idx].iter() {
+                self.in_degree[neighbor as usize] += 1;
             }
             true
         } else {
@@ -656,7 +667,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
     }
 }
 
-impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
+impl<'a, const N: usize, const MAX_DEPS: usize> Iterator for PermutationIter<'a, N, MAX_DEPS> {
     type Item = [&'a [u8]; N];
 
     fn next(&mut self) -> Option<Self::Item> {
