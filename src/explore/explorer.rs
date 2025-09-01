@@ -323,63 +323,77 @@ impl<'a, const N: usize> Explorer<'a, N> {
         failed_nodes: &[bool; N],
     ) -> Result<(heapless::Vec<&'a [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
         let len = self.sequence.len();
-        let mut in_degree: heapless::Vec<u8, N> = heapless::Vec::new();
-        in_degree
-            .resize(len, 0)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-        let mut adj_list_rev: heapless::Vec<heapless::Vec<u8, N>, N> = heapless::Vec::new();
-        adj_list_rev
-            .resize(len, heapless::Vec::new())
-            .map_err(|_| ExplorerError::BufferOverflow)?;
+        let mut in_degree: [u8; N] = [0; N];
+        let mut adj_list_rev: [u128; N] = [0; N];
 
-        for (i, node) in self.sequence.iter().enumerate() {
+        // Ensure N is large enough for the sequence
+        if len > N {
+            return Err(ExplorerError::TooManyCommands);
+        }
+
+        // Build the graph representation using fixed-size arrays
+        for (i, node) in self.sequence.iter().enumerate().take(len) {
             if failed_nodes[i] {
                 continue;
             }
-            in_degree[i] = node.deps.len() as u8; // node.deps.len() is usize, cast to u8
+            in_degree[i] = node.deps.len() as u8;
             for &dep_idx in node.deps.iter() {
                 let dep_idx_usize = dep_idx as usize;
                 if dep_idx_usize >= len {
                     return Err(ExplorerError::InvalidDependencyIndex);
                 }
-                // dep_idx is u8, i is usize. adj_list_rev expects u8 for its inner Vec.
-                adj_list_rev[dep_idx_usize]
-                    .push(i as u8)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
+                // Use a bitmask (u128) to represent the adjacency list.
+                // This replaces the heapless::Vec<heapless::Vec<u8, N>, N> from the original.
+                adj_list_rev[dep_idx_usize] |= 1 << i;
             }
         }
 
-        let mut result_sequence: heapless::Vec<&'a [u8], N> = heapless::Vec::new(); // Changed type
-        let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new(); // Changed type to u8
+        let mut result_sequence: heapless::Vec<&'a [u8], N> = heapless::Vec::new();
+        let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new();
         let mut visited_count = 0;
 
-        let mut q = heapless::Vec::<u8, N>::new(); // Initialize the queue 'q'
+        // Use a fixed-size array as a queue to avoid heap allocation.
+        // `q_head` and `q_tail` manage the queue's state.
+        let mut q: [u8; N] = [0; N];
+        let mut q_head: usize = 0;
+        let mut q_tail: usize = 0;
+
+        // Initialize the queue with nodes that have an in-degree of 0.
         for i in 0..len {
             if in_degree[i] == 0 && !failed_nodes[i] {
-                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
+                if q_tail >= N {
+                    return Err(ExplorerError::BufferOverflow);
+                }
+                q[q_tail] = i as u8;
+                q_tail += 1;
             }
         }
 
-        while let Some(u_u8) = q.pop() {
-            // u_u8 is u8
-            let u = u_u8 as usize; // Cast to usize for indexing
+        // Main topological sort loop
+        while q_head < q_tail {
+            let u_u8 = q[q_head];
+            q_head += 1;
+            let u = u_u8 as usize;
             visited_count += 1;
 
             let cmd_bytes = self.sequence[u].bytes;
             result_len_per_node
-                .push(cmd_bytes.len() as u8) // Push u8
+                .push(cmd_bytes.len() as u8)
                 .map_err(|_| ExplorerError::BufferOverflow)?;
             result_sequence
                 .push(cmd_bytes)
                 .map_err(|_| ExplorerError::BufferOverflow)?;
 
-            for &v_u8 in adj_list_rev[u].iter() {
-                // v_u8 is u8
-                let v = v_u8 as usize; // Cast to usize for indexing
-                if !failed_nodes[v] {
+            // Iterate through neighbors of 'u' using the bitmask
+            for v in 0..len {
+                if (adj_list_rev[u] >> v) & 1 != 0 && !failed_nodes[v] {
                     in_degree[v] -= 1;
                     if in_degree[v] == 0 {
-                        q.push(v_u8).map_err(|_| ExplorerError::BufferOverflow)?; // Push u8
+                        if q_tail >= N {
+                            return Err(ExplorerError::BufferOverflow);
+                        }
+                        q[q_tail] = v as u8;
+                        q_tail += 1;
                     }
                 }
             }
