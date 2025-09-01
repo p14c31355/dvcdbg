@@ -6,96 +6,6 @@ use crate::explore::explorer::*;
 use crate::scanner::I2C_MAX_DEVICES;
 
 #[macro_export]
-macro_rules! factorial_sort {
-    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $init_len:expr, $cmd_buf:expr, $max_deps:expr) => {
-        $crate::explore::runner::factorial_explorer::<_, _, $n, $init_len, $cmd_buf, $max_deps>(
-            $explorer,
-            $i2c,
-            $serial,
-            $prefix,
-            $init_sequence,
-        )
-    };
-}
-
-pub fn factorial_explorer<
-    I2C,
-    S,
-    const N: usize,
-    const INIT_SEQUENCE_LEN: usize,
-    const CMD_BUFFER_SIZE: usize,
-    const MAX_DEPS: usize,
->(
-    explorer: &Explorer<N, MAX_DEPS>,
-    i2c: &mut I2C,
-    serial: &mut S,
-    prefix: u8,
-    init_sequence: &[u8; INIT_SEQUENCE_LEN],
-) -> Result<(), ExplorerError>
-where
-    I2C: crate::compat::I2cCompat,
-    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    S: core::fmt::Write,
-{
-    util::prevent_garbled(
-        serial,
-        format_args!("[explorer] Running full exploration..."),
-    );
-
-    let found_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
-        Ok(addrs) => addrs,
-        Err(e) => {
-            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e}"));
-            return Err(ExplorerError::ExecutionFailed(e));
-        }
-    };
-    if found_addrs.is_empty() {
-        return Err(ExplorerError::NoValidAddressesFound);
-    }
-
-    let successful_seq = match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(
-        i2c,
-        serial,
-        prefix,
-        init_sequence,
-    ) {
-        Ok(seq) => seq,
-        Err(e) => {
-            util::prevent_garbled(
-                serial,
-                format_args!("[error] Failed to scan init sequence: {e}"),
-            );
-            return Err(ExplorerError::ExecutionFailed(e));
-        }
-    };
-    util::prevent_garbled(
-        serial,
-        format_args!("[scan] initial sequence scan completed"),
-    );
-    util::prevent_garbled(serial, format_args!("[log] Start driver safe init"));
-
-    let mut executor =
-        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, &successful_seq);
-
-    let exploration_result =
-        explorer.explore::<_, _, _, CMD_BUFFER_SIZE>(i2c, &mut executor, serial)?;
-
-    for addr in exploration_result.found_addrs[..exploration_result.found_addrs_len].iter() {
-        util::prevent_garbled(serial, format_args!("[driver] Found device at {addr:02X}"));
-    }
-
-    util::prevent_garbled(
-        serial,
-        format_args!(
-            "[explorer] Exploration complete. {} addresses found across {} permutations.",
-            exploration_result.found_addrs_len, exploration_result.permutations_tested
-        ),
-    );
-
-    Ok(())
-}
-
-#[macro_export]
 macro_rules! pruning_sort {
     ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $init_len:expr, $cmd_buf:expr, $max_deps:expr) => {
         $crate::explore::runner::pruning_explorer::<_, _, $n, $init_len, $cmd_buf, $max_deps>(
@@ -206,7 +116,6 @@ where
                 false
             };
 
-            // Now that `sort_iter` is out of scope, we can mutably borrow failed_nodes.
             if let Some(cmd_idx) = command_to_fail {
                 failed_nodes.set(cmd_idx).ok();
             }
