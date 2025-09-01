@@ -148,10 +148,9 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
         for &v_u8 in &self.adj_list_rev_flat[start_offset..end_offset] {
             let v = v_u8 as usize;
             self.in_degree[v] = self.in_degree[v].saturating_sub(1);
-            if self.in_degree[v] == 0
-                && self.queue.push(v_u8).is_err() {
-                    unreachable!("TopologicalIter queue overflowed");
-                }
+            if self.in_degree[v] == 0 && self.queue.push(v_u8).is_err() {
+                unreachable!("TopologicalIter queue overflowed");
+            }
         }
 
         Some(u)
@@ -287,7 +286,7 @@ where
                 writer,
                 format_args!("[Info] I2C initializing for {addr:02X?}..."),
             );
-            
+
             let ack_ok = Self::write_with_retry(i2c, addr, &[], writer).is_ok();
 
             if ack_ok {
@@ -317,7 +316,10 @@ where
                 self.initialized_addrs
                     .set(addr_idx)
                     .map_err(ExecutorError::BitFlagsError)?;
-                util::prevent_garbled(writer, format_args!("[Info] I2C initialized for {addr:02X?}"));
+                util::prevent_garbled(
+                    writer,
+                    format_args!("[Info] I2C initialized for {addr:02X?}"),
+                );
             }
         }
 
