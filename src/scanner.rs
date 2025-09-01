@@ -25,21 +25,22 @@ where
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-        write!(writer, "Scanning ").ok();
-        util::write_bytes_hex_fmt(writer, &[addr]).ok();
-        writeln!(writer, "...").ok();
+        util::prevent_garbled(
+            writer,
+            format_args!("Scanning {:02X?}...", addr),
+        );
 
         match i2c.write(addr, data) {
             Ok(_) => {
                 found_addrs.push(addr).map_err(|_| {
                     crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
                 })?;
-                writeln!(writer, " OK.").ok();
+                util::prevent_garbled(writer, format_args!(" OK."));
             }
             Err(e) => {
                 let error_kind = e.to_compat(Some(addr));
                 last_error = Some(error_kind);
-                writeln!(writer, " FAILED: {error_kind:?}").ok();
+                util::prevent_garbled(writer, format_args!(" FAILED: {error_kind:?}"));
             }
         }
     }
@@ -87,19 +88,30 @@ where
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for (i, &cmd) in init_sequence.iter().enumerate() {
-        writeln!(writer, "Scanning for init command {i}: {cmd:02X?}").ok();
+        util::prevent_garbled(
+            writer,
+            format_args!("Scanning for init command {i}: {cmd:02X?}"),
+        );
         let cmd_slice = [cmd];
         match internal_scan(i2c, writer, &cmd_slice) {
             Ok(found_addrs) => {
-                writeln!(writer, " -> Found on addresses: {found_addrs:02X?}").ok();
+                util::prevent_garbled(
+                    writer,
+                    format_args!(" -> Found on addresses: {found_addrs:02X?}"),
+                );
                 detected_cmds.push(cmd).ok();
             }
             Err(error_kind) => {
-                writeln!(writer, " -> Not found. Error: {error_kind:?}").ok();
+                util::prevent_garbled(
+                    writer,
+                    format_args!(" -> Not found. Error: {error_kind:?}"),
+                );
                 last_error = Some(error_kind);
             }
         }
     }
+    
+    log_sequence_summary(writer, init_sequence, &mut detected_cmds);
 
     if detected_cmds.is_empty() {
         Err(last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)))
@@ -117,17 +129,14 @@ fn log_sequence_summary<W, const N: usize>(
 {
     let mut missing_cmds = heapless::Vec::<u8, N>::new();
 
-    writeln!(writer, "\n--- I2C Sequence Scan Summary ---").ok();
+    util::prevent_garbled(writer, format_args!("\n--- I2C Sequence Scan Summary ---"));
 
-    // Log detected commands in their original, unsorted order
-    write!(writer, "Commands That Responded:").ok();
+    util::prevent_garbled(writer, format_args!("Commands That Responded:"));
     for &cmd in detected_cmds.iter() {
-        write!(writer, " ").ok();
-        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+        util::prevent_garbled(writer, format_args!(" {:02X}", cmd));
     }
-    writeln!(writer).ok();
+    util::prevent_garbled(writer, format_args!(""));
 
-    // Sort in-place to find missing commands efficiently
     detected_cmds.sort_unstable();
 
     for &cmd in expected_sequence.iter() {
@@ -136,21 +145,19 @@ fn log_sequence_summary<W, const N: usize>(
         }
     }
 
-    write!(writer, "Expected Commands:").ok();
+    util::prevent_garbled(writer, format_args!("Expected Commands:"));
     for &cmd in expected_sequence {
-        write!(writer, " ").ok();
-        util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+        util::prevent_garbled(writer, format_args!(" {:02X}", cmd));
     }
-    writeln!(writer).ok();
+    util::prevent_garbled(writer, format_args!(""));
 
-    write!(writer, "Commands Not Found:").ok();
+    util::prevent_garbled(writer, format_args!("Commands Not Found:"));
     if missing_cmds.is_empty() {
-        writeln!(writer, " (None)").ok();
+        util::prevent_garbled(writer, format_args!(" (None)"));
     } else {
         for &cmd in missing_cmds.iter() {
-            write!(writer, " ").ok();
-            util::write_bytes_hex_fmt(writer, &[cmd]).ok();
+            util::prevent_garbled(writer, format_args!(" {:02X}", cmd));
         }
-        writeln!(writer).ok();
+        util::prevent_garbled(writer, format_args!(""));
     }
 }
