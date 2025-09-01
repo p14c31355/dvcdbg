@@ -183,7 +183,6 @@ where
             util::prevent_garbled(serial, format_args!("Sending commands to {addr:02X}"));
 
             let mut all_ok = true;
-            let mut completed_node_count = 0;
 
             for cmd_idx in sort_iter.by_ref() {
                 let cmd_bytes = explorer.nodes[cmd_idx].bytes;
@@ -196,7 +195,6 @@ where
                     failed_nodes[cmd_idx] = true;
                     break;
                 }
-                completed_node_count += 1;
             }
 
             if all_ok && sort_iter.is_cycle_detected() {

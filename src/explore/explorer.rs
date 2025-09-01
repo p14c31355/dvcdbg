@@ -36,6 +36,10 @@ pub struct TopologicalIter<'a, const N: usize> {
 }
 
 impl<'a, const N: usize> TopologicalIter<'a, N> {
+    // This assert is a non-item in item list, so it's moved to a const block
+    // within the impl.
+    const _ASSERT_N_LE_128: () = assert!(N <= 128, "TopologicalIter uses a u128 bitmask, so N cannot exceed 128");
+
     pub fn new(explorer: &'a Explorer<N>, failed_nodes: &[bool; N]) -> Result<Self, ExplorerError> {
         let len = explorer.nodes.len();
         if len > N {
@@ -92,7 +96,7 @@ impl<'a, const N: usize> Iterator for TopologicalIter<'a, N> {
             return None;
         }
 
-        let u_u8 = self.queue.remove(0);
+        let u_u8 = self.queue.pop().unwrap();
         let u = u_u8 as usize;
         self.visited_count += 1;
 
