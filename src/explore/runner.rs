@@ -153,9 +153,7 @@ where
                 Err(e) => {
                     util::prevent_garbled(
                         serial,
-                        format_args!(
-                            "[error] Failed to generate topological sort: {e}. Aborting."
-                        ),
+                        format_args!("[error] Failed to generate topological sort: {e}. Aborting."),
                     );
                     return Err(e);
                 }
@@ -235,9 +233,7 @@ where
 
     util::prevent_garbled(
         serial,
-        format_args!(
-            "[explorer] Obtained one topological sort. Executing on {target_addr:02X}..."
-        ),
+        format_args!("[explorer] Obtained one topological sort. Executing on {target_addr:02X}..."),
     );
 
     let empty_seq: &[u8] = &[];
@@ -256,9 +252,7 @@ where
 
     util::prevent_garbled(
         serial,
-        format_args!(
-            "[explorer] Single sequence execution complete for {target_addr:02X}."
-        ),
+        format_args!("[explorer] Single sequence execution complete for {target_addr:02X}."),
     );
 
     Ok(())

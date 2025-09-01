@@ -109,9 +109,7 @@ where
     // Replaced writeln! with prevent_garbled
     util::prevent_garbled(
         writer,
-        format_args!(
-            "[explorer] Sending node {cmd_idx} bytes: {cmd_bytes:02X?} ..."
-        ),
+        format_args!("[explorer] Sending node {cmd_idx} bytes: {cmd_bytes:02X?} ..."),
     );
 
     match executor.exec(i2c, addr, cmd_bytes, writer) {
@@ -259,15 +257,11 @@ impl<'a, const N: usize> Explorer<'a, N> {
         let mut found_addrs_len: usize = 0;
         let mut solved_addrs: util::BitFlags = util::BitFlags::new();
         let mut permutations_tested = 0;
-        let mut iter = PermutationIter::new(self)?;
+        let iter = PermutationIter::new(self)?;
         writeln!(writer, "[explorer] Starting permutation exploration...").ok();
-        loop {
-            let sequence = match iter.next() {
-                Some(s) => s,
-                None => break,
-            };
-
+        for sequence in iter {
             permutations_tested += 1;
+
             for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
                 let addr = addr_val;
                 if solved_addrs
@@ -282,8 +276,8 @@ impl<'a, const N: usize> Explorer<'a, N> {
                 writeln!(writer, " (permutation {permutations_tested})").ok();
 
                 let mut all_ok = true;
-                for i in 0..self.sequence.len() {
-                    let cmd_bytes = sequence[i];
+
+                for (i, &cmd_bytes) in sequence.iter().enumerate().take(self.sequence.len()) {
                     if execute_and_log_command(i2c, executor, writer, addr, cmd_bytes, i).is_err() {
                         all_ok = false;
                         break;
@@ -294,6 +288,7 @@ impl<'a, const N: usize> Explorer<'a, N> {
                     write!(writer, "[explorer] Successfully executed sequence on ").ok();
                     util::write_bytes_hex_fmt(writer, &[addr]).ok();
                     writeln!(writer).ok();
+
                     if found_addrs_len < I2C_ADDRESS_COUNT {
                         found_addrs[found_addrs_len] = addr;
                         found_addrs_len += 1;
@@ -443,7 +438,7 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
         let mut q: heapless::Vec<u8, N> = heapless::Vec::new();
         let mut q_head: usize = 0;
         let mut q_tail: usize = 0;
-        for i in 0..total_nodes {
+        for (i, _) in temp_in_degree.iter().enumerate().take(total_nodes) {
             if temp_in_degree[i] == 0 {
                 if q_tail >= N {
                     return Err(ExplorerError::BufferOverflow);
@@ -453,11 +448,11 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
             }
         }
 
-        let mut count = 0;
+        let mut _count = 0;
         while q_head < q_tail {
             let u = q[q_head] as usize;
             q_head += 1;
-            count += 1;
+            _count += 1;
 
             for v in 0..total_nodes {
                 if (adj_list_rev[u] >> v) & 1 != 0 {
@@ -472,30 +467,27 @@ impl<'a, const N: usize> PermutationIter<'a, N> {
                 }
             }
         }
-        for i in 0..total_nodes {
+        for (i, _) in temp_in_degree.iter().enumerate().take(total_nodes) {
             if temp_in_degree[i] == 0 {
                 q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
             }
         }
 
-        let mut count = 0;
+        let mut _count = 0;
         let mut q_idx = 0;
         while q_idx < q.len() {
             let u = q[q_idx] as usize;
             q_idx += 1;
-            count += 1;
+            _count += 1;
 
             for v in 0..total_nodes {
                 if (adj_list_rev[u] >> v) & 1 != 0 {
                     temp_in_degree[v] -= 1;
-                    if temp_in_degree[v] == 0 {
-                        q.push(v as u8).map_err(|_| ExplorerError::BufferOverflow)?;
-                    }
                 }
             }
         }
 
-        if count != total_nodes {
+        if _count != total_nodes {
             return Err(ExplorerError::DependencyCycle);
         }
 
