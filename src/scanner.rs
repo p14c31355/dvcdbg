@@ -1,7 +1,6 @@
 //! Scanner utilities for I2C bus device discovery and analysis.
 
 use crate::compat::HalErrorExt;
-use crate::compat::SerialCompat;
 use crate::compat::util;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
