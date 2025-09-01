@@ -261,6 +261,13 @@ macro_rules! new_explorer {
     }};
 }
 
+/// simple macro to count comma-separated expressions at compile time
+#[macro_export]
+macro_rules! count_exprs {
+    () => (0usize);
+    ($x:expr $(, $xs:expr)*) => (1usize + $crate::count_exprs!($($xs),*));
+}
+
 pub struct Explorer<const N: usize> {
     pub(crate) nodes: &'static [CmdNode],
 }
