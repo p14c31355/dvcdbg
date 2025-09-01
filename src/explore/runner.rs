@@ -256,7 +256,7 @@ where
     let target_addr = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addr) => addr,
         Err(e) => {
-            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e}"));
+            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}"));
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
