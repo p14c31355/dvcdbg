@@ -419,7 +419,7 @@ impl<'a, const NODE_COUNT: usize, const N: usize, const D: usize> Explorer<'a, N
         // Use a fixed-size array as a queue to avoid heap allocation.
         // `q_head` and `q_tail` manage the queue's state.
         let mut q: [u8; N] = [0; N];
-        let mut q_head: usize = 0; // Changed from `usize` to `u8`
+        let mut q_head: usize = 0;
         let mut q_tail: usize = 0;
 
         // Initialize the queue with nodes that have an in-degree of 0.
