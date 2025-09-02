@@ -37,9 +37,8 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut target_addrs = crate::scanner::scan_i2c(i2c, serial, prefix).map_err(|e| {
-        write!(serial, "[E] SCAN FAIL: {}\r\n", e).ok();
-        e
+    let mut target_addrs = crate::scanner::scan_i2c(i2c, serial, prefix).inspect_err(|&e| {
+        write!(serial, "[E] SCAN FAIL: {e}\r\n").ok();
     })?;
     // let len = target_addrs.len() as u8;
     // write!(serial, "[DBG] target_addrs.len = {}\r\n", len).ok();
@@ -53,7 +52,7 @@ where
         match crate::scanner::scan_init_sequence(i2c, serial, prefix, init_sequence) {
             Ok(seq) => seq,
             Err(e) => {
-                write!(serial, "[E] Failed SCAN INIT: {}\r\n", e).ok();
+                write!(serial, "[E] Failed SCAN INIT: {e}\r\n").ok();
                 return Err(ExplorerError::ExecutionFailed(e));
             }
         };
@@ -85,8 +84,7 @@ where
                 Err(e) => {
                     write!(
                         serial,
-                        "[E] Failed GEN topological sort: {}. Aborting.\r\n",
-                        e
+                        "[E] Failed GEN topological sort: {e}. Aborting.\r\n"
                     )
                     .ok();
                     return Err(e);
@@ -97,8 +95,7 @@ where
                 if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, cmd_idx).is_err() {
                     write!(
                         serial,
-                        "[warn] Command {} failed on {:02X}\r\n",
-                        cmd_idx, addr
+                        "[warn] Command {cmd_idx} failed on {addr:02X}\r\n"
                     )
                     .ok();
                     all_ok = false;
@@ -173,7 +170,7 @@ where
     let target_addr = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addr) => addr,
         Err(e) => {
-            write!(serial, "[error] Failed to scan I2C: {}\r\n", e).ok();
+            write!(serial, "[error] Failed to scan I2C: {e}\r\n").ok();
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
@@ -187,8 +184,7 @@ where
         Err(e) => {
             write!(
                 serial,
-                "[E] Failed to GEN topological sort: {}. Aborting.\r\n",
-                e
+                "[E] Failed to GEN topological sort: {e}. Aborting.\r\n"
             )
             .ok();
             return Err(e);

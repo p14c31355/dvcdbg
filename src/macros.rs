@@ -205,7 +205,7 @@ macro_rules! quick_diag {
     (@inner $serial:expr, $i2c:expr, $ctrl_byte:expr) => {{
     let _ = core::writeln!($serial, "=== Quick Diagnostic Start ===");
     if let Err(e) = $crate::scanner::scan_i2c($i2c, $serial, $ctrl_byte) {
-        let _ = core::writeln!($serial, "[error] I2C Scan failed: {:?}", e);
+        let _ = core::writeln!($serial, "[error] I2C Scan failed: {}", e);
     }
 }};
 }

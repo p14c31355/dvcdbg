@@ -247,11 +247,11 @@ where
 {
     match executor.exec(i2c, addr, cmd_bytes, writer) {
         Ok(_) => {
-            write!(writer, "[E] OK {}\r\n", cmd_idx).ok();
+            write!(writer, "[E] OK {cmd_idx}\r\n").ok();
             Ok(())
         }
         Err(e) => {
-            write!(writer, "[E] FAIL {}: {}\r\n", cmd_idx, e).ok();
+            write!(writer, "[E] FAIL {cmd_idx}: {e}\r\n").ok();
             Err(e.into())
         }
     }

@@ -111,9 +111,8 @@ where
     crate::compat::util::write_bytes_hex_fmt(writer, &[ctrl_byte]).ok();
     core::fmt::Write::write_str(writer, "\r\n").ok();
 
-    let found_addrs = crate::scanner::scan_i2c(i2c, writer, ctrl_byte).map_err(|e| {
-        write!(writer, "Failed to scan I2C: {}\r\n", e).ok();
-        e
+    let found_addrs = crate::scanner::scan_i2c(i2c, writer, ctrl_byte).inspect_err(|&e| {
+        write!(writer, "Failed to scan I2C: {e}\r\n").ok();
     })?;
 
     if found_addrs.is_empty() {
@@ -160,7 +159,7 @@ where
                     crate::compat::util::write_bytes_hex_fmt(writer, &[cmd]).ok();
                     core::fmt::Write::write_str(writer, " at ").ok();
                     crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                    write!(writer, ": {}.\r\n", error_kind).ok();
+                    write!(writer, ": {error_kind}.\r\n").ok();
                     last_error = Some(error_kind);
                 }
             }
