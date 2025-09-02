@@ -70,14 +70,13 @@ where
                 }
             };
 
-            let mut all_ok = true;
             let mut command_to_fail = None;
 
             for cmd_idx in sort_iter.by_ref() {
                 let cmd_bytes = explorer.nodes[cmd_idx].bytes;
                 if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, cmd_idx).is_err() {
                     write!(serial, "[warn] Command {cmd_idx} failed on {addr:02X}\r\n").ok();
-                    all_ok = false;
+
                     command_to_fail = Some(cmd_idx);
                     break;
                 }
@@ -91,13 +90,8 @@ where
 
             if is_cycle_detected {
                 write!(serial, "[error] Dependency cycle detected on {addr:02X}, stopping exploration for this address\r\n").ok();
-                addrs_to_remove.push(addr_idx).ok();
-            } else if !all_ok {
-                addrs_to_remove.push(addr_idx).ok();
-            } else {
-                // all_ok is true
-                addrs_to_remove.push(addr_idx).ok();
             }
+            addrs_to_remove.push(addr_idx).ok();
         }
 
         for &idx in addrs_to_remove.iter().rev() {
