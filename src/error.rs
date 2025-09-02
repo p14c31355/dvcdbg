@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     /// UART-related errors
     Uart(UartError),
@@ -25,7 +25,7 @@ pub enum ErrorKind {
     Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum UartError {
     Framing,
     Parity,
@@ -34,29 +34,29 @@ pub enum UartError {
     Timeout,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum I2cError {
     Nack,
     ArbitrationLost,
     Bus,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SpiError {
     ModeFault,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GpioError {
     InvalidState,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum AdcError {
     OutOfRange,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum HardwareError {
     Power,
     Peripheral,
@@ -64,7 +64,7 @@ pub enum HardwareError {
     OpenCircuit,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BufferError {
     Overflow,
     Underflow,
@@ -100,7 +100,7 @@ impl fmt::Display for ErrorKind {
 }
 
 /// Errors that can occur during exploration of command sequences.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub enum ExplorerError {
     /// The provided sequence contained more commands than supported by the capacity N.
     TooManyCommands,
@@ -121,7 +121,7 @@ pub enum ExplorerError {
 }
 
 /// Errors that can occur during command execution.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub enum ExecutorError {
     /// The command failed to execute due to an I2C error.
     I2cError(crate::error::ErrorKind),

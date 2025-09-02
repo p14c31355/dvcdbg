@@ -222,7 +222,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
                     last_error = Some(compat_err);
-                    util::prevent_garbled(writer, format_args!("[I2C retry error] {compat_err:?}"));
+                    util::prevent_garbled(writer, format_args!("[I2C retry error] {compat_err}"));
                     Self::short_delay();
                 }
             }
@@ -251,7 +251,7 @@ where
             Ok(())
         }
         Err(e) => {
-            write!(writer, "[E] FAIL {}: {:?}\r\n", cmd_idx, e).ok();
+            write!(writer, "[E] FAIL {}: {}\r\n", cmd_idx, e).ok();
             Err(e.into())
         }
     }
