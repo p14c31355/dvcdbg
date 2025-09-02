@@ -33,6 +33,7 @@ pub struct TopologicalIter<'a, const N: usize, const MAX_DEPS_TOTAL: usize> {
     queue: heapless::Vec<u8, N>,
     visited_count: usize,
     total_non_failed: usize,
+    deps_total_len: usize,
 }
 
 impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX_DEPS_TOTAL> {
@@ -82,6 +83,7 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
         if current_offset as usize > MAX_DEPS_TOTAL {
             return Err(ExplorerError::BufferOverflow);
         }
+        let deps_total_len = current_offset as usize;
 
         // Re-use `rev_adj_offsets` as write pointers
         let mut write_pointers = rev_adj_offsets;
@@ -114,6 +116,7 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
             queue,
             visited_count: 0,
             total_non_failed,
+            deps_total_len,
         })
     }
 
@@ -133,23 +136,28 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
             return None;
         }
 
-        let u_u8 = self.queue.pop().unwrap();
-        let u = u_u8 as usize;
+        let u = self.queue.pop().unwrap() as usize;
         self.visited_count += 1;
 
         let start_offset = self.adj_list_rev_offsets[u] as usize;
         let end_offset = if u + 1 < self.nodes.len() {
             self.adj_list_rev_offsets[u + 1] as usize
         } else {
-            MAX_DEPS_TOTAL
+            self.deps_total_len
         };
+        let end_offset = end_offset.min(self.deps_total_len);
+        debug_assert!(start_offset <= end_offset);
 
         // Process neighbors of 'u'
         for &v_u8 in &self.adj_list_rev_flat[start_offset..end_offset] {
             let v = v_u8 as usize;
             self.in_degree[v] = self.in_degree[v].saturating_sub(1);
-            if self.in_degree[v] == 0 && self.queue.push(v_u8).is_err() {
-                unreachable!("TopologicalIter queue overflowed");
+            if self.in_degree[v] == 0 {
+                // A queue can be used as a LIFO queue, but it is still valid for topological ordering (the order changes, but the invariants are preserved).
+                // If you want a FIFO queue, use a ring buffer.
+                if self.queue.push(v_u8).is_err() {
+                    unreachable!("TopologicalIter queue overflowed");
+                }
             }
         }
 
@@ -286,7 +294,7 @@ where
                 core::fmt::Write::write_str(writer, "[Info] Device found at ").ok();
                 crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
                 core::fmt::Write::write_str(writer, ", sending init sequence...\r\n").ok();
-                
+
                 for (i, &c) in self.init_sequence[..self.init_sequence_len]
                     .iter()
                     .enumerate()
@@ -308,7 +316,7 @@ where
                 self.initialized_addrs
                     .set(addr_idx)
                     .map_err(ExecutorError::BitFlagsError)?;
-                
+
                 core::fmt::Write::write_str(writer, "[Info] I2C initialized for ").ok();
                 crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
                 core::fmt::Write::write_str(writer, "\r\n").ok();

@@ -89,14 +89,24 @@ where
             let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
                 Ok(iter) => iter,
                 Err(e) => {
-                    write!(serial, "[E] Failed GEN topological sort: {:?}. Aborting.\r\n", e).ok();
+                    write!(
+                        serial,
+                        "[E] Failed GEN topological sort: {:?}. Aborting.\r\n",
+                        e
+                    )
+                    .ok();
                     return Err(e);
                 }
             };
             for cmd_idx in sort_iter.by_ref() {
                 let cmd_bytes = explorer.nodes[cmd_idx].bytes;
                 if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, cmd_idx).is_err() {
-                    write!(serial, "[warn] Command {} failed on {:02X}\r\n", cmd_idx, addr).ok();
+                    write!(
+                        serial,
+                        "[warn] Command {} failed on {:02X}\r\n",
+                        cmd_idx, addr
+                    )
+                    .ok();
                     all_ok = false;
                     command_to_fail = Some(cmd_idx);
                     break;
@@ -116,7 +126,8 @@ where
             if is_cycle_detected {
                 core::fmt::Write::write_str(serial, "[error] Dependency cycle detected on ").ok();
                 crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
-                core::fmt::Write::write_str(serial, ", stopping exploration for this address\r\n").ok();
+                core::fmt::Write::write_str(serial, ", stopping exploration for this address\r\n")
+                    .ok();
             } else if all_ok {
                 addrs_to_remove.push(addr_idx).ok();
             }
@@ -180,12 +191,21 @@ where
     let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
         Ok(iter) => iter,
         Err(e) => {
-            write!(serial, "[E] Failed to GEN topological sort: {:?}. Aborting.\r\n", e).ok();
+            write!(
+                serial,
+                "[E] Failed to GEN topological sort: {:?}. Aborting.\r\n",
+                e
+            )
+            .ok();
             return Err(e);
         }
     };
 
-    core::fmt::Write::write_str(serial, "[explorer] Obtained one topological sort. Executing on ").ok();
+    core::fmt::Write::write_str(
+        serial,
+        "[explorer] Obtained one topological sort. Executing on ",
+    )
+    .ok();
     crate::compat::util::write_bytes_hex_fmt(serial, &[target_addr[0]]).ok();
     core::fmt::Write::write_str(serial, "...\r\n").ok();
 

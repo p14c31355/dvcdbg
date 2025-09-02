@@ -4,8 +4,8 @@
 //! Users can simply `use dvcdbg::prelude::*;` to access the main types and macros.
 
 pub use crate::{
-    adapt_serial, assert_log, get_one_sort, loop_with_delay, measure_cycles, pruning_sort,
-    quick_diag, write_bin, write_hex, nodes,
+    adapt_serial, assert_log, get_one_sort, loop_with_delay, measure_cycles, nodes, pruning_sort,
+    quick_diag, write_bin, write_hex,
 };
 
 pub use crate::compat::adapt::FmtWriteAdapter;

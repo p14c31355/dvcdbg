@@ -1,7 +1,6 @@
 //! Scanner utilities for I2C bus device discovery and analysis.
 
 use crate::compat::HalErrorExt;
-use crate::compat::util;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -11,15 +10,13 @@ pub const I2C_MAX_DEVICES: usize = 128;
 ///
 /// It iterates through all possible I2C addresses and attempts to write the
 /// provided `data`.
-fn internal_scan<I2C, W>(
+fn internal_scan<I2C>(
     i2c: &mut I2C,
-    writer: &mut W,
     data: &[u8],
 ) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    W: core::fmt::Write,
 {
     let mut found_addrs = heapless::Vec::<u8, I2C_MAX_DEVICES>::new();
     let mut last_error: Option<crate::error::ErrorKind> = None;
@@ -28,7 +25,9 @@ where
         match i2c.write(addr, data) {
             Ok(_) => {
                 if found_addrs.push(addr).is_err() {
-                    return Err(crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow));
+                    return Err(crate::error::ErrorKind::Buffer(
+                        crate::error::BufferError::Overflow,
+                    ));
                 }
             }
             Err(e) => {
@@ -70,12 +69,12 @@ where
     crate::compat::util::write_bytes_hex_fmt(writer, &[ctrl_byte]).ok();
     core::fmt::Write::write_str(writer, " ...\r\n").ok();
 
-    let found_addrs = internal_scan(i2c, writer, &[ctrl_byte])?;
-    
+    let found_addrs = internal_scan(i2c, &[ctrl_byte])?;
+
     core::fmt::Write::write_str(writer, "Found device @ ").ok();
     crate::compat::util::write_bytes_hex_fmt(writer, &found_addrs).ok();
     core::fmt::Write::write_str(writer, "\r\n").ok();
-    
+
     Ok(found_addrs)
 }
 
@@ -112,11 +111,10 @@ where
     crate::compat::util::write_bytes_hex_fmt(writer, &[ctrl_byte]).ok();
     core::fmt::Write::write_str(writer, "\r\n").ok();
 
-    let found_addrs = crate::scanner::scan_i2c(i2c, writer, ctrl_byte)
-        .map_err(|e| {
-            write!(writer, "Failed to scan I2C: {:?}\r\n", e).ok();
-            e
-        })?;
+    let found_addrs = crate::scanner::scan_i2c(i2c, writer, ctrl_byte).map_err(|e| {
+        write!(writer, "Failed to scan I2C: {:?}\r\n", e).ok();
+        e
+    })?;
 
     if found_addrs.is_empty() {
         core::fmt::Write::write_str(writer, "No devices found.\r\n").ok();
