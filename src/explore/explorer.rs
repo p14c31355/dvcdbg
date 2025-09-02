@@ -214,7 +214,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
                     last_error = Some(compat_err);
-                    util::prevent_garbled(writer, format_args!("[I2C retry error] {compat_err}"));
+                    util::prevent_garbled(writer, format_args!("[I2C retry error] {compat_err:?}"));
                     Self::short_delay();
                 }
             }
@@ -238,15 +238,15 @@ where
     W: core::fmt::Write,
 {
     match executor.exec(i2c, addr, cmd_bytes, writer) {
-    Ok(_) => {
-        util::prevent_garbled(writer, format_args!("[E] OK {cmd_idx}"));
-        Ok(())
+        Ok(_) => {
+            write!(writer, "[E] OK {cmd_idx}\r\n").ok();
+            Ok(())
+        }
+        Err(e) => {
+            write!(writer, "[E] FAIL {cmd_idx}: {:?}\r\n", e).ok();
+            Err(e.into())
+        }
     }
-    Err(e) => {
-        util::prevent_garbled(writer, format_args!("[E] FAIL {cmd_idx}: {e}"));
-        Err(e.into())
-    }
-}
 }
 
 impl<I2C, const INIT_SEQ_SIZE: usize, const CMD_BUFFER_SIZE: usize>
@@ -276,20 +276,17 @@ where
             if (self.init_sequence_len * 2) > CMD_BUFFER_SIZE {
                 return Err(ExecutorError::BufferOverflow);
             }
-
-            util::prevent_garbled(
-                writer,
-                format_args!("[Info] I2C initializing for {addr:02X?}..."),
-            );
+            write!(writer, "[Info] I2C initializing for ").ok();
+            crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
+            writeln!(writer, "...").ok();
 
             let ack_ok = Self::write_with_retry(i2c, addr, &[], writer).is_ok();
 
             if ack_ok {
-                util::prevent_garbled(
-                    writer,
-                    format_args!("[Info] Device found at {addr:02X?}, sending init sequence..."),
-                );
-
+                write!(writer, "[Info] Device found at ").ok();
+                crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                writeln!(writer, ", sending init sequence...").ok();
+                
                 for (i, &c) in self.init_sequence[..self.init_sequence_len]
                     .iter()
                     .enumerate()
@@ -311,10 +308,10 @@ where
                 self.initialized_addrs
                     .set(addr_idx)
                     .map_err(ExecutorError::BitFlagsError)?;
-                util::prevent_garbled(
-                    writer,
-                    format_args!("[Info] I2C initialized for {addr:02X?}"),
-                );
+                
+                write!(writer, "[Info] I2C initialized for ").ok();
+                crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                writeln!(writer).ok();
             }
         }
 
