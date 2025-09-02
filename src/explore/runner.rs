@@ -37,13 +37,7 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut target_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
-        Ok(addrs) => addrs,
-        Err(e) => {
-            write!(serial, "[E] Failed to scan I2C: {e}\r\n").ok();
-            return Err(ExplorerError::DeviceNotFound(e));
-        }
-    };
+    let mut target_addrs = crate::scanner::scan_i2c(i2c, serial, prefix)?;
 
     if target_addrs.is_empty() {
         write!(serial, "[I] Init scan OK: No devices found\r\n").ok();
@@ -66,32 +60,26 @@ where
             crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
             core::fmt::Write::write_str(serial, "\r\n").ok();
 
-            let mut all_ok = true;
-            let mut command_to_fail = None;
-
             let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
                 Ok(iter) => iter,
                 Err(e) => {
-                    write!(serial, "[E] Failed GEN topological sort: {}\r\n", e).ok();
+                    write!(serial, "[E] Failed GEN topological sort: {e}\r\n").ok();
+                    addrs_to_remove.push(addr_idx).ok();
                     continue;
                 }
             };
-
-            let mut addr_pending = [true; N];
+            
+            let mut all_ok = true;
+            let mut command_to_fail = None;
 
             for cmd_idx in sort_iter.by_ref() {
-                if !addr_pending[cmd_idx] {
-                    continue;
-                }
-
                 let cmd_bytes = explorer.nodes[cmd_idx].bytes;
                 if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, cmd_idx).is_err() {
-                    write!(serial, "[warn] Command {} failed on {:02X}\r\n", cmd_idx, addr).ok();
+                    write!(serial, "[warn] Command {cmd_idx} failed on {addr:02X}\r\n").ok();
                     all_ok = false;
                     command_to_fail = Some(cmd_idx);
                     break;
                 }
-                addr_pending[cmd_idx] = false;
             }
 
             let is_cycle_detected = sort_iter.is_cycle_detected();
@@ -101,18 +89,13 @@ where
             }
 
             if is_cycle_detected {
-                write!(serial, "[error] Dependency cycle detected on {:02X}, stopping exploration for this address\r\n", addr).ok();
+                write!(serial, "[error] Dependency cycle detected on {addr:02X}, stopping exploration for this address\r\n").ok();
                 addrs_to_remove.push(addr_idx).ok();
             } else if !all_ok {
                 addrs_to_remove.push(addr_idx).ok();
             } else { // all_ok is true
                 addrs_to_remove.push(addr_idx).ok();
             }
-        }
-        
-        if addrs_to_remove.is_empty() {
-            // No addresses were removed in this loop, something went wrong, probably a cycle
-            return Err(ExplorerError::DependencyCycle);
         }
 
         for &idx in addrs_to_remove.iter().rev() {

@@ -1,5 +1,7 @@
 //! src/compat/i2c_compat.rs
 use core::fmt::Debug;
+#[cfg(feature = "ehal_1_0")]
+use embedded_hal_1::i2c::{Error as Ehal1Error, ErrorKind as Ehal1ErrorKind}; // Add this for ehal 1.0 ErrorKind
 
 /// common I2C trait
 pub trait I2cCompat {
@@ -8,6 +10,12 @@ pub trait I2cCompat {
     fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error>;
     fn read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), Self::Error>;
     fn write_read(&mut self, addr: u8, bytes: &[u8], buffer: &mut [u8]) -> Result<(), Self::Error>;
+    /// Check if a device exists at the given I2C address.
+    /// This is typically implemented by a 1-byte write or a dummy read,
+    /// which checks for an ACK from the device.
+    fn probe(&mut self, addr: u8) -> Result<bool, Self::Error>;
+    /// Check if the error is a NACK error.
+    fn is_nack(&self, error: &Self::Error) -> bool;
 }
 
 // ========== ehal 0.2.x ==========
@@ -17,7 +25,7 @@ where
     I2C: embedded_hal_0_2::blocking::i2c::Write<Error = E>
         + embedded_hal_0_2::blocking::i2c::Read<Error = E>
         + embedded_hal_0_2::blocking::i2c::WriteRead<Error = E>,
-    E: Debug,
+    E: Debug, // Removed embedded_hal_0_2::blocking::i2c::Error
 {
     type Error = E;
 
@@ -32,6 +40,23 @@ where
     fn write_read(&mut self, addr: u8, bytes: &[u8], buffer: &mut [u8]) -> Result<(), Self::Error> {
         embedded_hal_0_2::blocking::i2c::WriteRead::write_read(self, addr, bytes, buffer)
     }
+
+    fn probe(&mut self, addr: u8) -> Result<bool, Self::Error> {
+        // For ehal 0.2.x, there's no standard way to check for NACK specifically
+        // without a custom error type that implements a `kind()` method.
+        // We'll assume any error means the device is not present or there's a bus issue.
+        // A successful 0-byte write implies the device is present.
+        match embedded_hal_0_2::blocking::i2c::Write::write(self, addr, &[]) {
+            Ok(_) => Ok(true),
+            Err(e) => Err(e), // Cannot distinguish NACK from other errors without `e.kind()`
+        }
+    }
+
+    fn is_nack(&self, _error: &Self::Error) -> bool {
+        // For ehal 0.2.x, there's no standard way to check for NACK specifically.
+        // This would require the error type `E` to provide a method for this.
+        false
+    }
 }
 
 // ========== ehal 1.0 ==========
@@ -39,6 +64,7 @@ where
 impl<I2C> I2cCompat for I2C
 where
     I2C: embedded_hal_1::i2c::I2c,
+    I2C::Error: embedded_hal_1::i2c::Error,
 {
     type Error = I2C::Error;
 
@@ -52,6 +78,23 @@ where
 
     fn write_read(&mut self, addr: u8, bytes: &[u8], buffer: &mut [u8]) -> Result<(), Self::Error> {
         embedded_hal_1::i2c::I2c::write_read(self, addr, bytes, buffer)
+    }
+
+    fn probe(&mut self, addr: u8) -> Result<bool, Self::Error> {
+        match embedded_hal_1::i2c::I2c::transaction(self, addr, &mut [embedded_hal_1::i2c::Operation::Write(&[])]) {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                if matches!(e.kind(), Ehal1ErrorKind::NoAcknowledge(_)) { // Use matches! macro with wildcard for NoAcknowledgeSource
+                    Ok(false)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    fn is_nack(&self, error: &Self::Error) -> bool {
+        matches!(error.kind(), Ehal1ErrorKind::NoAcknowledge(_)) // Use matches! macro with wildcard for NoAcknowledgeSource
     }
 }
 

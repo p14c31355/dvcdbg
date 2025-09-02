@@ -12,7 +12,6 @@ pub const I2C_MAX_DEVICES: usize = 128;
 /// provided `data`.
 fn internal_scan<I2C>(
     i2c: &mut I2C,
-    data: &[u8],
 ) -> Result<heapless::Vec<u8, I2C_MAX_DEVICES>, crate::error::ErrorKind>
 where
     I2C: crate::compat::I2cCompat,
@@ -22,13 +21,16 @@ where
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for addr in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-        match i2c.write(addr, data) {
-            Ok(_) => {
+        match i2c.probe(addr) {
+            Ok(true) => {
                 if found_addrs.push(addr).is_err() {
                     return Err(crate::error::ErrorKind::Buffer(
                         crate::error::BufferError::Overflow,
                     ));
                 }
+            }
+            Ok(false) => {
+                continue;
             }
             Err(e) => {
                 let error_kind = e.to_compat(Some(addr));
@@ -69,7 +71,7 @@ where
     crate::compat::util::write_bytes_hex_fmt(writer, &[ctrl_byte]).ok();
     core::fmt::Write::write_str(writer, " ...\r\n").ok();
 
-    let found_addrs = internal_scan(i2c, &[ctrl_byte])?;
+    let found_addrs = internal_scan(i2c)?;
 
     core::fmt::Write::write_str(writer, "Found device @ ").ok();
     crate::compat::util::write_bytes_hex_fmt(writer, &found_addrs).ok();
