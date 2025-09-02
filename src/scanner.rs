@@ -170,7 +170,7 @@ where
     let missing_cmds: heapless::Vec<u8, INIT_SEQUENCE_LEN> = init_sequence
         .iter()
         .copied()
-        .filter(|cmd| detected_cmds.binary_search(cmd).is_err())
+        .filter(|cmd| !detected_cmds.contains(cmd))
         .collect();
 
     fn log_commands<W: core::fmt::Write>(writer: &mut W, label: &str, cmds: &[u8]) {
