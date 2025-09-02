@@ -70,9 +70,11 @@ where
 {
     util::prevent_garbled(
         writer,
-        format_args!("Scanning I2C bus with a control byte..."),
+        format_args!("Scanning I2C bus with a {ctrl_byte:02X} ..."),
     );
-    internal_scan(i2c, writer, &[ctrl_byte])
+    let found_addrs = internal_scan(i2c, writer, &[ctrl_byte])?;
+    util::prevent_garbled(writer, format_args!("Found device @ {:02X}", found_addrs[0]));
+    Ok(found_addrs)
 }
 
 /// Scans the I2C bus for devices that respond to a given initialization sequence.
@@ -109,7 +111,7 @@ where
     );
     util::prevent_garbled(
         writer,
-        format_args!("Initializing scan with control byte {:02X}", ctrl_byte),
+        format_args!("Initializing scan with control byte {ctrl_byte:02X}"),
     );
 
     let found_addrs = match crate::scanner::scan_i2c(i2c, writer, ctrl_byte) {
@@ -144,13 +146,13 @@ where
     let mut log_buffer = String::<512>::new();
     write!(&mut log_buffer, "I2C Seq Scan Complete: Detected ").ok();
     for &cmd in detected_cmds.iter() {
-        write!(&mut log_buffer, "{:02X} ", cmd).ok();
+        write!(&mut log_buffer, "{cmd:02X} ").ok();
     }
     write!(&mut log_buffer, "| Missing ").ok();
     for &cmd in missing_cmds.iter() {
-        write!(&mut log_buffer, "{:02X} ", cmd).ok();
+        write!(&mut log_buffer, "{cmd:02X} ").ok();
     }
-    util::prevent_garbled(writer, format_args!("{}", log_buffer));
+    util::prevent_garbled(writer, format_args!("{log_buffer}"));
 
     Ok(detected_cmds)
 }
@@ -173,7 +175,7 @@ where
     for &addr in found_addrs.iter() {
         util::prevent_garbled(
             writer,
-            format_args!("Testing init sequence on {:02X}...", addr),
+            format_args!("Testing init sequence on {addr:02X}..."),
         );
 
         for &cmd in init_sequence.iter() {
@@ -187,7 +189,7 @@ where
 
             util::prevent_garbled(
                 writer,
-                format_args!("  Sending command {:02X} to {:02X}...", cmd, addr),
+                format_args!("  Sending command {cmd:02X} to {addr:02X}..."),
             );
 
             match i2c.write(addr, &command_data) {
@@ -199,7 +201,7 @@ where
                     }
                     util::prevent_garbled(
                         writer,
-                        format_args!("  Command {:02X} responded.", cmd),
+                        format_args!("  Command {cmd:02X} responded."),
                     );
                 }
                 Err(e) => {
@@ -207,13 +209,13 @@ where
                     if error_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
                         util::prevent_garbled(
                             writer,
-                            format_args!("  Command {:02X} no response (NACK).", cmd),
+                            format_args!("  Command {cmd:02X} no response (NACK)."),
                         );
                         continue;
                     }
                     util::prevent_garbled(
                         writer,
-                        format_args!("  Write failed for {:02X} at {:02X}: {:?}", cmd, addr, error_kind),
+                        format_args!("  Write failed for {cmd:02X} at {addr:02X}: {error_kind:?}"),
                     );
                     last_error = Some(error_kind);
                 }
