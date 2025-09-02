@@ -2,8 +2,6 @@
 
 use crate::compat::HalErrorExt;
 use crate::compat::util;
-use core::fmt::Write;
-use heapless::String;
 
 pub const I2C_SCAN_ADDR_START: u8 = 0x03;
 pub const I2C_SCAN_ADDR_END: u8 = 0x77;
@@ -105,7 +103,7 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     W: core::fmt::Write,
 {
-    util::prevent_garbled(writer, format_args!("Start I2C scan with INIT_SEQ..."));
+    let _ = core::fmt::Write::write_str(&mut *writer, "Start I2C scan with INIT_SEQ...");
     util::prevent_garbled(writer, format_args!("Initializing scan with ctrl byte {ctrl_byte:02X}"));
 
     let found_addrs = crate::scanner::scan_i2c(i2c, writer, ctrl_byte)
@@ -115,7 +113,7 @@ where
         })?;
 
     if found_addrs.is_empty() {
-        util::prevent_garbled(writer, format_args!("No devices found."));
+        let _ = core::fmt::Write::write_str(&mut *writer, "No devices found.");
         return Err(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack));
     }
 
@@ -123,7 +121,7 @@ where
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for &addr in found_addrs.iter() {
-        util::prevent_garbled(writer, format_args!("Testing init SEQ on {addr:02X}..."));
+        util::prevent_garbled(writer, format_args!("Testing init SEQ @ {addr:02X}..."));
 
         for &cmd in init_sequence.iter() {
             let command_data = [ctrl_byte, cmd];
@@ -160,7 +158,7 @@ where
         .collect();
 
     fn log_commands<W: core::fmt::Write>(writer: &mut W, label: &str, cmds: &[u8]) {
-        writeln!(writer, "{}:", label).ok();
+        core::fmt::Write::write_str(&mut *writer, label).ok();
         for &b in cmds {
             write!(writer, " ").ok();
             crate::compat::util::write_bytes_hex_fmt(writer, &[b]).ok();
