@@ -284,17 +284,23 @@ where
             if (self.init_sequence_len * 2) > CMD_BUFFER_SIZE {
                 return Err(ExecutorError::BufferOverflow);
             }
+            
             core::fmt::Write::write_str(writer, "[Info] I2C initializing for ").ok();
-            crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
+            crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).map_err(|_| ExecutorError::ExecFailed)?;
             core::fmt::Write::write_str(writer, "...\r\n").ok();
 
-            let ack_ok = Self::write_with_retry(i2c, addr, cmd, writer).is_ok();
+            let ack_ok = if cmd.is_empty() {
+    true
+} else {
+    Self::write_with_retry(i2c, addr, cmd, writer).is_ok()
+};
+
 
             if ack_ok {
                 core::fmt::Write::write_str(writer, "[Info] Device found at ").ok();
                 crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
                 core::fmt::Write::write_str(writer, ", sending init sequence...\r\n").ok();
-
+let _ = self.initialized_addrs.set(addr_idx);
                 for (i, &c) in self.init_sequence[..self.init_sequence_len]
                     .iter()
                     .enumerate()
