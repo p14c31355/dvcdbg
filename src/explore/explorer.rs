@@ -196,7 +196,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
     }
 
     fn short_delay() {
-        for _in in 0..1_000 {
+        for _ in 0..1_000 {
             core::hint::spin_loop();
         }
     }
