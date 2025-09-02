@@ -37,24 +37,22 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut target_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
-        Ok(addrs) => addrs,
-        Err(e) => {
-            write!(serial, "[E] SCAN FAIL: {:?}\r\n", e).ok();
-            return Err(ExplorerError::ExecutionFailed(e));
-        }
-    };
+    let mut target_addrs = crate::scanner::scan_i2c(i2c, serial, prefix).map_err(|e| {
+        
+        write!(serial, "[E] SCAN FAIL: {:?}\r\n", e).ok();
+        e
+    })?;
+// let len = target_addrs.len() as u8;
+// write!(serial, "[DBG] target_addrs.len = {}\r\n", len).ok();
+
+
     if target_addrs.is_empty() {
+        core::fmt::Write::write_str(serial, "No devices found.\r\n").ok();
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
     let successful_seq: heapless::Vec<u8, INIT_SEQUENCE_LEN> =
-        match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(
-            i2c,
-            serial,
-            prefix,
-            init_sequence,
-        ) {
+        match crate::scanner::scan_init_sequence(i2c, serial, prefix, init_sequence) {
             Ok(seq) => seq,
             Err(e) => {
                 write!(serial, "[E] Failed SCAN INIT: {:?}\r\n", e).ok();
@@ -62,14 +60,12 @@ where
             }
         };
 
-    let _successful_seq_len = successful_seq.len();
-
     core::fmt::Write::write_str(serial, "[I] Init scan OK\r\n").ok();
 
     let mut executor =
         crate::explore::explorer::PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(
             target_addrs[0],
-            &successful_seq,
+            &successful_seq[..],
         );
 
     let mut failed_nodes = util::BitFlags::new();
