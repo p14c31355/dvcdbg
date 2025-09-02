@@ -103,14 +103,18 @@ where
                 addr_pending[addr_idx][cmd_idx] = false;
             }
 
-            let is_cycle_detected = if all_ok {
-                sort_iter.is_cycle_detected()
-            } else {
-                false
-            };
+            let is_cycle_detected = sort_iter.is_cycle_detected();
 
-            if let Some(cmd_idx) = command_to_fail {
-                failed_nodes.set(cmd_idx).ok();
+            if all_ok && !is_cycle_detected {
+                // All commands succeeded, we're done with this address
+                addrs_to_remove.push(addr_idx).ok();
+             }
+            else {
+                // A command failed or a cycle was detected, remove this address
+                // and track the failed command.
+                if let Some(cmd_idx) = command_to_fail {
+                    failed_nodes.set(cmd_idx).ok();
+                }
             }
 
             if is_cycle_detected {
@@ -121,6 +125,7 @@ where
             } else if all_ok {
                 addrs_to_remove.push(addr_idx).ok();
             }
+            addrs_to_remove.push(addr_idx).ok();
         }
 
         for &idx in addrs_to_remove.iter().rev() {
