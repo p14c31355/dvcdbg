@@ -66,15 +66,15 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     W: core::fmt::Write,
 {
-    write!(writer, "Scanning I2C bus with a ").ok();
+    core::fmt::Write::write_str(writer, "Scanning I2C bus with a ").ok();
     crate::compat::util::write_bytes_hex_fmt(writer, &[ctrl_byte]).ok();
-    writeln!(writer, " ...").ok();
+    core::fmt::Write::write_str(writer, " ...\r\n").ok();
 
     let found_addrs = internal_scan(i2c, writer, &[ctrl_byte])?;
     
-    write!(writer, "Found device @ ").ok();
+    core::fmt::Write::write_str(writer, "Found device @ ").ok();
     crate::compat::util::write_bytes_hex_fmt(writer, &found_addrs).ok();
-    writeln!(writer).ok();
+    core::fmt::Write::write_str(writer, "\r\n").ok();
     
     Ok(found_addrs)
 }
@@ -108,13 +108,13 @@ where
     W: core::fmt::Write,
 {
     core::fmt::Write::write_str(writer, "Start I2C scan with INIT_SEQ...\r\n").ok();
-    write!(writer, "Initializing scan with ctrl byte ").ok();
+    core::fmt::Write::write_str(writer, "Initializing scan with ctrl byte ").ok();
     crate::compat::util::write_bytes_hex_fmt(writer, &[ctrl_byte]).ok();
-    writeln!(writer).ok();
+    core::fmt::Write::write_str(writer, "\r\n").ok();
 
     let found_addrs = crate::scanner::scan_i2c(i2c, writer, ctrl_byte)
         .map_err(|e| {
-            writeln!(writer, "Failed to scan I2C: {:?}", e).ok();
+            write!(writer, "Failed to scan I2C: {:?}\r\n", e).ok();
             e
         })?;
 
@@ -127,17 +127,17 @@ where
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for &addr in found_addrs.iter() {
-        write!(writer, "Testing init SEQ @ ").ok();
+        core::fmt::Write::write_str(writer, "Testing init SEQ @ ").ok();
         crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
-        writeln!(writer, "...").ok();
+        core::fmt::Write::write_str(writer, "...\r\n").ok();
 
         for &cmd in init_sequence.iter() {
             let command_data = [ctrl_byte, cmd];
-            write!(writer, "  Sending command ").ok();
+            core::fmt::Write::write_str(writer, "  Sending command ").ok();
             crate::compat::util::write_bytes_hex_fmt(writer, &[cmd]).ok();
-            write!(writer, " to ").ok();
+            core::fmt::Write::write_str(writer, " to ").ok();
             crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
-            writeln!(writer, "...").ok();
+            core::fmt::Write::write_str(writer, "...\r\n").ok();
 
             match i2c.write(addr, &command_data) {
                 Ok(_) => {
@@ -146,23 +146,23 @@ where
                             crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
                         })?;
                     }
-                    write!(writer, "  Command ").ok();
+                    core::fmt::Write::write_str(writer, "  Command ").ok();
                     crate::compat::util::write_bytes_hex_fmt(writer, &[cmd]).ok();
-                    writeln!(writer, " responded.").ok();
+                    core::fmt::Write::write_str(writer, " responded.\r\n").ok();
                 }
                 Err(e) => {
                     let error_kind = e.to_compat(Some(addr));
                     if error_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
-                        write!(writer, "  Command ").ok();
+                        core::fmt::Write::write_str(writer, "  Command ").ok();
                         crate::compat::util::write_bytes_hex_fmt(writer, &[cmd]).ok();
-                        writeln!(writer, " no response (NACK).").ok();
+                        core::fmt::Write::write_str(writer, " no response (NACK).\r\n").ok();
                         continue;
                     }
-                    write!(writer, "  Write failed for ").ok();
+                    core::fmt::Write::write_str(writer, "  Write failed for ").ok();
                     crate::compat::util::write_bytes_hex_fmt(writer, &[cmd]).ok();
-                    write!(writer, " at ").ok();
+                    core::fmt::Write::write_str(writer, " at ").ok();
                     crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                    writeln!(writer, ": {:?}.", error_kind).ok();
+                    write!(writer, ": {:?}.\r\n", error_kind).ok();
                     last_error = Some(error_kind);
                 }
             }
@@ -179,9 +179,9 @@ where
 
     fn log_commands<W: core::fmt::Write>(writer: &mut W, label: &str, cmds: &[u8]) {
         core::fmt::Write::write_str(writer, label).ok();
-        writeln!(writer).ok();
+        core::fmt::Write::write_str(writer, "\r\n").ok();
         for &b in cmds {
-            write!(writer, " ").ok();
+            core::fmt::Write::write_str(writer, " ").ok();
             crate::compat::util::write_bytes_hex_fmt(writer, &[b]).ok();
         }
     }

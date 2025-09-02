@@ -40,7 +40,7 @@ where
     let mut target_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addrs) => addrs,
         Err(e) => {
-            writeln!(serial, "[E] SCAN FAIL: {:?}", e).ok();
+            write!(serial, "[E] SCAN FAIL: {:?}\r\n", e).ok();
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
@@ -57,7 +57,7 @@ where
         ) {
             Ok(seq) => seq,
             Err(e) => {
-                writeln!(serial, "[E] Failed SCAN INIT: {:?}", e).ok();
+                write!(serial, "[E] Failed SCAN INIT: {:?}\r\n", e).ok();
                 return Err(ExplorerError::ExecutionFailed(e));
             }
         };
@@ -79,9 +79,9 @@ where
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
         for (addr_idx, &addr) in target_addrs.iter().enumerate() {
-            write!(serial, "[I] RUN ON ").ok();
+            core::fmt::Write::write_str(serial, "[I] RUN ON ").ok();
             crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
-            writeln!(serial).ok();
+            core::fmt::Write::write_str(serial, "\r\n").ok();
 
             let mut all_ok = true;
             let mut command_to_fail: Option<usize> = None;
@@ -89,14 +89,14 @@ where
             let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
                 Ok(iter) => iter,
                 Err(e) => {
-                    writeln!(serial, "[E] Failed GEN topological sort: {:?}. Aborting.", e).ok();
+                    write!(serial, "[E] Failed GEN topological sort: {:?}. Aborting.\r\n", e).ok();
                     return Err(e);
                 }
             };
             for cmd_idx in sort_iter.by_ref() {
                 let cmd_bytes = explorer.nodes[cmd_idx].bytes;
                 if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, cmd_idx).is_err() {
-                    writeln!(serial, "[warn] Command {} failed on {:02X}", cmd_idx, addr).ok();
+                    write!(serial, "[warn] Command {} failed on {:02X}\r\n", cmd_idx, addr).ok();
                     all_ok = false;
                     command_to_fail = Some(cmd_idx);
                     break;
@@ -114,9 +114,9 @@ where
             }
 
             if is_cycle_detected {
-                write!(serial, "[error] Dependency cycle detected on ").ok();
+                core::fmt::Write::write_str(serial, "[error] Dependency cycle detected on ").ok();
                 crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
-                writeln!(serial, ", stopping exploration for this address").ok();
+                core::fmt::Write::write_str(serial, ", stopping exploration for this address\r\n").ok();
             } else if all_ok {
                 addrs_to_remove.push(addr_idx).ok();
             }
@@ -168,7 +168,7 @@ where
     let target_addr = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addr) => addr,
         Err(e) => {
-            writeln!(serial, "[error] Failed to scan I2C: {:?}", e).ok();
+            write!(serial, "[error] Failed to scan I2C: {:?}\r\n", e).ok();
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
@@ -180,14 +180,14 @@ where
     let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
         Ok(iter) => iter,
         Err(e) => {
-            writeln!(serial, "[E] Failed to GEN topological sort: {:?}. Aborting.", e).ok();
+            write!(serial, "[E] Failed to GEN topological sort: {:?}. Aborting.\r\n", e).ok();
             return Err(e);
         }
     };
 
-    write!(serial, "[explorer] Obtained one topological sort. Executing on ").ok();
+    core::fmt::Write::write_str(serial, "[explorer] Obtained one topological sort. Executing on ").ok();
     crate::compat::util::write_bytes_hex_fmt(serial, &[target_addr[0]]).ok();
-    writeln!(serial, "...").ok();
+    core::fmt::Write::write_str(serial, "...\r\n").ok();
 
     let empty_seq: &[u8] = &[];
     let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, empty_seq);
@@ -207,9 +207,9 @@ where
         return Err(ExplorerError::DependencyCycle);
     }
 
-    write!(serial, "[explorer] Single sequence execution complete for ").ok();
+    core::fmt::Write::write_str(serial, "[explorer] Single sequence execution complete for ").ok();
     crate::compat::util::write_bytes_hex_fmt(serial, &[target_addr[0]]).ok();
-    writeln!(serial, ".").ok();
+    core::fmt::Write::write_str(serial, ".\r\n").ok();
 
     Ok(())
 }

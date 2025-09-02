@@ -239,11 +239,11 @@ where
 {
     match executor.exec(i2c, addr, cmd_bytes, writer) {
         Ok(_) => {
-            write!(writer, "[E] OK {cmd_idx}\r\n").ok();
+            write!(writer, "[E] OK {}\r\n", cmd_idx).ok();
             Ok(())
         }
         Err(e) => {
-            write!(writer, "[E] FAIL {cmd_idx}: {:?}\r\n", e).ok();
+            write!(writer, "[E] FAIL {}: {:?}\r\n", cmd_idx, e).ok();
             Err(e.into())
         }
     }
@@ -276,16 +276,16 @@ where
             if (self.init_sequence_len * 2) > CMD_BUFFER_SIZE {
                 return Err(ExecutorError::BufferOverflow);
             }
-            write!(writer, "[Info] I2C initializing for ").ok();
+            core::fmt::Write::write_str(writer, "[Info] I2C initializing for ").ok();
             crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
-            writeln!(writer, "...").ok();
+            core::fmt::Write::write_str(writer, "...\r\n").ok();
 
             let ack_ok = Self::write_with_retry(i2c, addr, &[], writer).is_ok();
 
             if ack_ok {
-                write!(writer, "[Info] Device found at ").ok();
+                core::fmt::Write::write_str(writer, "[Info] Device found at ").ok();
                 crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                writeln!(writer, ", sending init sequence...").ok();
+                core::fmt::Write::write_str(writer, ", sending init sequence...\r\n").ok();
                 
                 for (i, &c) in self.init_sequence[..self.init_sequence_len]
                     .iter()
@@ -309,9 +309,9 @@ where
                     .set(addr_idx)
                     .map_err(ExecutorError::BitFlagsError)?;
                 
-                write!(writer, "[Info] I2C initialized for ").ok();
+                core::fmt::Write::write_str(writer, "[Info] I2C initialized for ").ok();
                 crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                writeln!(writer).ok();
+                core::fmt::Write::write_str(writer, "\r\n").ok();
             }
         }
 
