@@ -37,9 +37,9 @@ pub struct TopologicalIter<'a, const N: usize, const MAX_DEPS_TOTAL: usize> {
 }
 
 impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX_DEPS_TOTAL> {
-    const _ASSERT_N_LE_256: () = assert!(
-        N <= 256,
-        "TopologicalIter uses a u8 bitmask, so N cannot exceed 256"
+    const _ASSERT_N_LE_128: () = assert!(
+        N <= 128,
+        "TopologicalIter uses a 128-bit BitFlags, so N cannot exceed 128"
     );
 
     pub fn new(
