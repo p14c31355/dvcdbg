@@ -138,7 +138,7 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
         self.visited_count += 1;
 
         let start_offset = self.adj_list_rev_offsets[u] as usize;
-        let end_offset = if u + 1 < self.adj_list_rev_offsets.len() {
+        let end_offset = if u + 1 < self.nodes.len() {
             self.adj_list_rev_offsets[u + 1] as usize
         } else {
             MAX_DEPS_TOTAL
