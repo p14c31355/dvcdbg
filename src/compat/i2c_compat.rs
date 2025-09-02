@@ -81,10 +81,15 @@ where
     }
 
     fn probe(&mut self, addr: u8) -> Result<bool, Self::Error> {
-        match embedded_hal_1::i2c::I2c::transaction(self, addr, &mut [embedded_hal_1::i2c::Operation::Write(&[])]) {
+        match embedded_hal_1::i2c::I2c::transaction(
+            self,
+            addr,
+            &mut [embedded_hal_1::i2c::Operation::Write(&[])],
+        ) {
             Ok(_) => Ok(true),
             Err(e) => {
-                if matches!(e.kind(), Ehal1ErrorKind::NoAcknowledge(_)) { // Use matches! macro with wildcard for NoAcknowledgeSource
+                if matches!(e.kind(), Ehal1ErrorKind::NoAcknowledge(_)) {
+                    // Use matches! macro with wildcard for NoAcknowledgeSource
                     Ok(false)
                 } else {
                     Err(e)

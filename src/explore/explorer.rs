@@ -75,10 +75,10 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
 
         // Pass 2: Convert counts to cumulative offsets and populate the flat array
         let mut current_offset: u16 = 0;
-        for i in 0..len {
-            let count = rev_adj_offsets[i];
-            rev_adj_offsets[i] = current_offset;
-            current_offset = current_offset.saturating_add(count);
+        for count in rev_adj_offsets.iter_mut().take(len) {
+            let temp_count = *count;
+            *count = current_offset;
+            current_offset = current_offset.saturating_add(temp_count);
         }
         if current_offset as usize > MAX_DEPS_TOTAL {
             return Err(ExplorerError::BufferOverflow);
@@ -100,8 +100,8 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
         }
 
         let mut queue: heapless::Vec<u8, N> = heapless::Vec::new();
-        for i in 0..len {
-            if in_degree[i] == 0 && !failed_nodes.get(i).unwrap_or(false) {
+        for (i, &degree) in in_degree.iter().enumerate().take(len) {
+            if degree == 0 && !failed_nodes.get(i).unwrap_or(false) {
                 queue
                     .push(i as u8)
                     .map_err(|_| ExplorerError::BufferOverflow)?;

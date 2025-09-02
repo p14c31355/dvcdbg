@@ -45,7 +45,8 @@ where
     }
 
     let mut failed_nodes = util::BitFlags::new();
-    let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, init_sequence);
+    let mut executor =
+        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, init_sequence);
 
     loop {
         if target_addrs.is_empty() {
@@ -68,7 +69,7 @@ where
                     continue;
                 }
             };
-            
+
             let mut all_ok = true;
             let mut command_to_fail = None;
 
@@ -93,7 +94,8 @@ where
                 addrs_to_remove.push(addr_idx).ok();
             } else if !all_ok {
                 addrs_to_remove.push(addr_idx).ok();
-            } else { // all_ok is true
+            } else {
+                // all_ok is true
                 addrs_to_remove.push(addr_idx).ok();
             }
         }
@@ -140,7 +142,8 @@ where
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
-    if target_addr.is_empty() { // target_addr is a Vec<u8> here
+    if target_addr.is_empty() {
+        // target_addr is a Vec<u8> here
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
