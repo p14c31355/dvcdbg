@@ -186,13 +186,12 @@ where
     log_commands(writer, "\r\nCommands with no response:", &missing_cmds);
 
     if detected_cmds.is_empty() {
-    if let Some(_err) = last_error {
-        Err(last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)))
+        if let Some(_err) = last_error {
+            Err(last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)))
+        } else {
+            Ok(detected_cmds)
+        }
     } else {
         Ok(detected_cmds)
     }
-} else {
-    Ok(detected_cmds)
-}
-
 }

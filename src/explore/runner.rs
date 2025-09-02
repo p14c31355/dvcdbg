@@ -67,6 +67,10 @@ where
 
     let mut failed_nodes = util::BitFlags::new();
     let num_nodes = explorer.nodes.len();
+    let mut addr_pending: heapless::Vec<[bool; N], I2C_MAX_DEVICES> = heapless::Vec::new();
+    for _ in 0..target_addrs.len() {
+        addr_pending.push([true; N]).ok();
+    }
 
     loop {
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
@@ -79,29 +83,24 @@ where
             let mut all_ok = true;
             let mut command_to_fail: Option<usize> = None;
 
-            let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
-                Ok(iter) => iter,
-                Err(e) => {
-                    write!(
-                        serial,
-                        "[E] Failed GEN topological sort: {e}. Aborting.\r\n"
-                    )
-                    .ok();
-                    return Err(e);
-                }
-            };
+            let mut sort_iter = explorer.topological_iter(&failed_nodes).map_err(|e| {
+                write!(serial, "[E] Failed GEN topological sort: {e}\r\n").ok();
+                e
+            })?;
             for cmd_idx in sort_iter.by_ref() {
+                if !addr_pending[addr_idx][cmd_idx] {
+                    continue;
+                }
+
                 let cmd_bytes = explorer.nodes[cmd_idx].bytes;
                 if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, cmd_idx).is_err() {
-                    write!(
-                        serial,
-                        "[warn] Command {cmd_idx} failed on {addr:02X}\r\n"
-                    )
-                    .ok();
+                    write!(serial, "[warn] Command {cmd_idx} failed on {addr:02X}\r\n").ok();
                     all_ok = false;
                     command_to_fail = Some(cmd_idx);
                     break;
                 }
+
+                addr_pending[addr_idx][cmd_idx] = false;
             }
 
             let is_cycle_detected = if all_ok {
@@ -126,6 +125,7 @@ where
 
         for &idx in addrs_to_remove.iter().rev() {
             target_addrs.swap_remove(idx);
+            addr_pending.swap_remove(idx);
         }
 
         let all_failed = (0..num_nodes).all(|i| failed_nodes.get(i).unwrap_or(false));

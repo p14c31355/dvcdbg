@@ -61,11 +61,11 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        for &b in buf {
-            self.0.write(&[b])?;
-        }
-        Ok(buf.len())
-    }
+                for &b in buf {
+                    self.0.write(&[b])?;
+                }
+                Ok(buf.len())
+            }
             fn flush(&mut self) -> Result<(), Self::Error> {
                 self.0.flush()
             }
@@ -76,12 +76,12 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for &b in s.as_bytes() {
-            self.0.write(&[b]).map_err(|_| core::fmt::Error)?;
-        }
-        self.0.flush().map_err(|_| core::fmt::Error)?;
-        Ok(())
-    }
+                for &b in s.as_bytes() {
+                    self.0.write(&[b]).map_err(|_| core::fmt::Error)?;
+                }
+                self.0.flush().map_err(|_| core::fmt::Error)?;
+                Ok(())
+            }
         }
     };
 }
