@@ -48,12 +48,23 @@ pub fn write_bytes_hex_line<W: Write>(w: &mut W, bytes: &[u8]) -> Result<(), W::
 
 pub fn write_bytes_hex_fmt<W: core::fmt::Write>(w: &mut W, bytes: &[u8]) -> core::fmt::Result {
     for (i, &b) in bytes.iter().enumerate() {
-        write!(w, "{b:02X}")?;
+        let hi = b >> 4;
+        let lo = b & 0x0F;
+        w.write_char(nibble_to_hex(hi))?;
+        w.write_char(nibble_to_hex(lo))?;
         if i != bytes.len() - 1 {
-            write!(w, " ")?;
+            w.write_char(' ')?;
         }
     }
     Ok(())
+}
+
+fn nibble_to_hex(n: u8) -> char {
+    match n {
+        0..=9 => (b'0' + n) as char,
+        10..=15 => (b'A' + n - 10) as char,
+        _ => '?',
+    }
 }
 
 // bitmask utility

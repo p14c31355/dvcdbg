@@ -37,8 +37,8 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut target_addrs = crate::scanner::scan_i2c(i2c, serial, prefix).inspect_err(|&e| {
-        write!(serial, "[E] SCAN FAIL: {e}\r\n").ok();
+    let mut target_addrs = crate::scanner::scan_i2c(i2c, serial, prefix).inspect_err(|_e| {
+        write!(serial, "[E] SCAN FAIL:\r\n").ok();
     })?;
     // let len = target_addrs.len() as u8;
     // write!(serial, "[DBG] target_addrs.len = {}\r\n", len).ok();

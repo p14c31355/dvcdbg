@@ -136,7 +136,7 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
             return None;
         }
 
-        let u = self.queue.pop().unwrap() as usize;
+        let u = self.queue.pop()? as usize;
         self.visited_count += 1;
 
         let start_offset = self.adj_list_rev_offsets[u] as usize;
@@ -288,7 +288,7 @@ where
             crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
             core::fmt::Write::write_str(writer, "...\r\n").ok();
 
-            let ack_ok = Self::write_with_retry(i2c, addr, &[], writer).is_ok();
+            let ack_ok = Self::write_with_retry(i2c, addr, cmd, writer).is_ok();
 
             if ack_ok {
                 core::fmt::Write::write_str(writer, "[Info] Device found at ").ok();
