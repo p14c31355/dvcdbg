@@ -88,10 +88,9 @@ where
                 failed_nodes.set(cmd_idx).ok();
             }
 
-            if is_cycle_detected {
-                write!(serial, "[error] Dependency cycle detected on {addr:02X}, stopping exploration for this address\r\n").ok();
+            if command_to_fail.is_none() && !is_cycle_detected {
+                addrs_to_remove.push(addr_idx).ok();
             }
-            addrs_to_remove.push(addr_idx).ok();
         }
 
         for &idx in addrs_to_remove.iter().rev() {
