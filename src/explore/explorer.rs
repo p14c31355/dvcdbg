@@ -289,8 +289,8 @@ where
             crate::compat::util::write_bytes_hex_fmt(writer, &[addr])
                 .map_err(|_| ExecutorError::ExecFailed)?;
             core::fmt::Write::write_str(writer, "...\r\n").ok();
-
-            let ack_ok = if cmd.is_empty() {
+            let ack_ok = Self::write_with_retry(i2c, addr, &[], writer).is_ok();
+            if cmd.is_empty() {
                 true
             } else {
                 Self::write_with_retry(i2c, addr, cmd, writer).is_ok()
