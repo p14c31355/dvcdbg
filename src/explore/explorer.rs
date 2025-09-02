@@ -53,7 +53,6 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
 
         let mut in_degree: [u8; N] = [0; N];
         let mut adj_list_rev_flat: [u8; MAX_DEPS_TOTAL] = [0; MAX_DEPS_TOTAL];
-        // Reuse this buffer for both counts and offsets
         let mut rev_adj_offsets: [u16; N] = [0; N];
         let mut total_non_failed = 0;
 
@@ -63,10 +62,13 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
                 total_non_failed += 1;
                 for &dep_idx in node.deps.iter() {
                     let dep_idx_usize = dep_idx as usize;
-                    if dep_idx_usize >= N {
+                    if dep_idx_usize >= len {
+                        // Changed from N to len for correct bounds check
                         return Err(ExplorerError::InvalidDependencyIndex);
                     }
-                    in_degree[i] = in_degree[i].saturating_add(1);
+                    // Corrected: Increment in_degree of the dependency, not the current node
+                    in_degree[dep_idx_usize] = in_degree[dep_idx_usize].saturating_add(1);
+                    // Corrected: Add current node 'i' to the reverse adjacency list of its dependency 'dep_idx_usize'
                     rev_adj_offsets[dep_idx_usize] =
                         rev_adj_offsets[dep_idx_usize].saturating_add(1);
                 }
@@ -94,7 +96,7 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
             for &dep_idx in node.deps.iter() {
                 let dep_idx_usize = dep_idx as usize;
                 let write_pos = write_pointers[dep_idx_usize] as usize;
-                adj_list_rev_flat[write_pos] = i as u8;
+                adj_list_rev_flat[write_pos] = i as u8; // Store 'i' as a node that depends on 'dep_idx_usize'
                 write_pointers[dep_idx_usize] = write_pointers[dep_idx_usize].saturating_add(1);
             }
         }

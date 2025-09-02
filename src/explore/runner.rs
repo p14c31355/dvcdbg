@@ -74,7 +74,16 @@ where
 
             for cmd_idx in sort_iter.by_ref() {
                 let cmd_bytes = explorer.nodes[cmd_idx].bytes;
-                if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, cmd_idx).is_err() {
+                if super::explorer::exec_log_cmd(
+                    i2c,
+                    &mut executor,
+                    serial,
+                    addr,
+                    cmd_bytes,
+                    cmd_idx,
+                )
+                .is_err()
+                {
                     write!(serial, "[warn] Command {cmd_idx} failed on {addr:02X}\r\n").ok();
 
                     command_to_fail = Some(cmd_idx);
@@ -165,7 +174,7 @@ where
     let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, empty_seq);
 
     for cmd_idx in sort_iter.by_ref() {
-        exec_log_cmd(
+        super::explorer::exec_log_cmd(
             i2c,
             &mut executor,
             serial,
