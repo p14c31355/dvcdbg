@@ -105,25 +105,14 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     W: core::fmt::Write,
 {
-    util::prevent_garbled(
-        writer,
-        format_args!("Start I2C scan with INIT_SEQ..."),
-    );
-    util::prevent_garbled(
-        writer,
-        format_args!("Initializing scan with ctrl byte {ctrl_byte:02X}"),
-    );
+    util::prevent_garbled(writer, format_args!("Start I2C scan with INIT_SEQ..."));
+    util::prevent_garbled(writer, format_args!("Initializing scan with ctrl byte {ctrl_byte:02X}"));
 
-    let found_addrs = match crate::scanner::scan_i2c(i2c, writer, ctrl_byte) {
-        Ok(addrs) => addrs,
-        Err(e) => {
-            util::prevent_garbled(
-                writer,
-                format_args!("Failed to scan I2C: {e:?}"),
-            );
-            return Err(e);
-        }
-    };
+    let found_addrs = crate::scanner::scan_i2c(i2c, writer, ctrl_byte)
+        .map_err(|e| {
+            util::prevent_garbled(writer, format_args!("Failed to scan I2C: {e:?}"));
+            e
+        })?;
 
     if found_addrs.is_empty() {
         util::prevent_garbled(writer, format_args!("No devices found."));
@@ -134,24 +123,11 @@ where
     let mut last_error: Option<crate::error::ErrorKind> = None;
 
     for &addr in found_addrs.iter() {
-        util::prevent_garbled(
-            writer,
-            format_args!("Testing init SEQ on {addr:02X}..."),
-        );
+        util::prevent_garbled(writer, format_args!("Testing init SEQ on {addr:02X}..."));
 
         for &cmd in init_sequence.iter() {
-            let mut command_data = heapless::Vec::<u8, 3>::new(); // ctrl_byte + cmd
-            command_data.push(ctrl_byte).map_err(|_| {
-                crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
-            })?;
-            command_data.push(cmd).map_err(|_| {
-                crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
-            })?;
-
-            util::prevent_garbled(
-                writer,
-                format_args!("  Sending command {cmd:02X} to {addr:02X}..."),
-            );
+            let command_data = [ctrl_byte, cmd];
+            util::prevent_garbled(writer, format_args!("  Sending command {cmd:02X} to {addr:02X}..."));
 
             match i2c.write(addr, &command_data) {
                 Ok(_) => {
@@ -160,76 +136,41 @@ where
                             crate::error::ErrorKind::Buffer(crate::error::BufferError::Overflow)
                         })?;
                     }
-                    util::prevent_garbled(
-                        writer,
-                        format_args!("  Command {cmd:02X} responded."),
-                    );
+                    util::prevent_garbled(writer, format_args!("  Command {cmd:02X} responded."));
                 }
                 Err(e) => {
                     let error_kind = e.to_compat(Some(addr));
                     if error_kind == crate::error::ErrorKind::I2c(crate::error::I2cError::Nack) {
-                        util::prevent_garbled(
-                            writer,
-                            format_args!("  Command {cmd:02X} no response (NACK)."),
-                        );
+                        util::prevent_garbled(writer, format_args!("  Command {cmd:02X} no response (NACK)."));
                         continue;
                     }
-                    util::prevent_garbled(
-                        writer,
-                        format_args!("  Write failed for {cmd:02X} at {addr:02X}: {error_kind:?}"),
-                    );
+                    util::prevent_garbled(writer, format_args!("  Write failed for {cmd:02X} at {addr:02X}: {error_kind:?}"));
                     last_error = Some(error_kind);
                 }
             }
         }
     }
 
-    let mut missing_cmds = heapless::Vec::<u8, INIT_SEQUENCE_LEN>::new();
-    let mut sorted_detected = detected_cmds.clone();
-    sorted_detected.sort_unstable();
-    for &b in init_sequence {
-        if sorted_detected.binary_search(&b).is_err() {
-            if missing_cmds.push(b).is_err() {
-                writeln!(
-                    writer,
-                    "[W] Missing commands buffer full, list truncated."
-                )
-                .ok();
-                break;
-            }
+    detected_cmds.sort_unstable();
+
+    let missing_cmds: heapless::Vec<u8, INIT_SEQUENCE_LEN> = init_sequence
+        .iter()
+        .copied()
+        .filter(|&cmd| !detected_cmds.contains(&cmd))
+        .collect();
+
+    fn log_commands<W: core::fmt::Write>(writer: &mut W, label: &str, cmds: &[u8]) {
+        writeln!(writer, "{}:", label).ok();
+        for &b in cmds {
+            write!(writer, " ").ok();
+            crate::compat::util::write_bytes_hex_fmt(writer, &[b]).ok();
         }
-    }
-
-    writeln!(writer, "Expected sequence:").ok();
-    for b in init_sequence {
-        write!(writer, " ").ok();
-        crate::compat::util::write_bytes_hex_fmt(writer, &[*b]).ok();
         writeln!(writer).ok();
     }
-    writeln!(writer).ok();
 
-    writeln!(writer, "Commands with response:").ok();
-    let mut detected_cmds_for_log = heapless::Vec::<u8, 64>::new();
-    for &cmd in detected_cmds.iter() {
-        if detected_cmds_for_log.push(cmd).is_err() {
-            // If the buffer overflows, truncate the list for logging
-            break;
-        }
-    }
-    for b in &detected_cmds_for_log {
-        write!(writer, " ").ok();
-        crate::compat::util::write_bytes_hex_fmt(writer, &[*b]).ok();
-        writeln!(writer).ok();
-    }
-    writeln!(writer).ok();
-
-    writeln!(writer, "Commands with no response:").ok();
-    for b in &missing_cmds {
-        write!(writer, " ").ok();
-        crate::compat::util::write_bytes_hex_fmt(writer, &[*b]).ok();
-        writeln!(writer).ok();
-    }
-    writeln!(writer).ok();
+    log_commands(writer, "Expected sequence", init_sequence);
+    log_commands(writer, "Commands with response", &detected_cmds);
+    log_commands(writer, "Commands with no response", &missing_cmds);
 
     if detected_cmds.is_empty() {
         Err(last_error.unwrap_or(crate::error::ErrorKind::I2c(crate::error::I2cError::Nack)))
