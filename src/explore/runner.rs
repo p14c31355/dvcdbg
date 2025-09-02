@@ -38,13 +38,11 @@ where
     S: core::fmt::Write,
 {
     let mut target_addrs = crate::scanner::scan_i2c(i2c, serial, prefix).map_err(|e| {
-        
         write!(serial, "[E] SCAN FAIL: {:?}\r\n", e).ok();
         e
     })?;
-// let len = target_addrs.len() as u8;
-// write!(serial, "[DBG] target_addrs.len = {}\r\n", len).ok();
-
+    // let len = target_addrs.len() as u8;
+    // write!(serial, "[DBG] target_addrs.len = {}\r\n", len).ok();
 
     if target_addrs.is_empty() {
         core::fmt::Write::write_str(serial, "No devices found.\r\n").ok();

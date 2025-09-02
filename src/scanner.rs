@@ -167,8 +167,6 @@ where
         }
     }
 
-    detected_cmds.sort_unstable();
-
     let missing_cmds: heapless::Vec<u8, INIT_SEQUENCE_LEN> = init_sequence
         .iter()
         .copied()
