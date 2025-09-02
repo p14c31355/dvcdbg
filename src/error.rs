@@ -131,6 +131,8 @@ pub enum ExecutorError {
     BufferOverflow,
     /// An error occurred in the BitFlags utility.
     BitFlagsError(BitFlagsError),
+    /// An error occurred in the explorer module.
+    Explorer(ExplorerError),
 }
 
 impl From<ExecutorError> for ExplorerError {
@@ -142,6 +144,7 @@ impl From<ExecutorError> for ExplorerError {
             }
             ExecutorError::BufferOverflow => ExplorerError::BufferOverflow,
             ExecutorError::BitFlagsError(e) => ExplorerError::BitFlagsError(e),
+            ExecutorError::Explorer(e) => e,
         }
     }
 }
@@ -159,6 +162,7 @@ impl fmt::Display for ExecutorError {
             ExecutorError::ExecFailed => f.write_str("ExecFailed"),
             ExecutorError::BufferOverflow => f.write_str("BufferOverflow"),
             ExecutorError::BitFlagsError(e) => write!(f, "BitFlagsError: {e:?}"),
+            ExecutorError::Explorer(e) => write!(f, "ExplorerError: {e}"),
         }
     }
 }

@@ -90,7 +90,7 @@ impl Default for BitFlags {
 }
 
 impl BitFlags {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { bytes: [0u8; 16] }
     }
 
@@ -129,6 +129,14 @@ impl BitFlags {
         let byte = idx / 8;
         let bit = idx % 8;
         Ok((self.bytes[byte] & (1 << bit)) != 0)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bytes.iter().all(|&b| b == 0)
+    }
+
+    pub fn clear_all(&mut self) {
+        self.bytes.fill(0);
     }
 }
 
