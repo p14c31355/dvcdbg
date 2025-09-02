@@ -37,43 +37,29 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut target_addrs = crate::scanner::scan_i2c(i2c, serial, prefix).inspect_err(|_e| {
-        write!(serial, "[E] SCAN FAIL:\r\n").ok();
-    })?;
-    // let len = target_addrs.len() as u8;
-    // write!(serial, "[DBG] target_addrs.len = {}\r\n", len).ok();
+    let mut target_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
+        Ok(addrs) => addrs,
+        Err(e) => {
+            write!(serial, "[E] Failed to scan I2C: {e}\r\n").ok();
+            return Err(ExplorerError::DeviceNotFound(e));
+        }
+    };
 
     if target_addrs.is_empty() {
-        core::fmt::Write::write_str(serial, "No devices found.\r\n").ok();
+        write!(serial, "[I] Init scan OK: No devices found\r\n").ok();
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
-    let successful_seq: heapless::Vec<u8, INIT_SEQUENCE_LEN> =
-        match crate::scanner::scan_init_sequence(i2c, serial, prefix, init_sequence) {
-            Ok(seq) => seq,
-            Err(e) => {
-                write!(serial, "[E] Failed SCAN INIT: {e}\r\n").ok();
-                return Err(ExplorerError::ExecutionFailed(e));
-            }
-        };
-
-    core::fmt::Write::write_str(serial, "[I] Init scan OK\r\n").ok();
-
-    let mut executor =
-        crate::explore::explorer::PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(
-            target_addrs[0],
-            &successful_seq[..],
-        );
-
     let mut failed_nodes = util::BitFlags::new();
-    let num_nodes = explorer.nodes.len();
-    let mut addr_pending: heapless::Vec<[bool; N], I2C_MAX_DEVICES> = heapless::Vec::new();
-    for _ in 0..target_addrs.len() {
-        addr_pending.push([true; N]).ok();
-    }
+    let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, init_sequence);
 
     loop {
-        let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
+        if target_addrs.is_empty() {
+            write!(serial, "[I] All valid addresses explored. Done.\r\n").ok();
+            return Ok(());
+        }
+
+        let mut addrs_to_remove = heapless::Vec::<usize, { I2C_MAX_DEVICES }>::new();
 
         for (addr_idx, &addr) in target_addrs.iter().enumerate() {
             core::fmt::Write::write_str(serial, "[I] RUN ON ").ok();
@@ -81,66 +67,58 @@ where
             core::fmt::Write::write_str(serial, "\r\n").ok();
 
             let mut all_ok = true;
-            let mut command_to_fail: Option<usize> = None;
+            let mut command_to_fail = None;
 
-            let mut sort_iter = explorer.topological_iter(&failed_nodes).map_err(|e| {
-                write!(serial, "[E] Failed GEN topological sort: {e}\r\n").ok();
-                e
-            })?;
+            let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
+                Ok(iter) => iter,
+                Err(e) => {
+                    write!(serial, "[E] Failed GEN topological sort: {}\r\n", e).ok();
+                    continue;
+                }
+            };
+
+            let mut addr_pending = [true; N];
+
             for cmd_idx in sort_iter.by_ref() {
-                if !addr_pending[addr_idx][cmd_idx] {
+                if !addr_pending[cmd_idx] {
                     continue;
                 }
 
                 let cmd_bytes = explorer.nodes[cmd_idx].bytes;
                 if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, cmd_idx).is_err() {
-                    write!(serial, "[warn] Command {cmd_idx} failed on {addr:02X}\r\n").ok();
+                    write!(serial, "[warn] Command {} failed on {:02X}\r\n", cmd_idx, addr).ok();
                     all_ok = false;
                     command_to_fail = Some(cmd_idx);
                     break;
                 }
-
-                addr_pending[addr_idx][cmd_idx] = false;
+                addr_pending[cmd_idx] = false;
             }
 
             let is_cycle_detected = sort_iter.is_cycle_detected();
 
-            if all_ok && !is_cycle_detected {
-                // All commands succeeded, we're done with this address
-                addrs_to_remove.push(addr_idx).ok();
-             }
-            else {
-                // A command failed or a cycle was detected, remove this address
-                // and track the failed command.
-                if let Some(cmd_idx) = command_to_fail {
-                    failed_nodes.set(cmd_idx).ok();
-                }
+            if let Some(cmd_idx) = command_to_fail {
+                failed_nodes.set(cmd_idx).ok();
             }
 
             if is_cycle_detected {
-                core::fmt::Write::write_str(serial, "[error] Dependency cycle detected on ").ok();
-                crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
-                core::fmt::Write::write_str(serial, ", stopping exploration for this address\r\n")
-                    .ok();
-            } else if all_ok {
+                write!(serial, "[error] Dependency cycle detected on {:02X}, stopping exploration for this address\r\n", addr).ok();
+                addrs_to_remove.push(addr_idx).ok();
+            } else if !all_ok {
+                addrs_to_remove.push(addr_idx).ok();
+            } else { // all_ok is true
                 addrs_to_remove.push(addr_idx).ok();
             }
-            addrs_to_remove.push(addr_idx).ok();
+        }
+        
+        if addrs_to_remove.is_empty() {
+            // No addresses were removed in this loop, something went wrong, probably a cycle
+            return Err(ExplorerError::DependencyCycle);
         }
 
         for &idx in addrs_to_remove.iter().rev() {
             target_addrs.swap_remove(idx);
-            addr_pending.swap_remove(idx);
-        }
-
-        let all_failed = (0..num_nodes).all(|i| failed_nodes.get(i).unwrap_or(false));
-        if target_addrs.is_empty() || all_failed {
-            break;
         }
     }
-
-    core::fmt::Write::write_str(serial, "[I] Explorer finished\r\n").ok();
-    Ok(())
 }
 
 #[macro_export]
@@ -179,7 +157,7 @@ where
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
-    if target_addr.is_empty() {
+    if target_addr.is_empty() { // target_addr is a Vec<u8> here
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
