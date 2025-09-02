@@ -64,9 +64,9 @@ where
 
     let _successful_seq_len = successful_seq.len();
 
-    util::prevent_garbled(
+    let _ = core::fmt::Write::write_str(
         serial,
-        format_args!("[I] Init scan OK"),
+        "[I] Init scan OK\r\n",
     );
 
     let mut executor =
@@ -142,7 +142,7 @@ where
         }
     }
 
-    util::prevent_garbled(serial, format_args!("[I] Explorer finished"));
+    let _ = core::fmt::Write::write_str(serial, "[I] Explorer finished\r\n");
     Ok(())
 }
 
@@ -173,9 +173,9 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    util::prevent_garbled(
+    let _ = core::fmt::Write::write_str(
         serial,
-        format_args!("[explorer] Attempting to get one topological sort..."),
+        "[exprore] Attempting to get 1 init seq ...\r\n"
     );
 
     let target_addr = match crate::scanner::scan_i2c(i2c, serial, prefix) {
@@ -195,7 +195,7 @@ where
         Err(e) => {
             util::prevent_garbled(
                 serial,
-                format_args!("[error] Failed to generate topological sort: {e}. Aborting."),
+                format_args!("[E] Failed to GEN topological sort: {e}. Aborting."),
             );
             return Err(e);
         }
@@ -223,7 +223,7 @@ where
         )?;
     }
     if sort_iter.is_cycle_detected() {
-        util::prevent_garbled(serial, format_args!("[error] Dependency cycle detected!"));
+        let _ = core::fmt::Write::write_str(serial, "[error] Dependency cycle detected!\r\n");
         return Err(ExplorerError::DependencyCycle);
     }
 
