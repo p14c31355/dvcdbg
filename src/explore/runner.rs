@@ -40,7 +40,7 @@ where
     let mut target_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addrs) => addrs,
         Err(e) => {
-            util::prevent_garbled(serial, format_args!("[E] SCAN FAIL: {e}"));
+            writeln!(serial, "[E] SCAN FAIL: {:?}", e).ok();
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
@@ -57,17 +57,14 @@ where
         ) {
             Ok(seq) => seq,
             Err(e) => {
-                util::prevent_garbled(serial, format_args!("[E] Failed SCAN INIT: {e}"));
+                writeln!(serial, "[E] Failed SCAN INIT: {:?}", e).ok();
                 return Err(ExplorerError::ExecutionFailed(e));
             }
         };
 
     let _successful_seq_len = successful_seq.len();
 
-    let _ = core::fmt::Write::write_str(
-        serial,
-        "[I] Init scan OK\r\n",
-    );
+    core::fmt::Write::write_str(serial, "[I] Init scan OK\r\n").ok();
 
     let mut executor =
         crate::explore::explorer::PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(
@@ -82,7 +79,9 @@ where
         let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
 
         for (addr_idx, &addr) in target_addrs.iter().enumerate() {
-            util::prevent_garbled(serial, format_args!("[I] RUN ON {addr:02X}"));
+            write!(serial, "[I] RUN ON ").ok();
+            crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
+            writeln!(serial).ok();
 
             let mut all_ok = true;
             let mut command_to_fail: Option<usize> = None;
@@ -90,20 +89,14 @@ where
             let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
                 Ok(iter) => iter,
                 Err(e) => {
-                    util::prevent_garbled(
-                        serial,
-                        format_args!("[E] Failed GEN topological sort: {e}. Aborting."),
-                    );
+                    writeln!(serial, "[E] Failed GEN topological sort: {:?}. Aborting.", e).ok();
                     return Err(e);
                 }
             };
             for cmd_idx in sort_iter.by_ref() {
                 let cmd_bytes = explorer.nodes[cmd_idx].bytes;
                 if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, cmd_idx).is_err() {
-                    util::prevent_garbled(
-                        serial,
-                        format_args!("[warn] Command {cmd_idx} failed on {addr:02X}"),
-                    );
+                    writeln!(serial, "[warn] Command {} failed on {:02X}", cmd_idx, addr).ok();
                     all_ok = false;
                     command_to_fail = Some(cmd_idx);
                     break;
@@ -121,12 +114,9 @@ where
             }
 
             if is_cycle_detected {
-                util::prevent_garbled(
-                    serial,
-                    format_args!(
-                        "[error] Dependency cycle detected on {addr:02X}, stopping exploration for this address"
-                    ),
-                );
+                write!(serial, "[error] Dependency cycle detected on ").ok();
+                crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
+                writeln!(serial, ", stopping exploration for this address").ok();
             } else if all_ok {
                 addrs_to_remove.push(addr_idx).ok();
             }
@@ -142,7 +132,7 @@ where
         }
     }
 
-    let _ = core::fmt::Write::write_str(serial, "[I] Explorer finished\r\n");
+    core::fmt::Write::write_str(serial, "[I] Explorer finished\r\n").ok();
     Ok(())
 }
 
@@ -173,15 +163,12 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let _ = core::fmt::Write::write_str(
-        serial,
-        "[exprore] Attempting to get 1 init seq ...\r\n"
-    );
+    core::fmt::Write::write_str(serial, "[exprore] Attempting to get 1 init seq ...\r\n").ok();
 
     let target_addr = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addr) => addr,
         Err(e) => {
-            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}"));
+            writeln!(serial, "[error] Failed to scan I2C: {:?}", e).ok();
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
@@ -193,21 +180,14 @@ where
     let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
         Ok(iter) => iter,
         Err(e) => {
-            util::prevent_garbled(
-                serial,
-                format_args!("[E] Failed to GEN topological sort: {e}. Aborting."),
-            );
+            writeln!(serial, "[E] Failed to GEN topological sort: {:?}. Aborting.", e).ok();
             return Err(e);
         }
     };
 
-    util::prevent_garbled(
-        serial,
-        format_args!(
-            "[explorer] Obtained one topological sort. Executing on {:02X}...",
-            target_addr[0]
-        ),
-    );
+    write!(serial, "[explorer] Obtained one topological sort. Executing on ").ok();
+    crate::compat::util::write_bytes_hex_fmt(serial, &[target_addr[0]]).ok();
+    writeln!(serial, "...").ok();
 
     let empty_seq: &[u8] = &[];
     let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, empty_seq);
@@ -223,17 +203,13 @@ where
         )?;
     }
     if sort_iter.is_cycle_detected() {
-        let _ = core::fmt::Write::write_str(serial, "[error] Dependency cycle detected!\r\n");
+        core::fmt::Write::write_str(serial, "[error] Dependency cycle detected!\r\n").ok();
         return Err(ExplorerError::DependencyCycle);
     }
 
-    util::prevent_garbled(
-        serial,
-        format_args!(
-            "[explorer] Single sequence execution complete for {:02X}.",
-            target_addr[0]
-        ),
-    );
+    write!(serial, "[explorer] Single sequence execution complete for ").ok();
+    crate::compat::util::write_bytes_hex_fmt(serial, &[target_addr[0]]).ok();
+    writeln!(serial, ".").ok();
 
     Ok(())
 }
