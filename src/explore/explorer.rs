@@ -381,7 +381,7 @@ macro_rules! nodes {
 
         (
             &EXPLORER,
-            $crate::explore::explorer::PrefixExecutor::<0, MAX_CMD_LEN_INTERNAL>::new($prefix, &[])
+            $crate::explore::explorer::PrefixExecutor::<0, { MAX_CMD_LEN_INTERNAL + 1 }>::new($prefix, &[])
         )
     }};
 }
