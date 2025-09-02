@@ -156,6 +156,52 @@ where
     // util::prevent_garbled(writer, format_args!("{log_buffer}"));
 
     Ok(detected_cmds)
+
+    fn log_differences<W: core::fmt::Write>(
+            serial: &mut W,
+            expected: &[u8],
+            detected: &heapless::Vec<u8, 64>,
+        ) {
+            let mut missing_cmds = heapless::Vec::<u8, 64>::new();
+            let mut sorted_detected = detected.clone();
+            sorted_detected.sort_unstable();
+            for &b in expected {
+                if sorted_detected.binary_search(&b).is_err() {
+                    if missing_cmds.push(b).is_err() {
+                        writeln!(
+                            serial,
+                            "[warn] Missing commands buffer is full, list is truncated."
+                        )
+                        .ok();
+                        break;
+                    }
+                }
+            }
+
+            writeln!(serial, "Expected sequence:").ok();
+            for b in expected {
+                write!(serial, " ").ok();
+                ascii::write_bytes_hex_fmt(serial, &[*b]).ok();
+                writeln!(serial).ok();
+            }
+            writeln!(serial).ok();
+
+            writeln!(serial, "Commands with response:").ok();
+            for b in detected {
+                write!(serial, " ").ok();
+                ascii::write_bytes_hex_fmt(serial, &[*b]).ok();
+                writeln!(serial).ok();
+            }
+            writeln!(serial).ok();
+
+            writeln!(serial, "Commands with no response:").ok();
+            for b in &missing_cmds {
+                write!(serial, " ").ok();
+                ascii::write_bytes_hex_fmt(serial, &[*b]).ok();
+                writeln!(serial).ok();
+            }
+            writeln!(serial).ok();
+        }
 }
 
 fn check_init_sequence<I2C, W, const N: usize>(
