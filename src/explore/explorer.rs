@@ -224,7 +224,7 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
                     last_error = Some(compat_err);
-                    util::prevent_garbled(writer, format_args!("[I2C retry error] {compat_err}"));
+                    let _ = util::write_formatted_ascii_safe(writer, format_args!("[I2C retry error] {compat_err}"));
                     Self::short_delay();
                 }
             }
