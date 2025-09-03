@@ -227,7 +227,7 @@ impl fmt::Display for ExplorerError {
 }
 
 /// Errors that can occur during command execution.
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ExecutorError {
     /// A command failed to execute due to an I2C error.
     I2cError(ErrorKind),
