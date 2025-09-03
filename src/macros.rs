@@ -61,7 +61,9 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-                self.0.write(buf)?;
+                for &b in buf {
+                    self.0.write(&[b])?;
+                }
                 Ok(buf.len())
             }
             fn flush(&mut self) -> Result<(), Self::Error> {
@@ -74,7 +76,9 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                self.0.write(s.as_bytes()).map_err(|_| core::fmt::Error)?;
+                for &b in s.as_bytes() {
+                    self.0.write(&[b]).map_err(|_| core::fmt::Error)?;
+                }
                 self.0.flush().map_err(|_| core::fmt::Error)?;
                 Ok(())
             }
@@ -188,8 +192,8 @@ macro_rules! assert_log {
 /// ```
 #[macro_export]
 macro_rules! quick_diag {
-    ($serial:expr, $i2c:expr, $ctrl_byte:expr, $log_level:expr, $timer:expr, $test_expr:expr) => {{
-        quick_diag!(@inner $serial, $i2c, $ctrl_byte, $log_level);
+    ($serial:expr, $i2c:expr, $ctrl_byte:expr, $timer:expr, $test_expr:expr) => {{
+        quick_diag!(@inner $serial, $i2c, $ctrl_byte);
 
         // Test expression timing
         let (_result, cycles) = $crate::measure_cycles!($test_expr, $timer);
@@ -198,16 +202,14 @@ macro_rules! quick_diag {
         let _ = core::writeln!($serial, "=== Quick Diagnostic Complete ===");
     }};
     ($serial:expr, $i2c:expr) => {{
-        quick_diag!(@inner $serial, $i2c, &[0x00], $crate::explore::logger::LogLevel::Verbose);
-        let _ = core::writeln!($serial, "=== Quick Diagnostic Complete ===");
-    }};
-    ($serial:expr, $i2c:expr, $log_level:expr) => {{
-        quick_diag!(@inner $serial, $i2c, &[0x00], $log_level);
+        quick_diag!(@inner $serial, $i2c, 0x00);
         let _ = core::writeln!($serial, "=== Quick Diagnostic Complete ===");
     }};
     // Internal rule for common diagnostic steps.
-    (@inner $serial:expr, $i2c:expr, $ctrl_byte_slice:expr, $log_level:expr) => {{
+    (@inner $serial:expr, $i2c:expr, $ctrl_byte:expr) => {{
     let _ = core::writeln!($serial, "=== Quick Diagnostic Start ===");
-    let _ = $crate::scanner::scan_i2c($i2c, $serial, $ctrl_byte_slice, $log_level);
-    }};
+    if let Err(e) = $crate::scanner::scan_i2c($i2c, $serial, $ctrl_byte) {
+        let _ = core::writeln!($serial, "[error] I2C Scan failed: {}", e);
+    }
+}};
 }

@@ -18,7 +18,9 @@ impl SerialCompat for DummySerial {
 }
 
 impl core::fmt::Write for DummySerial {
-    fn write_str(&mut self, _s: &str) -> core::fmt::Result {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        // For testing purposes, we can print to stdout to see what would be logged
+        print!("{s}");
         Ok(())
     }
 }
@@ -41,6 +43,14 @@ impl I2cCompat for DummyI2c {
     ) -> Result<(), Self::Error> {
         Ok(())
     }
+
+    fn probe(&mut self, _addr: u8) -> Result<bool, Self::Error> {
+        Ok(true)
+    }
+
+    fn is_nack(&self, _error: &Self::Error) -> bool {
+        false
+    }
 }
 
 // -----------------------------
@@ -60,15 +70,7 @@ fn test_full_stack() {
     assert!(i2c.read(0x42, &mut buf).is_ok());
     assert!(i2c.write_read(0x42, &[1, 2], &mut buf).is_ok());
 
-    assert!(
-        scan_i2c(
-            &mut i2c,
-            &mut serial,
-            &[0x00],
-            dvcdbg::explore::logger::LogLevel::Verbose
-        )
-        .is_ok()
-    );
+    assert!(scan_i2c(&mut i2c, &mut serial, 0x00).is_ok());
 
     assert_log!(false, &mut serial, "test log macro");
 

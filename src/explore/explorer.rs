@@ -1,70 +1,223 @@
 // explorer.rs
 
 use crate::compat::err_compat::HalErrorExt;
+use crate::compat::util;
 use crate::error::{ExecutorError, ExplorerError};
-use core::fmt::Write;
 
-use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
-use heapless::Vec;
 const I2C_ADDRESS_COUNT: usize = 128;
 
 #[derive(Copy, Clone)]
 pub struct CmdNode {
     pub bytes: &'static [u8],
-    pub deps: &'static [usize],
+    pub deps: &'static [u8],
 }
 
-pub trait CmdExecutor<I2C, const BUF_CAP: usize> {
-    fn exec<S>(
+pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
+    // Use CMD_BUFFER_SIZE
+    fn exec<W: core::fmt::Write>(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
         cmd: &[u8],
-        logger: &mut S,
-    ) -> Result<(), ExecutorError>
-    where
-        S: core::fmt::Write + crate::explore::logger::Logger;
+        writer: &mut W,
+    ) -> Result<(), ExecutorError>;
+}
+
+/// A stateful iterator for generating a single topological sort using Kahn's algorithm.
+/// This avoids allocating the entire sorted sequence in memory at once.
+pub struct TopologicalIter<'a, const N: usize, const MAX_DEPS_TOTAL: usize> {
+    nodes: &'a [CmdNode],
+    in_degree: [u8; N],
+    adj_list_rev_flat: [u8; MAX_DEPS_TOTAL],
+    adj_list_rev_offsets: [u16; N],
+    queue: heapless::Vec<u8, N>,
+    visited_count: usize,
+    total_non_failed: usize,
+    deps_total_len: usize,
+}
+
+impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX_DEPS_TOTAL> {
+    const _ASSERT_N_LE_128: () = assert!(
+        N <= 128,
+        "TopologicalIter uses a 128-bit BitFlags, so N cannot exceed 128"
+    );
+
+    pub fn new(
+        explorer: &'a Explorer<N, MAX_DEPS_TOTAL>,
+        failed_nodes: &util::BitFlags,
+    ) -> Result<Self, ExplorerError> {
+        let len = explorer.nodes.len();
+        if len > N {
+            return Err(ExplorerError::TooManyCommands);
+        }
+
+        let mut in_degree: [u8; N] = [0; N];
+        let mut adj_list_rev_flat: [u8; MAX_DEPS_TOTAL] = [0; MAX_DEPS_TOTAL];
+        let mut rev_adj_offsets: [u16; N] = [0; N];
+        let mut total_non_failed = 0;
+
+        // Pass 1: Count dependencies and in-degrees
+        for (i, node) in explorer.nodes.iter().enumerate().take(len) {
+            if !failed_nodes.get(i).unwrap_or(false) {
+                total_non_failed += 1;
+                for &dep_idx in node.deps.iter() {
+                    let dep_idx_usize = dep_idx as usize;
+                    if dep_idx_usize >= len {
+                        return Err(ExplorerError::InvalidDependencyIndex);
+                    }
+                    in_degree[i] = in_degree[i].saturating_add(1);
+                    rev_adj_offsets[dep_idx_usize] =
+                        rev_adj_offsets[dep_idx_usize].saturating_add(1);
+                }
+            }
+        }
+
+        // Pass 2: Convert counts to cumulative offsets and populate the flat array
+        let mut current_offset: u16 = 0;
+        for count in rev_adj_offsets.iter_mut().take(len) {
+            let temp_count = *count;
+            *count = current_offset;
+            current_offset = current_offset.saturating_add(temp_count);
+        }
+        if current_offset as usize > MAX_DEPS_TOTAL {
+            return Err(ExplorerError::BufferOverflow);
+        }
+        let deps_total_len = current_offset as usize;
+
+        // Re-use `rev_adj_offsets` as write pointers
+        let mut write_pointers = rev_adj_offsets;
+        for (i, node) in explorer.nodes.iter().enumerate().take(len) {
+            if failed_nodes.get(i).unwrap_or(false) {
+                continue;
+            }
+            for &dep_idx in node.deps.iter() {
+                let dep_idx_usize = dep_idx as usize;
+                let write_pos = write_pointers[dep_idx_usize] as usize;
+                adj_list_rev_flat[write_pos] = i as u8; // Store 'i' as a node that depends on 'dep_idx_usize'
+                write_pointers[dep_idx_usize] = write_pointers[dep_idx_usize].saturating_add(1);
+            }
+        }
+
+        let mut queue: heapless::Vec<u8, N> = heapless::Vec::new();
+        for (i, &degree) in in_degree.iter().enumerate().take(len) {
+            if degree == 0 && !failed_nodes.get(i).unwrap_or(false) {
+                queue
+                    .push(i as u8)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+        }
+
+        Ok(Self {
+            nodes: explorer.nodes,
+            in_degree,
+            adj_list_rev_flat,
+            adj_list_rev_offsets: rev_adj_offsets, // Use the final offsets
+            queue,
+            visited_count: 0,
+            total_non_failed,
+            deps_total_len,
+        })
+    }
+
+    /// Checks if a cycle was detected after the iteration is complete.
+    pub fn is_cycle_detected(&self) -> bool {
+        self.visited_count != self.total_non_failed
+    }
+}
+
+impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
+    for TopologicalIter<'a, N, MAX_DEPS_TOTAL>
+{
+    type Item = usize; // Return the index of the next node
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.queue.is_empty() {
+            return None;
+        }
+
+        let u = self.queue.pop()? as usize;
+        self.visited_count += 1;
+
+        let start_offset = self.adj_list_rev_offsets[u] as usize;
+        let end_offset = if u + 1 < self.nodes.len() {
+            self.adj_list_rev_offsets[u + 1] as usize
+        } else {
+            self.deps_total_len
+        };
+        let end_offset = end_offset.min(self.deps_total_len);
+        debug_assert!(start_offset <= end_offset);
+
+        // Process neighbors of 'u'
+        for &v_u8 in &self.adj_list_rev_flat[start_offset..end_offset] {
+            let v = v_u8 as usize;
+            self.in_degree[v] = self.in_degree[v].saturating_sub(1);
+            if self.in_degree[v] == 0 {
+                // A queue can be used as a LIFO queue, but it is still valid for topological ordering (the order changes, but the invariants are preserved).
+                // If you want a FIFO queue, use a ring buffer.
+                if self.queue.push(v_u8).is_err() {
+                    unreachable!("TopologicalIter queue overflowed");
+                }
+            }
+        }
+
+        Some(u)
+    }
 }
 
 /// A command executor that prepends a prefix to each command.
-pub struct PrefixExecutor<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> {
+pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> {
+    buffer: [u8; CMD_BUFFER_SIZE],
+    buffer_len: usize,
+    initialized_addrs: util::BitFlags,
     prefix: u8,
-    init_sequence: heapless::Vec<u8, INIT_SEQ_SIZE>,
-    initialized_addrs: [bool; 128],
-    buffer: heapless::Vec<u8, BUF_CAP>,
+    init_sequence: [u8; INIT_SEQUENCE_LEN],
+    init_sequence_len: usize,
 }
 
-impl<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQ_SIZE, BUF_CAP> {
-    pub fn new(prefix: u8, init_sequence: heapless::Vec<u8, INIT_SEQ_SIZE>) -> Self {
+impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
+    PrefixExecutor<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>
+{
+    pub fn new(prefix: u8, init_sequence: &[u8]) -> Self {
+        let mut init_seq_arr = [0u8; INIT_SEQUENCE_LEN];
+        let init_seq_len = init_sequence.len().min(INIT_SEQUENCE_LEN);
+        if init_seq_len > 0 {
+            init_seq_arr[..init_seq_len].copy_from_slice(&init_sequence[..init_seq_len]);
+        }
+
         Self {
+            buffer: [0; CMD_BUFFER_SIZE],
+            buffer_len: 0,
+            initialized_addrs: util::BitFlags::new(),
             prefix,
-            init_sequence,
-            initialized_addrs: [false; 128],
-            buffer: heapless::Vec::new(),
+            init_sequence: init_seq_arr,
+            init_sequence_len: init_seq_len,
         }
     }
 
-    // Private helper for short delay
     fn short_delay() {
-        for _ in 0..8_000 {
+        for _ in 0..1_000 {
             core::hint::spin_loop();
         }
     }
 
-    // Private helper for write with retry
-    fn write_with_retry<I2C, S>(
+    fn write_with_retry<I2C, W>(
         i2c: &mut I2C,
         addr: u8,
         bytes: &[u8],
-        logger: &mut S,
+        writer: &mut W,
     ) -> Result<(), crate::error::ErrorKind>
     where
         I2C: crate::compat::I2cCompat,
         <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-        S: core::fmt::Write + crate::explore::logger::Logger,
+        W: core::fmt::Write,
     {
         let mut last_error = None;
-        for _attempt in 0..10 {
+        for _attempt in 0..2 {
+            writeln!(writer, "I2C WRITE @{addr:02X}:").ok();
+            for b in bytes.iter() {
+                write!(writer, "{b:02X} ").ok();
+            }
+            writeln!(writer).ok();
             match i2c.write(addr, bytes) {
                 Ok(_) => {
                     Self::short_delay();
@@ -73,7 +226,10 @@ impl<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQ_S
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
                     last_error = Some(compat_err);
-                    logger.log_error_fmt(|buf| writeln!(buf, "[I2C retry error] {compat_err:?}"));
+                    let _ = util::write_formatted_ascii_safe(
+                        writer,
+                        format_args!("[I2C retry error] {compat_err}"),
+                    );
                     Self::short_delay();
                 }
             }
@@ -82,10 +238,10 @@ impl<const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> PrefixExecutor<INIT_SEQ_S
     }
 }
 
-pub fn execute_and_log_command<I2C, E, L, const BUF_CAP: usize>(
+pub fn exec_log_cmd<I2C, E, W, const MAX_BYTES_PER_CMD: usize>(
     i2c: &mut I2C,
     executor: &mut E,
-    logger: &mut L,
+    writer: &mut W,
     addr: u8,
     cmd_bytes: &[u8],
     cmd_idx: usize,
@@ -93,453 +249,189 @@ pub fn execute_and_log_command<I2C, E, L, const BUF_CAP: usize>(
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    E: CmdExecutor<I2C, BUF_CAP>,
-    L: crate::explore::logger::Logger + core::fmt::Write,
+    E: CmdExecutor<I2C, MAX_BYTES_PER_CMD>,
+    W: core::fmt::Write,
 {
-    logger.log_info_fmt(|buf| {
-        writeln!(
-            buf,
-            "[explorer] Sending node {} bytes: {:02X?} ...",
-            cmd_idx, cmd_bytes
-        )
-    });
-
-    match executor.exec(i2c, addr, cmd_bytes, logger) {
+    match executor.exec(i2c, addr, cmd_bytes, writer) {
         Ok(_) => {
-            logger.log_info_fmt(|buf| writeln!(buf, "[explorer] OK"));
+            write!(writer, "[E] OK {cmd_idx}\r\n").ok();
             Ok(())
         }
         Err(e) => {
-            logger.log_error_fmt(|buf| writeln!(buf, "[explorer] FAILED: {:?}", e));
+            write!(writer, "[E] FAIL {cmd_idx}: {e}\r\n").ok();
             Err(e.into())
         }
     }
 }
 
-impl<I2C, const INIT_SEQ_SIZE: usize, const BUF_CAP: usize> CmdExecutor<I2C, BUF_CAP>
-    for PrefixExecutor<INIT_SEQ_SIZE, BUF_CAP>
+impl<I2C, const INIT_SEQ_SIZE: usize, const CMD_BUFFER_SIZE: usize>
+    CmdExecutor<I2C, CMD_BUFFER_SIZE> for PrefixExecutor<INIT_SEQ_SIZE, CMD_BUFFER_SIZE>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
 {
-    fn exec<S>(
+    fn exec<W>(
         &mut self,
         i2c: &mut I2C,
         addr: u8,
         cmd: &[u8],
-        logger: &mut S,
+        writer: &mut W,
     ) -> Result<(), ExecutorError>
     where
-        S: core::fmt::Write + crate::explore::logger::Logger,
+        W: core::fmt::Write,
     {
         let addr_idx = addr as usize;
 
-        if !self.initialized_addrs[addr_idx] && !self.init_sequence.is_empty() {
-            logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initializing for 0x{addr:02X}..."));
-
-            for &c in self.init_sequence.iter() {
-                let command = [self.prefix, c];
-                Self::write_with_retry(i2c, addr, &command, logger) // Call the private method
-                    .map_err(ExecutorError::I2cError)?;
-                Self::short_delay(); // Call the private associated function
+        if !self
+            .initialized_addrs
+            .get(addr_idx)
+            .map_err(ExecutorError::BitFlags)?
+            && self.init_sequence_len > 0
+        {
+            if (self.init_sequence_len * 2) > CMD_BUFFER_SIZE {
+                return Err(ExecutorError::BufferOverflow);
             }
 
-            self.initialized_addrs[addr_idx] = true;
-            logger.log_info_fmt(|buf| writeln!(buf, "[Info] I2C initialized for 0x{addr:02X}"));
+            core::fmt::Write::write_str(writer, "[Info] I2C initializing for ").ok();
+            crate::compat::util::write_bytes_hex_fmt(writer, &[addr])
+                .map_err(|_| ExecutorError::ExecFailed)?;
+            core::fmt::Write::write_str(writer, "...\r\n").ok();
+            let ack_ok = i2c.probe(addr).is_ok();
+
+            if ack_ok {
+                core::fmt::Write::write_str(writer, "[Info] Device found at ").ok();
+                crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                core::fmt::Write::write_str(writer, ", sending init sequence...\r\n").ok();
+                for (i, &c) in self.init_sequence[..self.init_sequence_len]
+                    .iter()
+                    .enumerate()
+                {
+                    self.buffer[2 * i] = self.prefix;
+                    self.buffer[2 * i + 1] = c;
+                }
+
+                Self::write_with_retry(
+                    i2c,
+                    addr,
+                    &self.buffer[..self.init_sequence_len * 2],
+                    writer,
+                )
+                .map_err(ExecutorError::I2cError)?;
+
+                Self::short_delay();
+
+                self.initialized_addrs
+                    .set(addr_idx)
+                    .map_err(ExecutorError::BitFlags)?;
+
+                core::fmt::Write::write_str(writer, "[Info] I2C initialized for ").ok();
+                crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                core::fmt::Write::write_str(writer, "\r\n").ok();
+            }
         }
 
-        self.buffer.clear();
-        self.buffer
-            .push(self.prefix)
-            .map_err(|_| ExecutorError::BufferOverflow)?;
-        self.buffer
-            .extend_from_slice(cmd)
-            .map_err(|_| ExecutorError::BufferOverflow)?;
+        self.buffer_len = 0;
+        self.buffer[self.buffer_len] = self.prefix;
+        self.buffer_len += 1;
 
-        Self::write_with_retry(i2c, addr, &self.buffer, logger) // Call the private method
+        if self.buffer_len + cmd.len() > CMD_BUFFER_SIZE {
+            return Err(ExecutorError::BufferOverflow);
+        }
+        let end = self.buffer_len + cmd.len();
+        self.buffer[self.buffer_len..end].copy_from_slice(cmd);
+        self.buffer_len = end;
+
+        Self::write_with_retry(i2c, addr, &self.buffer[..self.buffer_len], writer)
             .map_err(ExecutorError::I2cError)
     }
 }
 
-pub struct Explorer<'a, const N: usize> {
-    pub sequence: &'a [CmdNode],
+#[macro_export]
+macro_rules! nodes {
+    (
+        prefix = $prefix:expr,
+        [ $( [ $( $b:expr ),* ] $( @ [ $( $d:expr ),* ] )? ),* $(,)? ]
+    ) => {{
+        static NODES: &[$crate::explore::explorer::CmdNode] = &[
+            $(
+                $crate::explore::explorer::CmdNode {
+                    bytes: &[ $( $b ),* ],
+                    deps: &[ $( $( $d ),* )? ],
+                }
+            ),*
+        ];
+
+        const MAX_CMD_LEN_INTERNAL: usize = {
+            let mut max_len = 0;
+            let mut i = 0;
+            while i < NODES.len() {
+                let len = NODES[i].bytes.len();
+                if len > max_len {
+                    max_len = len;
+                }
+                i += 1;
+            }
+            max_len
+        };
+        const MAX_DEPS_TOTAL_INTERNAL: usize = {
+            let mut total_deps = 0;
+            let mut i = 0;
+            while i < NODES.len() {
+                total_deps += NODES[i].deps.len();
+                i += 1;
+            }
+            total_deps
+        };
+
+        static EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}, {MAX_DEPS_TOTAL_INTERNAL}> =
+            $crate::explore::explorer::Explorer::new(NODES);
+
+        (
+            &EXPLORER,
+            $crate::explore::explorer::PrefixExecutor::<0, { MAX_CMD_LEN_INTERNAL + 1 }>::new($prefix, &[])
+        )
+    }};
+}
+
+/// simple macro to count comma-separated expressions at compile time
+#[macro_export]
+macro_rules! count_exprs {
+    () => (0usize);
+    ($x:expr $(, $xs:expr)*) => (1usize + $crate::count_exprs!($($xs),*));
+}
+
+pub struct Explorer<const N: usize, const MAX_DEPS_TOTAL: usize> {
+    pub(crate) nodes: &'static [CmdNode],
 }
 
 pub struct ExploreResult {
-    pub found_addrs: Vec<u8, I2C_ADDRESS_COUNT>,
+    pub found_addrs: [u8; I2C_ADDRESS_COUNT],
+    pub found_addrs_len: usize,
     pub permutations_tested: usize,
 }
 
-impl<'a, const N: usize> Explorer<'a, N> {
+impl<const N: usize, const MAX_DEPS_TOTAL: usize> Explorer<N, MAX_DEPS_TOTAL> {
+    pub fn topological_iter<'a>(
+        &'a self,
+        failed_nodes: &'a util::BitFlags,
+    ) -> Result<TopologicalIter<'a, N, MAX_DEPS_TOTAL>, ExplorerError> {
+        TopologicalIter::new(self, failed_nodes)
+    }
+
     pub const fn max_cmd_len(&self) -> usize {
         let mut max_len = 0;
         let mut i = 0;
         while i < N {
-            let len = self.sequence[i].bytes.len();
+            let len = self.nodes[i].bytes.len();
             if len > max_len {
                 max_len = len;
             }
             i += 1;
         }
-        max_len + 1 // prefix add
-    }
-}
-
-impl<'a, const N: usize> Explorer<'a, N> {
-    pub fn explore<I2C, E, L, const BUF_CAP: usize>(
-        &self,
-        i2c: &mut I2C,
-        executor: &mut E,
-        logger: &mut L,
-    ) -> Result<ExploreResult, ExplorerError>
-    where
-        I2C: crate::compat::I2cCompat,
-        <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-        E: CmdExecutor<I2C, BUF_CAP>,
-        L: crate::explore::logger::Logger + core::fmt::Write,
-    {
-        if self.sequence.is_empty() {
-            logger.log_info_fmt(|buf| writeln!(buf, "[explorer] No commands provided."));
-            return Err(ExplorerError::NoValidAddressesFound);
-        }
-
-        let mut found_addrs: Vec<u8, I2C_ADDRESS_COUNT> = Vec::new();
-        let mut solved_addrs: [bool; I2C_ADDRESS_COUNT] = [false; I2C_ADDRESS_COUNT];
-        let mut permutations_tested = 0;
-        let iter = PermutationIter::new(self)?;
-        logger.log_info_fmt(|buf| writeln!(buf, "[explorer] Starting permutation exploration..."));
-        for sequence in iter {
-            permutations_tested += 1;
-            for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                let addr = addr_val;
-                if solved_addrs[addr as usize] {
-                    continue;
-                }
-
-                logger.log_info_fmt(|buf| {
-                    writeln!(
-                        buf,
-                        "[explorer] Trying sequence on 0x{:02X} (permutation {})",
-                        addr, permutations_tested
-                    )
-                });
-
-                let mut all_ok = true;
-                for i in 0..self.sequence.len() {
-                    let cmd_bytes = sequence[i];
-                    match execute_and_log_command(i2c, executor, logger, addr, cmd_bytes, i) {
-                        Ok(_) => {}
-                        Err(_) => {
-                            all_ok = false;
-                            break;
-                        }
-                    }
-                }
-
-                if all_ok {
-                    logger.log_info_fmt(|buf| {
-                        writeln!(
-                            buf,
-                            "[explorer] Successfully executed sequence on 0x{:02X}",
-                            addr
-                        )
-                    });
-                    if found_addrs.push(addr).is_err() {
-                        logger.log_error_fmt(|buf| {
-                            writeln!(buf, "[error] Buffer overflow in found_addrs")
-                        });
-                        return Err(ExplorerError::BufferOverflow);
-                    }
-                    solved_addrs[addr as usize] = true;
-                } else {
-                    logger.log_info_fmt(|buf| {
-                        writeln!(
-                            buf,
-                            "[explorer] Failed to execute sequence on 0x{:02X}",
-                            addr
-                        )
-                    });
-                }
-            }
-            // After the inner loop over addresses
-            if found_addrs.len() == (I2C_SCAN_ADDR_END - I2C_SCAN_ADDR_START + 1) as usize {
-                break;
-            }
-        }
-        Ok(ExploreResult {
-            found_addrs,
-            permutations_tested,
-        })
-    }
-    /// Generates a single valid topological sort of the command sequence.
-    /// This is useful when only one valid ordering is needed, and avoids
-    /// the computational cost of generating all permutations.
-    ///
-    /// Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
-    /// or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
-    pub fn get_one_topological_sort_buf<const MAX_CMD_LEN: usize>(
-        &self,
-        _serial: &mut impl core::fmt::Write,
-        failed_nodes: &[bool; N],
-    ) -> Result<
-        (
-            heapless::Vec<heapless::Vec<u8, MAX_CMD_LEN>, N>,
-            heapless::Vec<usize, N>,
-        ),
-        ExplorerError,
-    > {
-        let len = self.sequence.len();
-        let mut in_degree: heapless::Vec<usize, N> = heapless::Vec::new();
-        in_degree
-            .resize(len, 0)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-        let mut adj_list_rev: heapless::Vec<heapless::Vec<usize, N>, N> = heapless::Vec::new();
-        adj_list_rev
-            .resize(len, heapless::Vec::new())
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-
-        for (i, node) in self.sequence.iter().enumerate() {
-            if failed_nodes[i] {
-                continue;
-            }
-            in_degree[i] = node.deps.len();
-            for &dep_idx in node.deps.iter() {
-                if dep_idx >= len {
-                    return Err(ExplorerError::InvalidDependencyIndex);
-                }
-                adj_list_rev[dep_idx]
-                    .push(i)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-        }
-
-        let mut q: heapless::Vec<usize, N> = heapless::Vec::new();
-        for (i, &degree) in in_degree.iter().enumerate().take(len) {
-            if !failed_nodes[i] && degree == 0 {
-                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-        }
-
-        let mut result_sequence: heapless::Vec<heapless::Vec<u8, MAX_CMD_LEN>, N> =
-            heapless::Vec::new();
-        let mut result_len_per_node: heapless::Vec<usize, N> = heapless::Vec::new();
-        let mut visited_count = 0;
-
-        while let Some(u) = q.pop() {
-            visited_count += 1;
-
-            let cmd_bytes = self.sequence[u].bytes;
-            let mut cmd_vec: heapless::Vec<u8, MAX_CMD_LEN> = heapless::Vec::new();
-            cmd_vec
-                .extend_from_slice(cmd_bytes)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
-            result_len_per_node
-                .push(cmd_vec.len())
-                .map_err(|_| ExplorerError::BufferOverflow)?;
-            result_sequence
-                .push(cmd_vec)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
-
-            for &v in adj_list_rev[u].iter() {
-                if !failed_nodes[v] {
-                    in_degree[v] -= 1;
-                    if in_degree[v] == 0 {
-                        q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
-                    }
-                }
-            }
-        }
-
-        if visited_count != len - failed_nodes.iter().filter(|&&f| f).count() {
-            return Err(ExplorerError::DependencyCycle);
-        }
-
-        Ok((result_sequence, result_len_per_node))
-    }
-}
-
-pub struct PermutationIter<'a, const N: usize> {
-    sequence: &'a [CmdNode],
-    total_nodes: usize,
-    current_permutation: Vec<&'a [u8], N>,
-    used: Vec<bool, N>,
-    in_degree: Vec<usize, N>,
-    adj_list_rev: Vec<Vec<usize, N>, N>,
-    path_stack: Vec<usize, N>, // Stores original indices of commands in current_permutation
-    loop_start_indices: Vec<usize, N>, // Tracks the starting point for the next search at each level
-    is_done: bool,
-}
-
-impl<'a, const N: usize> PermutationIter<'a, N> {
-    pub fn new(explorer: &'a Explorer<'a, N>) -> Result<Self, ExplorerError> {
-        let total_nodes = explorer.sequence.len();
-        if total_nodes > N {
-            return Err(ExplorerError::TooManyCommands);
-        }
-
-        let mut in_degree: Vec<usize, N> = Vec::new();
-        let mut adj_list_rev: Vec<Vec<usize, N>, N> = Vec::new();
-
-        in_degree
-            .resize(total_nodes, 0)
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-        adj_list_rev
-            .resize(total_nodes, Vec::new())
-            .map_err(|_| ExplorerError::BufferOverflow)?;
-
-        for (i, node) in explorer.sequence.iter().enumerate() {
-            in_degree[i] = node.deps.len();
-            for &dep in node.deps.iter() {
-                if dep >= total_nodes {
-                    return Err(ExplorerError::InvalidDependencyIndex);
-                }
-                adj_list_rev[dep]
-                    .push(i)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-        }
-
-        // Cycle detection using Kahn's algorithm
-        let mut temp_in_degree = in_degree.clone();
-        let mut q = Vec::<usize, N>::new();
-        for i in 0..total_nodes {
-            if temp_in_degree[i] == 0 {
-                q.push(i).map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-        }
-
-        let mut count = 0;
-        let mut q_idx = 0;
-        while q_idx < q.len() {
-            let u = q[q_idx];
-            q_idx += 1;
-            count += 1;
-
-            for &v in adj_list_rev[u].iter() {
-                temp_in_degree[v] -= 1;
-                if temp_in_degree[v] == 0 {
-                    q.push(v).map_err(|_| ExplorerError::BufferOverflow)?;
-                }
-            }
-        }
-
-        if count != total_nodes {
-            return Err(ExplorerError::DependencyCycle);
-        }
-
-        Ok(Self {
-            sequence: explorer.sequence,
-            total_nodes,
-            current_permutation: Vec::new(),
-            used: {
-                let mut v = Vec::new();
-                v.resize(total_nodes, false)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
-                v
-            },
-            in_degree,
-            adj_list_rev,
-            path_stack: Vec::new(),
-            loop_start_indices: Vec::new(),
-            is_done: false,
-        })
-    }
-}
-
-impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
-    type Item = Vec<&'a [u8], N>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.is_done {
-            return None;
-        }
-
-        loop {
-            // If we have a complete permutation, return it and prepare for the next one.
-            if self.current_permutation.len() == self.total_nodes {
-                let full_sequence = self.current_permutation.clone();
-                // Backtrack to find the next permutation
-                if !self.backtrack() {
-                    self.is_done = true;
-                }
-                return Some(full_sequence);
-            }
-
-            // Try to extend the current partial permutation
-            if self.try_extend() {
-                // Successfully extended, continue building the permutation
-                continue;
-            } else {
-                // Could not extend, backtrack
-                if !self.backtrack() {
-                    self.is_done = true;
-                    return None; // No more permutations
-                }
-            }
-        }
-    }
-}
-
-impl<'a, const N: usize> PermutationIter<'a, N> {
-    fn try_extend(&mut self) -> bool {
-        // The `loop_start_indices` tracks the starting point for the search at the current depth.
-        // If it's empty, we start from the beginning (0). Otherwise, we continue from where we left off.
-        let start_idx_for_level = self.loop_start_indices.last().copied().unwrap_or(0);
-
-        // Iterate through all possible nodes (0 to total_nodes-1)
-        for idx in start_idx_for_level..self.total_nodes {
-            // If this node is already used in the current permutation, skip it
-            if self.used[idx] {
-                continue;
-            }
-
-            // Check if this node's dependencies are satisfied (i.e., its current in-degree is 0)
-            if self.in_degree[idx] == 0 {
-                // Make choice: Add this node to the current permutation
-                // Note: unwrap() is used here assuming N is sufficiently large based on initial checks.
-                self.current_permutation
-                    .push(self.sequence[idx].bytes)
-                    .unwrap();
-                self.used[idx] = true;
-
-                // Decrement in-degrees for all nodes that depend on this one
-                for &dependent_idx in self.adj_list_rev[idx].iter() {
-                    self.in_degree[dependent_idx] -= 1;
-                }
-
-                self.path_stack.push(idx).unwrap();
-                self.loop_start_indices.push(idx + 1).unwrap();
-                return true;
-            }
-        }
-        false // No node found to extend the current permutation
+        max_len
     }
 
-    fn backtrack(&mut self) -> bool {
-        if let Some(last_added_idx) = self.path_stack.pop() {
-            // Undo the choice: Remove the last added node from the permutation
-            self.current_permutation.pop();
-            self.used[last_added_idx] = false; // Unmark as used
-
-            // Increment in-degrees for all nodes that depend on this one (undo decrement)
-            for &dependent_idx in self.adj_list_rev[last_added_idx].iter() {
-                self.in_degree[dependent_idx] += 1;
-            }
-
-            // Pop the loop start for the level we just finished. The next search start for the parent
-            // was already set when this level was pushed.
-            self.loop_start_indices.pop();
-
-            // If path_stack is empty after pop, we've backtracked past the root
-            if self.path_stack.is_empty() {
-                self.is_done = true;
-                return false;
-            }
-            true
-        } else {
-            // Already at the root and no more options
-            self.is_done = true;
-            false
-        }
+    pub const fn new(nodes: &'static [CmdNode]) -> Self {
+        Self { nodes }
     }
 }
