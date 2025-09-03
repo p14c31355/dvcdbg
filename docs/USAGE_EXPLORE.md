@@ -82,7 +82,12 @@ pub fn one_topological_explorer<I2C, S, const N: usize, const INIT_SEQUENCE_LEN:
 ```
 
 * **Description**: Generates a single topological sort of commands and executes it on the first detected device. Useful for testing a single valid initialization sequence.
-* **Parameters**: Same as `pruning_explorer`.
+* **Parameters**:
+
+  * `explorer`: Reference to an `Explorer` containing command nodes.
+  * `i2c`: I2C interface implementing `I2cCompat`.
+  * `serial`: Serial interface implementing `core::fmt::Write` for logs.
+  * `prefix`: Command prefix byte.
 * **Returns**: `Ok(())` on success, otherwise an `ExplorerError`.
 * **Errors**:
 
