@@ -83,11 +83,11 @@ Add the following settings to your application's `Cargo.toml`.
 ```toml
 # Cargo.toml (application)
 [profile.release]
-panic = "abort"
-codegen-units = 1
-lto = true
-strip = true
 opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
 ```
 
 ---
