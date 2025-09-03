@@ -1,7 +1,7 @@
 use core::fmt;
 
 /// Defines the category of an error.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     /// Errors related to the UART peripheral.
     Uart(UartError),
