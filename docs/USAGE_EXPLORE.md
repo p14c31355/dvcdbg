@@ -46,7 +46,7 @@ Represents a single initialization command node.
 
 ### `pruning_explorer`
 
-```rust
+```rust,no_run
 pub fn pruning_explorer<I2C, S, const N: usize, const CMD_BUFFER_SIZE: usize, const MAX_DEPS: usize>(
     explorer: &Explorer<N, MAX_DEPS>,
     i2c: &mut I2C,
@@ -74,7 +74,7 @@ pub fn pruning_explorer<I2C, S, const N: usize, const CMD_BUFFER_SIZE: usize, co
 
 ### `one_topological_explorer`
 
-```rust
+```rust,no_run
 pub fn one_topological_explorer<I2C, S, const N: usize, const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize, const MAX_DEPS: usize>(
     explorer: &Explorer<N, MAX_DEPS>,
     i2c: &mut I2C,
@@ -100,7 +100,7 @@ pub fn one_topological_explorer<I2C, S, const N: usize, const INIT_SEQUENCE_LEN:
 
 * **Usage**: Wraps `pruning_explorer` for convenience.
 
-```rust
+```rust,no_run
 pruning_sort!(explorer_instance, &mut i2c, &mut serial, PREFIX, 23, 256, 22);
 ```
 
@@ -108,7 +108,7 @@ pruning_sort!(explorer_instance, &mut i2c, &mut serial, PREFIX, 23, 256, 22);
 
 * **Usage**: Wraps `one_topological_explorer` for convenience.
 
-```rust
+```rust,no_run
 get_one_sort!(explorer_instance, &mut i2c, &mut serial, PREFIX, 23, 13, 256, 22);
 ```
 
@@ -116,7 +116,7 @@ get_one_sort!(explorer_instance, &mut i2c, &mut serial, PREFIX, 23, 13, 256, 22)
 
 ## Example Usage
 
-```rust
+```rust,no_run
 const PREFIX: u8 = 0x00;
 let explorer_instance = nodes! {
     prefix = PREFIX,
