@@ -191,7 +191,7 @@ impl fmt::Display for BitFlagsError {
 }
 
 /// Errors that can occur during the exploration of command sequences.
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ExplorerError {
     /// The provided sequence contained more commands than supported by the capacity.
     TooManyCommands,
