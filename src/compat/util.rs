@@ -1,7 +1,6 @@
 // src/compat/util.rs
 
 use crate::error::BitFlagsError;
-use core::fmt;
 use embedded_io::Write;
 
 /// A bitflag structure optimized for 128 bits, used for tracking I2C addresses.
@@ -95,7 +94,10 @@ pub fn write_bytes_hex_fmt<W: core::fmt::Write>(w: &mut W, bytes: &[u8]) -> core
     Ok(())
 }
 
-pub fn write_bytes_hex_prefixed_fmt<W: core::fmt::Write>(w: &mut W, bytes: &[u8]) -> core::fmt::Result {
+pub fn write_bytes_hex_prefixed_fmt<W: core::fmt::Write>(
+    w: &mut W,
+    bytes: &[u8],
+) -> core::fmt::Result {
     for (i, &b) in bytes.iter().enumerate() {
         w.write_str("0x")?;
         write_byte_hex_fmt(w, b)?;
@@ -123,7 +125,7 @@ impl<'a, W: core::fmt::Write> core::fmt::Write for AsciiSafeWriter<'a, W> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         for c in s.chars() {
             if c.is_ascii() {
-                write!(self.0, "{}", c)?;
+                write!(self.0, "{c}")?;
             } else {
                 write!(self.0, "\\u{{{:X}}}", c as u32)?;
             }
