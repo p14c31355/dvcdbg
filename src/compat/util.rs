@@ -168,6 +168,56 @@ pub fn prevent_garbled<W: core::fmt::Write>(serial: &mut W, args: core::fmt::Arg
     }
 }
 
+pub fn write_str_bytewise<W: core::fmt::Write>(serial: &mut W, s: &str) {
+    for b in s.as_bytes() {
+        let _ = serial.write_char(*b as char);
+    }
+}
+
+pub fn write_str_byte<W: Write>(writer: &mut W, s: &str) -> Result<(), W::Error> {
+    for &byte in s.as_bytes() {
+        writer.write_all(&[byte])?;
+    }
+    Ok(())
+}
+
+pub fn write_ascii_safe<S: core::fmt::Write>(
+    serial: &mut S,
+    text: &str
+) -> Result<(), core::fmt::Error> {
+    for c in text.chars() {
+        if c.is_ascii() {
+            write!(serial, "{}", c)?;
+        } else {
+            write!(serial, "\\u{{{:X}}}", c as u32)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn write_formatted_ascii_safe<S: core::fmt::Write>(
+    serial: &mut S,
+    args: core::fmt::Arguments<'_>,
+) -> Result<(), core::fmt::Error> {
+    struct AsciiSafeWriter<'a, W: 'a + core::fmt::Write>(&'a mut W);
+
+    impl<'a, W: core::fmt::Write> core::fmt::Write for AsciiSafeWriter<'a, W> {
+        fn write_str(&mut self, s: &str) -> core::fmt::Result {
+            for c in s.chars() {
+                if c.is_ascii() {
+                    write!(self.0, "{}", c)?;
+                } else {
+                    write!(self.0, "\\u{{{:X}}}", c as u32)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    let mut writer = AsciiSafeWriter(serial);
+    core::fmt::Write::write_fmt(&mut writer, args)
+}
+
 pub fn write_node_deps<W: core::fmt::Write>(
     w: &mut W,
     index: usize,
