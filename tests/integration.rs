@@ -43,6 +43,14 @@ impl I2cCompat for DummyI2c {
     ) -> Result<(), Self::Error> {
         Ok(())
     }
+
+    fn probe(&mut self, _addr: u8) -> Result<bool, Self::Error> {
+        Ok(true)
+    }
+
+    fn is_nack(&self, _error: &Self::Error) -> bool {
+        false
+    }
 }
 
 // -----------------------------

@@ -4,7 +4,6 @@ use crate::compat::err_compat::HalErrorExt;
 use crate::compat::util;
 use crate::error::{ExecutorError, ExplorerError};
 
-use crate::scanner::{I2C_SCAN_ADDR_END, I2C_SCAN_ADDR_START};
 const I2C_ADDRESS_COUNT: usize = 128;
 
 #[derive(Copy, Clone)]
@@ -24,11 +23,152 @@ pub trait CmdExecutor<I2C, const CMD_BUFFER_SIZE: usize> {
     ) -> Result<(), ExecutorError>;
 }
 
+/// A stateful iterator for generating a single topological sort using Kahn's algorithm.
+/// This avoids allocating the entire sorted sequence in memory at once.
+pub struct TopologicalIter<'a, const N: usize, const MAX_DEPS_TOTAL: usize> {
+    nodes: &'a [CmdNode],
+    in_degree: [u8; N],
+    adj_list_rev_flat: [u8; MAX_DEPS_TOTAL],
+    adj_list_rev_offsets: [u16; N],
+    queue: heapless::Vec<u8, N>,
+    visited_count: usize,
+    total_non_failed: usize,
+    deps_total_len: usize,
+}
+
+impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX_DEPS_TOTAL> {
+    const _ASSERT_N_LE_128: () = assert!(
+        N <= 128,
+        "TopologicalIter uses a 128-bit BitFlags, so N cannot exceed 128"
+    );
+
+    pub fn new(
+        explorer: &'a Explorer<N, MAX_DEPS_TOTAL>,
+        failed_nodes: &util::BitFlags,
+    ) -> Result<Self, ExplorerError> {
+        let len = explorer.nodes.len();
+        if len > N {
+            return Err(ExplorerError::TooManyCommands);
+        }
+
+        let mut in_degree: [u8; N] = [0; N];
+        let mut adj_list_rev_flat: [u8; MAX_DEPS_TOTAL] = [0; MAX_DEPS_TOTAL];
+        let mut rev_adj_offsets: [u16; N] = [0; N];
+        let mut total_non_failed = 0;
+
+        // Pass 1: Count dependencies and in-degrees
+        for (i, node) in explorer.nodes.iter().enumerate().take(len) {
+            if !failed_nodes.get(i).unwrap_or(false) {
+                total_non_failed += 1;
+                for &dep_idx in node.deps.iter() {
+                    let dep_idx_usize = dep_idx as usize;
+                    if dep_idx_usize >= len {
+                        return Err(ExplorerError::InvalidDependencyIndex);
+                    }
+                    in_degree[i] = in_degree[i].saturating_add(1);
+                    rev_adj_offsets[dep_idx_usize] =
+                        rev_adj_offsets[dep_idx_usize].saturating_add(1);
+                }
+            }
+        }
+
+        // Pass 2: Convert counts to cumulative offsets and populate the flat array
+        let mut current_offset: u16 = 0;
+        for count in rev_adj_offsets.iter_mut().take(len) {
+            let temp_count = *count;
+            *count = current_offset;
+            current_offset = current_offset.saturating_add(temp_count);
+        }
+        if current_offset as usize > MAX_DEPS_TOTAL {
+            return Err(ExplorerError::BufferOverflow);
+        }
+        let deps_total_len = current_offset as usize;
+
+        // Re-use `rev_adj_offsets` as write pointers
+        let mut write_pointers = rev_adj_offsets;
+        for (i, node) in explorer.nodes.iter().enumerate().take(len) {
+            if failed_nodes.get(i).unwrap_or(false) {
+                continue;
+            }
+            for &dep_idx in node.deps.iter() {
+                let dep_idx_usize = dep_idx as usize;
+                let write_pos = write_pointers[dep_idx_usize] as usize;
+                adj_list_rev_flat[write_pos] = i as u8; // Store 'i' as a node that depends on 'dep_idx_usize'
+                write_pointers[dep_idx_usize] = write_pointers[dep_idx_usize].saturating_add(1);
+            }
+        }
+
+        let mut queue: heapless::Vec<u8, N> = heapless::Vec::new();
+        for (i, &degree) in in_degree.iter().enumerate().take(len) {
+            if degree == 0 && !failed_nodes.get(i).unwrap_or(false) {
+                queue
+                    .push(i as u8)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+        }
+
+        Ok(Self {
+            nodes: explorer.nodes,
+            in_degree,
+            adj_list_rev_flat,
+            adj_list_rev_offsets: rev_adj_offsets, // Use the final offsets
+            queue,
+            visited_count: 0,
+            total_non_failed,
+            deps_total_len,
+        })
+    }
+
+    /// Checks if a cycle was detected after the iteration is complete.
+    pub fn is_cycle_detected(&self) -> bool {
+        self.visited_count != self.total_non_failed
+    }
+}
+
+impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> Iterator
+    for TopologicalIter<'a, N, MAX_DEPS_TOTAL>
+{
+    type Item = usize; // Return the index of the next node
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.queue.is_empty() {
+            return None;
+        }
+
+        let u = self.queue.pop()? as usize;
+        self.visited_count += 1;
+
+        let start_offset = self.adj_list_rev_offsets[u] as usize;
+        let end_offset = if u + 1 < self.nodes.len() {
+            self.adj_list_rev_offsets[u + 1] as usize
+        } else {
+            self.deps_total_len
+        };
+        let end_offset = end_offset.min(self.deps_total_len);
+        debug_assert!(start_offset <= end_offset);
+
+        // Process neighbors of 'u'
+        for &v_u8 in &self.adj_list_rev_flat[start_offset..end_offset] {
+            let v = v_u8 as usize;
+            self.in_degree[v] = self.in_degree[v].saturating_sub(1);
+            if self.in_degree[v] == 0 {
+                // A queue can be used as a LIFO queue, but it is still valid for topological ordering (the order changes, but the invariants are preserved).
+                // If you want a FIFO queue, use a ring buffer.
+                if self.queue.push(v_u8).is_err() {
+                    unreachable!("TopologicalIter queue overflowed");
+                }
+            }
+        }
+
+        Some(u)
+    }
+}
+
 /// A command executor that prepends a prefix to each command.
 pub struct PrefixExecutor<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize> {
     buffer: [u8; CMD_BUFFER_SIZE],
     buffer_len: usize,
-    initialized_addrs: util::BitFlags, // No generic parameter needed now
+    initialized_addrs: util::BitFlags,
     prefix: u8,
     init_sequence: [u8; INIT_SEQUENCE_LEN],
     init_sequence_len: usize,
@@ -47,21 +187,19 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
         Self {
             buffer: [0; CMD_BUFFER_SIZE],
             buffer_len: 0,
-            initialized_addrs: util::BitFlags::new(), // No generic parameter
+            initialized_addrs: util::BitFlags::new(),
             prefix,
             init_sequence: init_seq_arr,
             init_sequence_len: init_seq_len,
         }
     }
 
-    // Private helper for short delay
     fn short_delay() {
         for _ in 0..1_000 {
             core::hint::spin_loop();
         }
     }
 
-    // Private helper for write with retry
     fn write_with_retry<I2C, W>(
         i2c: &mut I2C,
         addr: u8,
@@ -75,6 +213,11 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
     {
         let mut last_error = None;
         for _attempt in 0..2 {
+            writeln!(writer, "I2C WRITE @{addr:02X}:").ok();
+            for b in bytes.iter() {
+                write!(writer, "{b:02X} ").ok();
+            }
+            writeln!(writer).ok();
             match i2c.write(addr, bytes) {
                 Ok(_) => {
                     Self::short_delay();
@@ -83,7 +226,10 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
                 Err(e) => {
                     let compat_err = e.to_compat(Some(addr));
                     last_error = Some(compat_err);
-                    writeln!(writer, "[I2C retry error] {compat_err}").ok();
+                    let _ = util::write_formatted_ascii_safe(
+                        writer,
+                        format_args!("[I2C retry error] {compat_err}"),
+                    );
                     Self::short_delay();
                 }
             }
@@ -106,21 +252,13 @@ where
     E: CmdExecutor<I2C, MAX_BYTES_PER_CMD>,
     W: core::fmt::Write,
 {
-    // Replaced writeln! with prevent_garbled
-    util::prevent_garbled(
-        writer,
-        format_args!("[explorer] Sending node {cmd_idx} bytes: {cmd_bytes:02X?} ..."),
-    );
-
     match executor.exec(i2c, addr, cmd_bytes, writer) {
         Ok(_) => {
-            // Replaced writeln! with prevent_garbled
-            util::prevent_garbled(writer, format_args!("[explorer] OK"));
+            write!(writer, "[E] OK {cmd_idx}\r\n").ok();
             Ok(())
         }
         Err(e) => {
-            // Replaced writeln! with prevent_garbled
-            util::prevent_garbled(writer, format_args!("[explorer] FAILED: {e}"));
+            write!(writer, "[E] FAIL {cmd_idx}: {e}\r\n").ok();
             Err(e.into())
         }
     }
@@ -147,25 +285,23 @@ where
         if !self
             .initialized_addrs
             .get(addr_idx)
-            .map_err(ExecutorError::BitFlagsError)?
+            .map_err(ExecutorError::BitFlags)?
             && self.init_sequence_len > 0
         {
-            // Check for buffer space for batched init sequence
             if (self.init_sequence_len * 2) > CMD_BUFFER_SIZE {
                 return Err(ExecutorError::BufferOverflow);
             }
 
-            write!(writer, "[Info] I2C initializing for ").ok();
-            util::write_bytes_hex_fmt(writer, &[addr]).ok();
-            writeln!(writer, "...").ok();
+            core::fmt::Write::write_str(writer, "[Info] I2C initializing for ").ok();
+            crate::compat::util::write_bytes_hex_fmt(writer, &[addr])
+                .map_err(|_| ExecutorError::ExecFailed)?;
+            core::fmt::Write::write_str(writer, "...\r\n").ok();
             let ack_ok = Self::write_with_retry(i2c, addr, &[], writer).is_ok();
 
             if ack_ok {
-                write!(writer, "[Info] Device found at ").ok();
-                util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                writeln!(writer, ", sending init sequence...").ok();
-
-                // Batch the init sequence
+                core::fmt::Write::write_str(writer, "[Info] Device found at ").ok();
+                crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                core::fmt::Write::write_str(writer, ", sending init sequence...\r\n").ok();
                 for (i, &c) in self.init_sequence[..self.init_sequence_len]
                     .iter()
                     .enumerate()
@@ -186,14 +322,14 @@ where
 
                 self.initialized_addrs
                     .set(addr_idx)
-                    .map_err(ExecutorError::BitFlagsError)?;
-                write!(writer, "[Info] I2C initialized for ").ok();
-                util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                writeln!(writer).ok();
+                    .map_err(ExecutorError::BitFlags)?;
+
+                core::fmt::Write::write_str(writer, "[Info] I2C initialized for ").ok();
+                crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
+                core::fmt::Write::write_str(writer, "\r\n").ok();
             }
         }
 
-        // Existing command execution logic remains similar
         self.buffer_len = 0;
         self.buffer[self.buffer_len] = self.prefix;
         self.buffer_len += 1;
@@ -225,10 +361,7 @@ macro_rules! nodes {
             ),*
         ];
 
-        static EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}> =
-            $crate::explore::explorer::Explorer::new(NODES);
-
-        const CMD_BUFFER_SIZE_INTERNAL: usize = {
+        const MAX_CMD_LEN_INTERNAL: usize = {
             let mut max_len = 0;
             let mut i = 0;
             while i < NODES.len() {
@@ -240,14 +373,25 @@ macro_rules! nodes {
             }
             max_len
         };
+        const MAX_DEPS_TOTAL_INTERNAL: usize = {
+            let mut total_deps = 0;
+            let mut i = 0;
+            while i < NODES.len() {
+                total_deps += NODES[i].deps.len();
+                i += 1;
+            }
+            total_deps
+        };
+
+        static EXPLORER: $crate::explore::explorer::Explorer<{NODES.len()}, {MAX_DEPS_TOTAL_INTERNAL}> =
+            $crate::explore::explorer::Explorer::new(NODES);
 
         (
             &EXPLORER,
-            $crate::explore::explorer::PrefixExecutor::<0, CMD_BUFFER_SIZE_INTERNAL>::new($prefix, &[])
+            $crate::explore::explorer::PrefixExecutor::<0, { MAX_CMD_LEN_INTERNAL + 1 }>::new($prefix, &[])
         )
     }};
 }
-
 
 /// simple macro to count comma-separated expressions at compile time
 #[macro_export]
@@ -256,7 +400,7 @@ macro_rules! count_exprs {
     ($x:expr $(, $xs:expr)*) => (1usize + $crate::count_exprs!($($xs),*));
 }
 
-pub struct Explorer<const N: usize> {
+pub struct Explorer<const N: usize, const MAX_DEPS_TOTAL: usize> {
     pub(crate) nodes: &'static [CmdNode],
 }
 
@@ -266,8 +410,14 @@ pub struct ExploreResult {
     pub permutations_tested: usize,
 }
 
-impl<const N: usize> Explorer<N> {
-    // This function calculates the max length of a single command's byte array
+impl<const N: usize, const MAX_DEPS_TOTAL: usize> Explorer<N, MAX_DEPS_TOTAL> {
+    pub fn topological_iter<'a>(
+        &'a self,
+        failed_nodes: &'a util::BitFlags,
+    ) -> Result<TopologicalIter<'a, N, MAX_DEPS_TOTAL>, ExplorerError> {
+        TopologicalIter::new(self, failed_nodes)
+    }
+
     pub const fn max_cmd_len(&self) -> usize {
         let mut max_len = 0;
         let mut i = 0;
@@ -283,404 +433,5 @@ impl<const N: usize> Explorer<N> {
 
     pub const fn new(nodes: &'static [CmdNode]) -> Self {
         Self { nodes }
-    }
-
-    pub fn explore<I2C, E, W, const CMD_BUFFER_SIZE: usize>(
-        // Use CMD_BUFFER_SIZE
-        &self,
-        i2c: &mut I2C,
-        executor: &mut E,
-        writer: &mut W,
-    ) -> Result<ExploreResult, ExplorerError>
-    where
-        I2C: crate::compat::I2cCompat,
-        <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-        E: CmdExecutor<I2C, CMD_BUFFER_SIZE>,
-        W: core::fmt::Write,
-    {
-        if self.nodes.is_empty() {
-            writeln!(writer, "[explorer] No commands provided.").ok();
-            return Err(ExplorerError::NoValidAddressesFound);
-        }
-
-        let mut found_addrs: [u8; I2C_ADDRESS_COUNT] = [0; I2C_ADDRESS_COUNT];
-        let mut found_addrs_len: usize = 0;
-        let mut solved_addrs: util::BitFlags = util::BitFlags::new();
-        let mut permutations_tested = 0;
-        let iter = PermutationIter::new(self)?;
-        writeln!(writer, "[explorer] Starting permutation exploration...").ok();
-        for sequence in iter {
-            permutations_tested += 1;
-
-            for addr_val in I2C_SCAN_ADDR_START..=I2C_SCAN_ADDR_END {
-                let addr = addr_val;
-                if solved_addrs
-                    .get(addr as usize)
-                    .map_err(ExplorerError::BitFlagsError)?
-                {
-                    continue;
-                }
-
-                write!(writer, "[explorer] Trying sequence on ").ok();
-                util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                writeln!(writer, " (permutation {permutations_tested})").ok();
-
-                let mut all_ok = true;
-
-                for (i, &cmd_bytes) in sequence.iter().enumerate().take(self.nodes.len()) {
-                    if exec_log_cmd(i2c, executor, writer, addr, cmd_bytes, i).is_err() {
-                        all_ok = false;
-                        break;
-                    }
-                }
-
-                if all_ok {
-                    write!(writer, "[explorer] Successfully executed sequence on ").ok();
-                    util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                    writeln!(writer).ok();
-
-                    if found_addrs_len < I2C_ADDRESS_COUNT {
-                        found_addrs[found_addrs_len] = addr;
-                        found_addrs_len += 1;
-                    } else {
-                        writeln!(writer, "[error] Buffer overflow in found_addrs").ok();
-                        return Err(ExplorerError::BufferOverflow);
-                    }
-                    solved_addrs
-                        .set(addr as usize)
-                        .map_err(ExplorerError::BitFlagsError)?;
-                } else {
-                    write!(writer, "[explorer] Failed to execute sequence on ").ok();
-                    util::write_bytes_hex_fmt(writer, &[addr]).ok();
-                    writeln!(writer).ok();
-                }
-            }
-
-            if found_addrs_len == (I2C_SCAN_ADDR_END - I2C_SCAN_ADDR_START + 1) as usize {
-                break;
-            }
-        }
-        Ok(ExploreResult {
-            found_addrs,
-            found_addrs_len,
-            permutations_tested,
-        })
-    }
-
-    pub fn get_one_sort(
-        &self,
-        _writer: &mut impl core::fmt::Write,
-        failed_nodes: &[bool; N],
-    ) -> Result<(heapless::Vec<&'static [u8], N>, heapless::Vec<u8, N>), ExplorerError> {
-        let len = self.nodes.len();
-        let mut in_degree: [u8; N] = [0; N];
-        let mut adj_list_rev: [u128; N] = [0; N];
-        for (i, node) in self.nodes.iter().enumerate().take(len) {
-    writeln!(_writer, "node {i}: deps={:?}", node.deps).ok();
-}
-
-
-        // Ensure N is large enough for the sequence
-        if len > N {
-            return Err(ExplorerError::TooManyCommands);
-        }
-
-        // Build the graph representation using fixed-size arrays
-        for (i, node) in self.nodes.iter().enumerate().take(len) {
-            if failed_nodes[i] {
-                continue;
-            }
-            in_degree[i] = node.deps.len() as u8;
-            for &dep_idx in node.deps.iter() {
-                let dep_idx_usize = dep_idx as usize;
-                if dep_idx_usize >= len {
-                    return Err(ExplorerError::InvalidDependencyIndex);
-                }
-                // Use a bitmask (u128) to represent the adjacency list.
-                // This replaces the heapless::Vec<heapless::Vec<u8, N>, N> from the original.
-                adj_list_rev[dep_idx_usize] |= 1 << i;
-            }
-        }
-
-        let mut result_sequence: heapless::Vec<&[u8], N> = heapless::Vec::new();
-        let mut result_len_per_node: heapless::Vec<u8, N> = heapless::Vec::new();
-        let mut visited_count = 0;
-
-        // Use a fixed-size array as a queue to avoid heap allocation.
-        // `q_head` and `q_tail` manage the queue's state.
-        let mut q: [u8; N] = [0; N];
-        let mut q_head: usize = 0;
-        let mut q_tail: usize = 0;
-
-        // Initialize the queue with nodes that have an in-degree of 0.
-        for i in 0..len {
-            if in_degree[i] == 0 && !failed_nodes[i] {
-                if q_tail >= N {
-                    return Err(ExplorerError::BufferOverflow);
-                }
-                q[q_tail] = i as u8;
-                q_tail += 1;
-            }
-        }
-
-        // Main topological sort loop
-        while q_head < q_tail {
-            let u_u8 = q[q_head];
-            q_head += 1;
-            let u = u_u8 as usize;
-            visited_count += 1;
-
-            let cmd_bytes = self.nodes[u].bytes;
-            result_len_per_node
-                .push(cmd_bytes.len() as u8)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
-            result_sequence
-                .push(cmd_bytes)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
-
-            // Iterate through neighbors of 'u' using the bitmask
-            for v in 0..len {
-                if (adj_list_rev[u] >> v) & 1 != 0 && !failed_nodes[v] {
-                    in_degree[v] -= 1;
-                    if in_degree[v] == 0 {
-                        if q_tail >= N {
-                            return Err(ExplorerError::BufferOverflow);
-                        }
-                        q[q_tail] = v as u8;
-                        q_tail += 1;
-                    }
-                }
-            }
-        }
-
-        let non_failed_count = len - failed_nodes.iter().filter(|&&f| f).count();
-        if visited_count != non_failed_count {
-            // Cycle detected
-            writeln!(
-                _writer,
-                "[error] Dependency cycle detected. Nodes involved (or reachable from cycle):"
-            )
-            .ok();
-            for i in 0..len {
-                // A node is part of a cycle if its in-degree is still > 0 after the topological sort
-                // and it wasn't already marked as failed.
-                if in_degree[i] > 0 && !failed_nodes[i] {
-                    writeln!(_writer, "  - Node index: {i}").ok();
-                }
-            }
-            Err(ExplorerError::DependencyCycle)
-        } else {
-            Ok((result_sequence, result_len_per_node))
-        }
-    }
-}
-
-pub struct PermutationIter<'a, const N: usize> {
-    pub explorer: &'a Explorer<N>,
-    pub total_nodes: usize,
-    pub current_permutation: [&'a [u8]; N],
-    pub current_permutation_len: u8,
-    pub used: util::BitFlags, // No generic parameter needed now
-    pub in_degree: [u8; N],
-    pub adj_list_rev: [u128; N],
-    pub path_stack: [u8; N],
-    pub path_stack_len: u8,
-    pub is_done: bool,
-}
-
-impl<'a, const N: usize> PermutationIter<'a, N> {
-    pub fn new(explorer: &'a Explorer<N>) -> Result<Self, ExplorerError> {
-        const {
-            assert!(
-                N <= 128,
-                "PermutationIter uses a u128 bitmask, so N cannot exceed 128"
-            );
-        };
-
-        let total_nodes = explorer.nodes.len();
-        if total_nodes > N {
-            return Err(ExplorerError::TooManyCommands);
-        }
-
-        let mut in_degree: [u8; N] = [0; N];
-        let mut adj_list_rev: [u128; N] = [0; N];
-
-        for (i, node) in explorer.nodes.iter().enumerate() {
-            in_degree[i] = node.deps.len() as u8;
-            for &dep in node.deps.iter() {
-                if dep as usize >= total_nodes {
-                    return Err(ExplorerError::InvalidDependencyIndex);
-                }
-                adj_list_rev[dep as usize] |= 1 << (i as u128);
-            }
-        }
-
-        // Cycle detection using Kahn's algorithm
-        let mut temp_in_degree = in_degree;
-        let mut q: heapless::Vec<u8, N> = heapless::Vec::new();
-        let mut q_head: usize = 0;
-        let mut q_tail: usize = 0;
-        for (i, _) in temp_in_degree.iter().enumerate().take(total_nodes) {
-            if temp_in_degree[i] == 0 {
-                if q_tail >= N {
-                    return Err(ExplorerError::BufferOverflow);
-                }
-                q[q_tail] = i as u8;
-                q_tail += 1;
-            }
-        }
-
-        let mut _count = 0;
-        while q_head < q_tail {
-            let u = q[q_head] as usize;
-            q_head += 1;
-            _count += 1;
-
-            for v in 0..total_nodes {
-                if (adj_list_rev[u] >> v) & 1 != 0 {
-                    temp_in_degree[v] -= 1;
-                    if temp_in_degree[v] == 0 {
-                        if q_tail >= N {
-                            return Err(ExplorerError::BufferOverflow);
-                        }
-                        q[q_tail] = v as u8;
-                        q_tail += 1;
-                    }
-                }
-            }
-        }
-        for (i, _) in temp_in_degree.iter().enumerate().take(total_nodes) {
-            if temp_in_degree[i] == 0 {
-                q.push(i as u8).map_err(|_| ExplorerError::BufferOverflow)?;
-            }
-        }
-
-        let mut _count = 0;
-        let mut q_idx = 0;
-        while q_idx < q.len() {
-            let u = q[q_idx] as usize;
-            q_idx += 1;
-            _count += 1;
-
-            for v in 0..total_nodes {
-                if (adj_list_rev[u] >> v) & 1 != 0 {
-                    temp_in_degree[v] -= 1;
-                }
-            }
-        }
-
-        if _count != total_nodes {
-            return Err(ExplorerError::DependencyCycle);
-        }
-
-        Ok(Self {
-            explorer,
-            total_nodes,
-            current_permutation: [b""; N], // Corrected: Initialize with N empty byte slices
-            current_permutation_len: 0,
-            used: util::BitFlags::new(), // Corrected: No generic parameter
-            in_degree,
-            adj_list_rev,
-            path_stack: [0; N],
-            path_stack_len: 0,
-            is_done: false,
-            // Removed q, q_head, q_tail from here as they are local variables
-        })
-    }
-
-    fn try_extend(&mut self) -> bool {
-        let _current_depth = self.current_permutation_len as usize;
-
-        for i in 0..self.total_nodes {
-            let used = match self.used.get(i) {
-                Ok(u) => u,
-                Err(_) => {
-                    // This should not happen given the bounds checks, but handle gracefully.
-                    self.is_done = true;
-                    return false;
-                }
-            };
-            if !used && self.in_degree[i] == 0 {
-                // Mark node 'i' as used
-                self.used.set(i).unwrap();
-                if self.current_permutation_len < N as u8 {
-                    self.current_permutation[self.current_permutation_len as usize] =
-                        self.explorer.nodes[i].bytes;
-                    self.current_permutation_len += 1;
-                } else {
-                    self.is_done = true;
-                }
-                // Push to path_stack
-                if self.path_stack_len < N as u8 {
-                    self.path_stack[self.path_stack_len as usize] = i as u8;
-                    self.path_stack_len += 1;
-                } else {
-                    self.is_done = true;
-                }
-
-                for neighbor in 0..self.total_nodes {
-                    if (self.adj_list_rev[i] >> neighbor) & 1 != 0 {
-                        self.in_degree[neighbor] -= 1;
-                    }
-                }
-                return true;
-            }
-        }
-        false
-    }
-
-    fn backtrack(&mut self) -> bool {
-        if self.path_stack_len > 0 {
-            self.path_stack_len -= 1;
-            let last_added_idx_u8 = self.path_stack[self.path_stack_len as usize];
-            let last_added_idx = last_added_idx_u8 as usize;
-
-            if self.current_permutation_len > 0 {
-                self.current_permutation_len -= 1;
-                self.current_permutation[self.current_permutation_len as usize] = b"";
-            }
-
-            self.used.clear(last_added_idx).unwrap();
-
-            for neighbor in 0..self.total_nodes {
-                if (self.adj_list_rev[last_added_idx] >> neighbor) & 1 != 0 {
-                    self.in_degree[neighbor] += 1;
-                }
-            }
-            true
-        } else {
-            // Already at the root and no more options
-            self.is_done = true;
-            false
-        }
-    }
-}
-
-impl<'a, const N: usize> Iterator for PermutationIter<'a, N> {
-    type Item = [&'a [u8]; N];
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.is_done {
-            return None;
-        }
-
-        loop {
-            if self.current_permutation_len as usize == self.total_nodes {
-                let result = self.current_permutation;
-                self.backtrack();
-                return Some(result);
-            }
-
-            // Try to extend the current partial permutation
-            if self.try_extend() {
-                continue;
-            } else {
-                // Could not extend, backtrack
-                if !self.backtrack() {
-                    self.is_done = true;
-                    return None; // No more permutations
-                }
-            }
-        }
     }
 }

@@ -61,7 +61,9 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-                self.0.write(buf)?;
+                for &b in buf {
+                    self.0.write(&[b])?;
+                }
                 Ok(buf.len())
             }
             fn flush(&mut self) -> Result<(), Self::Error> {
@@ -74,7 +76,9 @@ macro_rules! adapt_serial {
             T: $crate::compat::serial_compat::SerialCompat,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                self.0.write(s.as_bytes()).map_err(|_| core::fmt::Error)?;
+                for &b in s.as_bytes() {
+                    self.0.write(&[b]).map_err(|_| core::fmt::Error)?;
+                }
                 self.0.flush().map_err(|_| core::fmt::Error)?;
                 Ok(())
             }
@@ -205,7 +209,7 @@ macro_rules! quick_diag {
     (@inner $serial:expr, $i2c:expr, $ctrl_byte:expr) => {{
     let _ = core::writeln!($serial, "=== Quick Diagnostic Start ===");
     if let Err(e) = $crate::scanner::scan_i2c($i2c, $serial, $ctrl_byte) {
-        let _ = core::writeln!($serial, "[error] I2C Scan failed: {:?}", e);
+        let _ = core::writeln!($serial, "[error] I2C Scan failed: {}", e);
     }
 }};
 }

@@ -6,103 +6,13 @@ use crate::explore::explorer::*;
 use crate::scanner::I2C_MAX_DEVICES;
 
 #[macro_export]
-macro_rules! factorial_sort {
-    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
-        $crate::explore::runner::factorial_explorer::<_, _, $n, $init_len, $cmd_buf>(
-            $explorer,
-            $i2c,
-            $serial,
-            $prefix,
-            $init_sequence,
-        )
-    };
-}
-
-pub fn factorial_explorer<
-    I2C,
-    S,
-    const N: usize,
-    const INIT_SEQUENCE_LEN: usize,
-    const CMD_BUFFER_SIZE: usize,
->(
-    explorer: &Explorer<N>,
-    i2c: &mut I2C,
-    serial: &mut S,
-    prefix: u8,
-    init_sequence: &[u8; INIT_SEQUENCE_LEN],
-) -> Result<(), ExplorerError>
-where
-    I2C: crate::compat::I2cCompat,
-    <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
-    S: core::fmt::Write,
-{
-    util::prevent_garbled(
-        serial,
-        format_args!("[explorer] Running full exploration..."),
-    );
-
-    let found_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
-        Ok(addrs) => addrs,
-        Err(e) => {
-            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e}"));
-            return Err(ExplorerError::ExecutionFailed(e));
-        }
-    };
-    if found_addrs.is_empty() {
-        return Err(ExplorerError::NoValidAddressesFound);
-    }
-
-    let successful_seq = match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(
-        i2c,
-        serial,
-        prefix,
-        init_sequence,
-    ) {
-        Ok(seq) => seq,
-        Err(e) => {
-            util::prevent_garbled(
-                serial,
-                format_args!("[error] Failed to scan init sequence: {e}"),
-            );
-            return Err(ExplorerError::ExecutionFailed(e));
-        }
-    };
-    util::prevent_garbled(
-        serial,
-        format_args!("[scan] initial sequence scan completed"),
-    );
-    util::prevent_garbled(serial, format_args!("[log] Start driver safe init"));
-
-    let mut executor =
-        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, &successful_seq);
-
-    let exploration_result =
-        explorer.explore::<_, _, _, CMD_BUFFER_SIZE>(i2c, &mut executor, serial)?;
-
-    for addr in exploration_result.found_addrs[..exploration_result.found_addrs_len].iter() {
-        util::prevent_garbled(serial, format_args!("[driver] Found device at {addr:02X}"));
-    }
-
-    util::prevent_garbled(
-        serial,
-        format_args!(
-            "[explorer] Exploration complete. {} addresses found across {} permutations.",
-            exploration_result.found_addrs_len, exploration_result.permutations_tested
-        ),
-    );
-
-    Ok(())
-}
-
-#[macro_export]
 macro_rules! pruning_sort {
-    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $init_sequence:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
-        $crate::explore::runner::pruning_explorer::<_, _, $n, $init_len, $cmd_buf>(
+    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $n:expr, $cmd_buf:expr, $max_deps:expr) => {
+        $crate::explore::runner::pruning_explorer::<_, _, $n, $cmd_buf, $max_deps>(
             $explorer,
             $i2c,
             $serial,
             $prefix,
-            $init_sequence,
         )
     };
 }
@@ -111,127 +21,103 @@ pub fn pruning_explorer<
     I2C,
     S,
     const N: usize,
-    const INIT_SEQUENCE_LEN: usize,
     const CMD_BUFFER_SIZE: usize,
+    const MAX_DEPS: usize,
 >(
-    explorer: &Explorer<N>,
+    explorer: &Explorer<N, MAX_DEPS>,
     i2c: &mut I2C,
     serial: &mut S,
     prefix: u8,
-    init_sequence: &[u8; INIT_SEQUENCE_LEN],
 ) -> Result<(), ExplorerError>
 where
     I2C: crate::compat::I2cCompat,
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    let mut target_addrs = match crate::scanner::scan_i2c(i2c, serial, prefix) {
-        Ok(addrs) => addrs,
-        Err(e) => {
-            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}"));
-            return Err(ExplorerError::ExecutionFailed(e));
-        }
-    };
+    let mut target_addrs = crate::scanner::scan_i2c(i2c, serial, prefix)?;
     if target_addrs.is_empty() {
+        write!(serial, "[I] Init scan OK: No devices found\r\n").ok();
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
-    let successful_seq: heapless::Vec<u8, INIT_SEQUENCE_LEN> =
-        match crate::scanner::scan_init_sequence::<_, _, INIT_SEQUENCE_LEN>(
-            i2c,
-            serial,
-            prefix,
-            init_sequence,
-        ) {
-            Ok(seq) => seq,
-            Err(e) => {
-                util::prevent_garbled(serial, format_args!("Failed to scan init sequence: {e}"));
-                return Err(ExplorerError::ExecutionFailed(e));
-            }
-        };
-
-    let successful_seq_len = successful_seq.len();
-
-    util::prevent_garbled(
-        serial,
-        format_args!("[scan] initial sequence scan completed"),
-    );
-
-    let mut executor =
-        crate::explore::explorer::PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(
-            target_addrs[0],
-            &successful_seq,
-        );
-
-    let mut failed_nodes = [false; N];
+    let mut global_failed_nodes = util::BitFlags::new();
 
     loop {
-        let (sequence_bytes, _sequence_len) = match explorer.get_one_sort(serial, &failed_nodes) {
-            Ok(seq) => seq,
-            Err(ExplorerError::DependencyCycle) => {
-                util::prevent_garbled(
-                    serial,
-                    format_args!("[error] Dependency cycle detected, stopping exploration"),
-                );
-                break;
-            }
-            Err(e) => {
-                util::prevent_garbled(
-                    serial,
-                    format_args!("[error] Failed to generate topological sort: {e}. Aborting."),
-                );
-                return Err(e);
-            }
-        };
+        if target_addrs.is_empty() {
+            write!(serial, "[I] All valid addresses explored. Done.\r\n").ok();
+            return Ok(());
+        }
 
-        let mut addrs_to_remove: heapless::Vec<usize, I2C_MAX_DEVICES> = heapless::Vec::new();
+        let mut addrs_to_remove = heapless::Vec::<usize, { I2C_MAX_DEVICES }>::new();
 
         for (addr_idx, &addr) in target_addrs.iter().enumerate() {
-            util::prevent_garbled(serial, format_args!("Sending commands to {addr:02X}"));
+            write!(serial, "[I] RUN ON ").ok();
+            crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
+            write!(serial, "\r\n").ok();
 
-            let mut all_ok = true;
-
-            for i in 0..explorer.nodes.len() {
-                if failed_nodes[i] {
+            let mut failed_nodes = global_failed_nodes.clone();
+            let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
+                Ok(iter) => iter,
+                Err(e) => {
+                    write!(serial, "[E] Failed GEN topological sort: {e}\r\n").ok();
+                    addrs_to_remove.push(addr_idx).ok();
                     continue;
                 }
-                let cmd_bytes = &sequence_bytes[i];
+            };
 
-                if exec_log_cmd(i2c, &mut executor, serial, addr, cmd_bytes, i).is_err() {
-                    util::prevent_garbled(
+            let mut batched: heapless::Vec<u8, CMD_BUFFER_SIZE> = heapless::Vec::new();
+            batched.push(prefix).map_err(|_| ExplorerError::BufferOverflow)?;
+
+            for cmd_idx in sort_iter.by_ref() {
+                if failed_nodes.get(cmd_idx).unwrap_or(false) {
+                    continue;
+                }
+
+                let cmd_bytes = explorer.nodes[cmd_idx].bytes;
+                if batched.len() + cmd_bytes.len() > CMD_BUFFER_SIZE {
+                    write!(
                         serial,
-                        format_args!("[warn] Command {i} failed on {addr:02X}"),
-                    );
-                    all_ok = false;
-                    if i >= successful_seq_len {
-                        failed_nodes[i] = true;
+                        "[E] Batch buffer overflow (need {} bytes)\r\n",
+                        batched.len() + cmd_bytes.len()
+                    )
+                    .ok();
+                    return Err(ExplorerError::BufferOverflow);
+                }
+                batched.extend_from_slice(cmd_bytes).map_err(|_| ExplorerError::BufferOverflow)?;
+            }
+
+            if sort_iter.is_cycle_detected() {
+                write!(serial, "[E] Dependency cycle detected. Aborting.\r\n").ok();
+                return Err(ExplorerError::DependencyCycle);
+            }
+
+            match i2c.write(addr, &batched) {
+                Ok(_) => {
+                    write!(serial, "[I] OK batched @ {addr:02X} ({} bytes)\r\n", batched.len()).ok();
+                }
+                Err(_) => {
+                    write!(serial, "[W] Failed batched @ {addr:02X}, pruning nodes\r\n").ok();
+                    for cmd_idx in 0..explorer.nodes.len() {
+                        failed_nodes.set(cmd_idx).ok();
                     }
-                    break;
                 }
             }
 
-            if all_ok {
-                addrs_to_remove.push(addr_idx).ok();
-            }
+            global_failed_nodes |= failed_nodes;
+
+            addrs_to_remove.push(addr_idx).ok();
         }
 
         for &idx in addrs_to_remove.iter().rev() {
             target_addrs.swap_remove(idx);
         }
-
-        if target_addrs.is_empty() || failed_nodes.iter().all(|&x| x) {
-            break;
-        }
     }
-
-    util::prevent_garbled(serial, format_args!("[I] Explorer finished"));
-    Ok(())
 }
 
 #[macro_export]
 macro_rules! get_one_sort {
-    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $n:expr, $init_len:expr, $cmd_buf:expr) => {
-        $crate::explore::runner::one_topological_explorer::<_, _, $n, $init_len, $cmd_buf>(
+    ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $n:expr, $init_len:expr, $cmd_buf:expr, $max_deps:expr) => {
+        $crate::explore::runner::one_topological_explorer::<_, _, $n, $init_len, $cmd_buf, $max_deps>(
             $explorer, $i2c, $serial, $prefix,
         )
     };
@@ -243,8 +129,9 @@ pub fn one_topological_explorer<
     const N: usize,
     const INIT_SEQUENCE_LEN: usize,
     const CMD_BUFFER_SIZE: usize,
+    const MAX_DEPS: usize,
 >(
-    explorer: &Explorer<N>,
+    explorer: &Explorer<N, MAX_DEPS>,
     i2c: &mut I2C,
     serial: &mut S,
     prefix: u8,
@@ -254,55 +141,62 @@ where
     <I2C as crate::compat::I2cCompat>::Error: crate::compat::HalErrorExt,
     S: core::fmt::Write,
 {
-    util::prevent_garbled(
-        serial,
-        format_args!("[explorer] Attempting to get one topological sort..."),
-    );
+    core::fmt::Write::write_str(serial, "[exprore] Attempting to get 1 init seq ...\r\n").ok();
 
     let target_addr = match crate::scanner::scan_i2c(i2c, serial, prefix) {
         Ok(addr) => addr,
         Err(e) => {
-            util::prevent_garbled(serial, format_args!("[error] Failed to scan I2C: {e:?}"));
+            write!(serial, "[error] Failed to scan I2C: {e}\r\n").ok();
             return Err(ExplorerError::ExecutionFailed(e));
         }
     };
     if target_addr.is_empty() {
+        // target_addr is a Vec<u8> here
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
-    let single_sequence = explorer.get_one_sort(serial, &[false; N])?;
+    let failed_nodes = util::BitFlags::new();
+    let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
+        Ok(iter) => iter,
+        Err(e) => {
+            write!(
+                serial,
+                "[E] Failed to GEN topological sort: {e}. Aborting.\r\n"
+            )
+            .ok();
+            return Err(e);
+        }
+    };
 
-    let sequence_len = explorer.nodes.len();
-
-    util::prevent_garbled(
+    core::fmt::Write::write_str(
         serial,
-        format_args!(
-            "[explorer] Obtained one topological sort. Executing on {:02X}...",
-            target_addr[0]
-        ),
-    );
+        "[explorer] Obtained one topological sort. Executing on ",
+    )
+    .ok();
+    crate::compat::util::write_bytes_hex_fmt(serial, &[target_addr[0]]).ok();
+    core::fmt::Write::write_str(serial, "...\r\n").ok();
 
     let empty_seq: &[u8] = &[];
     let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, empty_seq);
 
-    for i in 0..sequence_len {
-        exec_log_cmd(
+    for cmd_idx in sort_iter.by_ref() {
+        super::explorer::exec_log_cmd(
             i2c,
             &mut executor,
             serial,
             target_addr[0],
-            single_sequence.0[i],
-            i,
+            explorer.nodes[cmd_idx].bytes,
+            cmd_idx,
         )?;
     }
+    if sort_iter.is_cycle_detected() {
+        core::fmt::Write::write_str(serial, "[error] Dependency cycle detected!\r\n").ok();
+        return Err(ExplorerError::DependencyCycle);
+    }
 
-    util::prevent_garbled(
-        serial,
-        format_args!(
-            "[explorer] Single sequence execution complete for {:02X}.",
-            target_addr[0]
-        ),
-    );
+    core::fmt::Write::write_str(serial, "[explorer] Single sequence execution complete for ").ok();
+    crate::compat::util::write_bytes_hex_fmt(serial, &[target_addr[0]]).ok();
+    core::fmt::Write::write_str(serial, ".\r\n").ok();
 
     Ok(())
 }
