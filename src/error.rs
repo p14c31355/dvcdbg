@@ -156,13 +156,13 @@ impl fmt::Display for BufferError {
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ErrorKind::Uart(e) => write!(f, "Uart: {}", e),
-            ErrorKind::I2c(e) => write!(f, "I2c: {}", e),
-            ErrorKind::Spi(e) => write!(f, "Spi: {}", e),
-            ErrorKind::Gpio(e) => write!(f, "Gpio: {}", e),
-            ErrorKind::Adc(e) => write!(f, "Adc: {}", e),
-            ErrorKind::Hardware(e) => write!(f, "Hardware: {}", e),
-            ErrorKind::Buffer(e) => write!(f, "Buffer: {}", e),
+            ErrorKind::Uart(e) => write!(f, "Uart: {e}"),
+            ErrorKind::I2c(e) => write!(f, "I2c: {e}"),
+            ErrorKind::Spi(e) => write!(f, "Spi: {e}"),
+            ErrorKind::Gpio(e) => write!(f, "Gpio: {e}"),
+            ErrorKind::Adc(e) => write!(f, "Adc: {e}"),
+            ErrorKind::Hardware(e) => write!(f, "Hardware: {e}"),
+            ErrorKind::Buffer(e) => write!(f, "Buffer: {e}"),
             ErrorKind::InvalidConfig => f.write_str("InvalidConfig"),
             ErrorKind::Unknown => f.write_str("Unknown"),
             ErrorKind::Other => f.write_str("Other"),
@@ -181,7 +181,10 @@ impl fmt::Display for BitFlagsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BitFlagsError::IndexOutOfBounds { idx, max } => {
-                write!(f, "Index out of bounds: index {} is out of range 0..{}", idx, max)
+                write!(
+                    f,
+                    "Index out of bounds: index {idx} is out of range 0..{max}"
+                )
             }
         }
     }
@@ -214,11 +217,11 @@ impl fmt::Display for ExplorerError {
             ExplorerError::TooManyCommands => f.write_str("TooManyCommands"),
             ExplorerError::DependencyCycle => f.write_str("DependencyCycle"),
             ExplorerError::NoValidAddressesFound => f.write_str("NoValidAddressesFound"),
-            ExplorerError::ExecutionFailed(kind) => write!(f, "ExecutionFailed: {}", kind),
+            ExplorerError::ExecutionFailed(kind) => write!(f, "ExecutionFailed: {kind}"),
             ExplorerError::BufferOverflow => f.write_str("BufferOverflow"),
             ExplorerError::InvalidDependencyIndex => f.write_str("InvalidDependencyIndex"),
-            ExplorerError::DeviceNotFound(kind) => write!(f, "DeviceNotFound: {}", kind),
-            ExplorerError::BitFlags(e) => write!(f, "BitFlagsError: {}", e),
+            ExplorerError::DeviceNotFound(kind) => write!(f, "DeviceNotFound: {kind}"),
+            ExplorerError::BitFlags(e) => write!(f, "BitFlagsError: {e}"),
         }
     }
 }
@@ -261,11 +264,11 @@ impl From<ErrorKind> for ExplorerError {
 impl fmt::Display for ExecutorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExecutorError::I2cError(kind) => write!(f, "I2cError: {}", kind),
+            ExecutorError::I2cError(kind) => write!(f, "I2cError: {kind}"),
             ExecutorError::ExecFailed => f.write_str("ExecFailed"),
             ExecutorError::BufferOverflow => f.write_str("BufferOverflow"),
-            ExecutorError::BitFlags(e) => write!(f, "BitFlagsError: {}", e),
-            ExecutorError::Explorer(e) => write!(f, "ExplorerError: {}", e),
+            ExecutorError::BitFlags(e) => write!(f, "BitFlagsError: {e}"),
+            ExecutorError::Explorer(e) => write!(f, "ExplorerError: {e}"),
         }
     }
 }
