@@ -91,11 +91,14 @@ where
 
             let is_cycle_detected = sort_iter.is_cycle_detected();
 
-            if let Some(cmd_idx) = command_to_fail {
-                failed_nodes.set(cmd_idx).ok();
+            if is_cycle_detected {
+                write!(serial, "[E] Dependency cycle detected. Aborting.\r\n").ok();
+                return Err(ExplorerError::DependencyCycle);
             }
 
-            if command_to_fail.is_none() && !is_cycle_detected {
+            if let Some(cmd_idx) = command_to_fail {
+                failed_nodes.set(cmd_idx).unwrap();
+            } else {
                 addrs_to_remove.push(addr_idx).ok();
             }
         }
