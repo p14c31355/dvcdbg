@@ -86,6 +86,7 @@ Add the following settings to your application's `Cargo.toml`.
 panic = "abort"
 codegen-units = 1
 lto = true
+strip = true
 opt-level = "z"
 ```
 

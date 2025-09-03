@@ -1,5 +1,3 @@
-# API\_EXPLORE.md
-
 # Initialization Sequence Explorer API
 
 This document describes the API for automatically exploring and executing initialization sequences over I2C. The API is designed for embedded Rust (`no_std`) environments such as Arduino Uno.
