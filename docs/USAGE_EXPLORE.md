@@ -1,257 +1,156 @@
-# I2C Command Sequence Explorer
+# Initialization Sequence Explorer API
 
-This module provides an algorithm and supporting utilities for discovering
-valid sequences of I2C commands when device dependencies are unknown or
-partially specified. It is designed for embedded bring-up scenarios, where
-experimenting with permutations of initialization commands can reveal the
-correct sequence for a new or undocumented device.
+This document describes the API for automatically exploring and executing initialization sequences over I2C. The API is designed for embedded Rust (`no_std`) environments such as Arduino Uno.
+
+---
 
 ## Overview
-- [`Explorer`] manages a dependency graph of commands and produces only
-   valid permutations that satisfy the declared constraints.
-- [`PermutationIter`] generates these permutations using an iterative,
-   stack-safe backtracking algorithm (no recursion).
-- [`CmdExecutor`] abstracts the execution of a command on the I2C bus.
-- [`Logger`] provides pluggable logging backends (serial console, null logger, etc.).
 
-## Key Features
-1. **Separation of Concerns**: The permutation engine (`PermutationIter`) is
-   isolated from bus execution logic (`explore`).
-2. **Iterator-based API**: The [`Explorer::permutations`] method yields an
-   iterator, making the algorithm testable and composable.
-3. **Generic Capacity**: The const generic `N` defines the maximum command
-   capacity at compile time, enabling efficient use on resource-constrained
-   microcontrollers.
-4. **Flexible Logging**: The [`Logger`] trait supports both formatted and
-   lightweight logging without allocating large buffers.
-5. **Robust Error Handling**: [`ExplorerError`] reports dependency cycles,
-   buffer exhaustion, and runtime execution issues explicitly.
+The Explorer API provides tools to:
 
-## Typical Use Case
-- Bring-up of a new I2C peripheral when the required initialization sequence
-  is undocumented or incomplete.
-- Automated discovery of valid command orderings under dependency constraints.
-- Filtering of device addresses that respond consistently to a tested sequence.
+* Automatically discover valid I2C addresses of connected devices.
+* Generate and execute valid initialization sequences.
+* Handle command dependencies and batch execution efficiently.
+* Detect cycles or failures in command dependencies.
 
-## Example
-```ignore
-use dvcdbg::prelude::*;
-use heapless::Vec;
-// Example executor for a specific I2C implementation.
-struct MyExecutor;
-impl<I2C: crate::compat::I2cCompat> CmdExecutor<I2C> for MyExecutor {
-    fn exec(
-        &mut self,
-        i2c: &mut I2C,
-        addr: u8,
-        cmd: &[u8]
-    ) -> Result<(), crate::explorer::ExecutorError> {
-        // Simplified example: prepend 0x00 control byte.
-        if cmd.len() != 1 {
-            return Err(crate::explorer::ExecutorError::ExecFailed);
-        }
-        let buf = [0x00, cmd[0]];
-        i2c.write(addr, &buf)
-            .map_err(|e| crate::explorer::ExecutorError::I2cError(e.to_compat(Some(addr))))
-    }
-}
+It is intended for scenarios where the initialization sequence is unknown or needs verification.
 
-// Dummy logger that ignores messages.
-struct NullLogger;
-impl Logger for NullLogger {
-    fn log_info(&mut self, _msg: &str) {}
-    fn log_warning(&mut self, _msg: &str) {}
-    fn log_error(&mut self, _msg: &str) {}
-    fn log_info_fmt<F>(&mut self, _fmt: F)
-    where F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error> {}
-    fn log_error_fmt<F>(&mut self, _fmt: F)
-    where F: FnOnce(&mut heapless::String<{ crate::explorer::LOG_BUFFER_CAPACITY }>) -> Result<(), core::fmt::Error> {}
-}
+---
 
-// Define candidate commands with dependencies.
-const CAPACITY: usize = 32;
-let cmds = &[
-    CmdNode { bytes: &[0x01], deps: &[] },
-    CmdNode { bytes: &[0x02], deps: &[0] }, // depends on first command
-    CmdNode { bytes: &[0x03], deps: &[0] },
-];
+## Key Structures
 
-let explorer = Explorer::<CAPACITY> { sequence: cmds };
-let mut executor = MyExecutor;
-let mut logger = NullLogger;
-let mut i2c = /* platform-specific I2C impl */;
-let result = explorer.explore(&mut i2c, &mut executor, &mut logger);
-if let Err(e) = result {
-    logger.log_error(&format!("Exploration failed: {:?}", e));
-}
-```
+### `Explorer<N, MAX_DEPS>`
+
+Holds information about all initialization commands and their dependencies.
+
+* **`nodes`**: Array of `CmdNode` representing commands.
+* **`N`**: Maximum number of commands.
+* **`MAX_DEPS`**: Maximum number of dependencies per command.
+
+---
 
 ### `CmdNode`
-Represents a single I2C command in the dependency graph.
 
-- `bytes` - The I2C command bytes to be sent.
-- `deps` - The indices of the commands that must precede this command.
+Represents a single initialization command node.
 
-The dependency is now on the index of the dependent command in the sequence.
+| Field       | Type           | Description                      |
+| ----------- | -------------- | -------------------------------- |
+| `bytes`     | `&'static [u8]` | Command bytes to send over I2C   |
+| `deps`      | `&'static [u8]` | List of dependent node indices   |
 
-```rust
-#[derive(Copy, Clone)]
-pub struct CmdNode {
-    pub bytes: &'static [u8],
-    pub deps: &'static [usize],
-}
+---
+
+## Key Functions
+
+### `pruning_explorer`
+
+```rust,no_run
+pub fn pruning_explorer<I2C, S, const N: usize, const CMD_BUFFER_SIZE: usize, const MAX_DEPS: usize>(
+    explorer: &Explorer<N, MAX_DEPS>,
+    i2c: &mut I2C,
+    serial: &mut S,
+    prefix: u8,
+) -> Result<(), ExplorerError>
 ```
 
+* **Description**: Explores all valid initialization sequences for devices found on the I2C bus. Prunes failing commands automatically.
+* **Parameters**:
 
-Returns a stack-safe iterator for all valid command permutations (topological sorts).
+  * `explorer`: Reference to an `Explorer` containing command nodes.
+  * `i2c`: I2C interface implementing `I2cCompat`.
+  * `serial`: Serial interface implementing `core::fmt::Write` for logs.
+  * `prefix`: Command prefix byte.
+* **Returns**: `Ok(())` if all sequences were executed successfully, or an `ExplorerError` on failure.
+* **Errors**:
 
-This function first performs cycle detection using a modified Kahn's algorithm.
-If a cycle is detected, it returns an `ExplorerError::DependencyCycle`.
-Otherwise, it initializes and returns a `PermutationIter` to generate all valid permutations.
+  * `NoValidAddressesFound`
+  * `BufferOverflow`
+  * `DependencyCycle`
+  * `ExecutionFailed`
 
-Explores valid sequences, attempting to execute them on an I2C bus.
+---
 
-This function iterates through all valid command permutations generated by `PermutationIter`,
-and for each permutation, attempts to execute it on all active I2C addresses.
-It filters out addresses that fail to respond to any command in a sequence.
+### `one_topological_explorer`
 
-# Parameters
-- `i2c`: An I2C implementation used to test candidate sequences against device addresses.
-- `executor`: The object responsible for executing a single command on the bus.
-- `logger`: The object responsible for logging progress and results.
-
-# Returns
-- `Ok(ExploreResult)` containing the list of found addresses and the number of permutations tested.
-- `Err(ExplorerError)` if an error occurs during permutation generation or I2C execution.
-
-Generates a single valid topological sort of the command sequence.
-This is useful when only one valid ordering is needed, and avoids
-the computational cost of generating all permutations.
-
-Returns `Ok(Vec<&'a [u8], N>)` containing one valid command sequence,
-or `Err(ExplorerError)` if a cycle is detected or buffer overflows.
-
-Attempts to extend the current partial permutation by adding a new command.
-
-It iterates through all available (not yet used) commands and checks if their
-dependencies are satisfied (i.e., their in-degree is 0). If a valid command
-is found, it's added to the current permutation, its `used` status is updated,
-and the in-degrees of its dependent nodes are decremented.
-
-Returns `true` if a command was successfully added, `false` otherwise.
-
-Backtracks to the previous decision point in the permutation search.
-
-This method undoes the last choice made: it removes the last added command
-from the current permutation, unmarks it as used, and increments the
-in-degrees of its dependent nodes (reversing the decrement).
-It then updates the `loop_start_indices` to ensure the next search
-at the parent level continues from the next sibling.
-
-Returns `true` if backtracking can continue (i.e., there are more options
-at a previous level), or `false` if the root was reached and no more
-permutations can be generated.
-
-Runs the I2C explorer with a given initial sequence and logs the results.
-
-This function first performs an I2C scan with the provided `init_sequence` to identify
-responsive commands. Then, it uses the `explorer` to find valid command sequences
-for discovered devices, applying a `prefix` to each command.
-
-# Type Parameters
-- `I2C`: The I2C interface type that implements `crate::compat::I2cCompat`.
-- `S`: The serial interface type used for logging, implementing `core::fmt::Write`.
-- `N`: A const generic for the maximum number of commands.
-- `BUF_CAP`: A const generic for the command buffer capacity.
-
-# Parameters
-- `explorer`: An instance of `Explorer` containing the command nodes and their dependencies.
-- `i2c`: The I2C bus instance.
-- `serial`: The serial writer for logging.
-- `init_sequence`: The initial sequence of bytes to test for device responsiveness.
-- `prefix`: A byte to prepend to every command sent during exploration.
-- `log_level`: The desired logging level.
-
-# Example
-```ignore
-use dvcdbg::prelude::*;
-use arduino_hal::I2c;
-use arduino_hal::hal::port::Port;
-use arduino_hal::pac::TWI;
-use heapless::Vec;
-use core::fmt::Write;
-
-# struct MyI2c; // Dummy I2c implementation
-# impl dvcdbg::compat::I2cCompat for MyI2c {
-#     type Error = dvcdbg::error::ErrorKind;
-#     fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> { Ok(()) }
-#     fn read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), Self::Error> { Ok(()) }
-#     fn write_read(&mut self, addr: u8, bytes: &[u8], buffer: &mut [u8]) -> Result<(), Self::Error> { Ok(()) }
-# }
-# struct MySerial; // Dummy Serial implementation
-# impl core::fmt::Write for MySerial {
-#     fn write_str(&mut self, s: &str) -> core::fmt::Result { Ok(()) }
-# }
-
-let mut i2c = /* your I2C instance */;
-let mut serial = /* your serial instance */;
-let init_sequence = [0u8; 16]; // Example initial sequence
-const EXPLORER_CAP: usize = 32;
-const BUF_CAP: usize = 128;
-let explorer = Explorer::<EXPLORER_CAP> { sequence: &[] }; // Dummy explorer
-
-run_explorer::<_, _, EXPLORER_CAP, BUF_CAP>(
-    &explorer,
-    &mut i2c,
-    &mut serial,
-    &init_sequence,
-    0x00, // Example prefix
-    LogLevel::Verbose,
-).unwrap();
-# Ok::<(), dvcdbg::explorer::ExplorerError>(())
-# }
+```rust,no_run
+pub fn one_topological_explorer<I2C, S, const N: usize, const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize, const MAX_DEPS: usize>(
+    explorer: &Explorer<N, MAX_DEPS>,
+    i2c: &mut I2C,
+    serial: &mut S,
+    prefix: u8,
+) -> Result<(), ExplorerError>
 ```
 
-Runs the I2C explorer to find and execute a single valid command sequence.
+* **Description**: Generates a single topological sort of commands and executes it on the first detected device. Useful for testing a single valid initialization sequence.
+* **Parameters**:
 
-This function first obtains one topological sort of the commands from the explorer.
-Then, it attempts to execute this single sequence on a specified I2C address.
-This is useful for device initialization where only one valid sequence is needed,
-avoiding the high computational cost of exploring all permutations.
+  * `explorer`: Reference to an `Explorer` containing command nodes.
+  * `i2c`: I2C interface implementing `I2cCompat`.
+  * `serial`: Serial interface implementing `core::fmt::Write` for logs.
+  * `prefix`: Command prefix byte.
+* **Returns**: `Ok(())` on success, otherwise an `ExplorerError`.
+* **Errors**:
 
-# Type Parameters
-- `I2C`: The I2C interface type that implements `crate::compat::I2cCompat`.
-- `S`: The serial interface type used for logging, implementing `core::fmt::Write`.
-- `N`: A const generic for the maximum number of commands.
-- `BUF_CAP`: A const generic for the command buffer capacity.
+  * `NoValidAddressesFound`
+  * `DependencyCycle`
+  * `ExecutionFailed`
 
-### Parameters
+---
 
-- `explorer`: An instance of `Explorer` containing the command nodes and their dependencies.
-- `i2c`: The I2C bus instance.
-- `serial`: The serial writer for logging.
-- `target_addr`: The specific I2C address to execute the sequence on.
-- `prefix`: A byte to prepend to every command sent during execution.
-- `log_level`: The desired logging level.
+## Macros
 
-### Returns
+### `pruning_sort!`
 
-Returns `Ok(())` if the sequence was successfully executed,
-or `Err(ExplorerError)` if an error occurred (e.g., cycle detected, execution failed).
+* **Usage**: Wraps `pruning_explorer` for convenience.
 
-Generates a single valid topological sort of the command sequence, considering failed nodes.
-This is useful when only one valid ordering is needed, and avoids
-the computational cost of generating all permutations. It respects the `failed_nodes`
-array to exclude certain nodes and their dependencies from the sort.
+```rust,no_run
+// Assuming `explorer` is a reference to an Explorer instance
+const N: usize = 23;
+const CMD_BUFFER_SIZE: usize = 256;
+const MAX_DEPS: usize = 22;
+pruning_sort!(explorer, &mut i2c, &mut serial, PREFIX, N, CMD_BUFFER_SIZE, MAX_DEPS);
+```
 
-# Arguments
+### `get_one_sort!`
 
-* `_serial`: A writer for logging, currently unused.
-* `failed_nodes`: An array indicating which nodes (by index) have failed and should be excluded.
+* **Usage**: Wraps `one_topological_explorer` for convenience.
 
-# Returns
+```rust,no_run
+// Assuming `explorer` is a reference to an Explorer instance
+const N: usize = 23;
+const CMD_BUFFER_SIZE: usize = 256;
+const MAX_DEPS: usize = 22;
+get_one_sort!(explorer, &mut i2c, &mut serial, PREFIX, N, CMD_BUFFER_SIZE, MAX_DEPS);
+```
 
-The first element of the returned tuple is a `heapless::Vec` of command byte slices representing one valid topological sort, and
-`sequence_len_per_node` is a `heapless::Vec` of the corresponding lengths.
+---
 
-Returns `Err(ExplorerError)` if a cycle is detected, a buffer overflows, or a dependency index is invalid.
+## Example Usage
+
+```rust,no_run
+const PREFIX: u8 = 0x00;
+let explorer_instance = nodes! {
+    prefix = PREFIX,
+    [
+        [0xAE],
+        [0xD5, 0x51] @ [0],
+        [0xA8, 0x3F] @ [1],
+        ...
+        [0xAF] @ [0] // Display ON
+    ]
+};
+
+let _ = pruning_sort!(explorer_instance.0, &mut i2c, &mut serial, PREFIX, 23, 256, 22);
+```
+
+---
+
+## Notes & Caveats
+
+* Ensure the `CMD_BUFFER_SIZE` is sufficient for batched commands.
+* All serial logs use `core::fmt::Write` and may fail silently with `.ok()`.
+* Dependency cycles will abort execution to prevent I2C conflicts.
+* Devices must respond to I2C scans; otherwise `NoValidAddressesFound` is returned.
+* Recommended to add small delays (e.g., `arduino_hal::delay_ms`) between I2C operations on slow MCUs.
+
+---
