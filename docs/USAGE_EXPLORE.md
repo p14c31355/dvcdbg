@@ -31,14 +31,14 @@ Holds information about all initialization commands and their dependencies.
 
 ---
 
-### `CmdNode<const N: usize, const D: usize>`
+### `CmdNode`
 
 Represents a single initialization command node.
 
-| Field       | Type      | Description                      |
-| ----------- | --------- | -------------------------------- |
-| `bytes`     | `[u8; N]` | Command bytes to send over I2C   |
-| `deps`      | `[u8; D]` | List of dependent node indices   |
+| Field       | Type           | Description                      |
+| ----------- | -------------- | -------------------------------- |
+| `bytes`     | `&'static [u8]` | Command bytes to send over I2C   |
+| `deps`      | `&'static [u8]` | List of dependent node indices   |
 
 ---
 
