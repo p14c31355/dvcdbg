@@ -30,7 +30,7 @@ pub fn pruning_explorer<
     i2c: &mut I2C,
     serial: &mut S,
     prefix: u8,
-    init_sequence: &[u8; INIT_SEQUENCE_LEN],
+    _init_sequence: &[u8; INIT_SEQUENCE_LEN],
 ) -> Result<(), ExplorerError>
 where
     I2C: crate::compat::I2cCompat,

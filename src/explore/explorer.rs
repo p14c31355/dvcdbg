@@ -63,12 +63,9 @@ impl<'a, const N: usize, const MAX_DEPS_TOTAL: usize> TopologicalIter<'a, N, MAX
                 for &dep_idx in node.deps.iter() {
                     let dep_idx_usize = dep_idx as usize;
                     if dep_idx_usize >= len {
-                        // Changed from N to len for correct bounds check
                         return Err(ExplorerError::InvalidDependencyIndex);
                     }
-                    // Corrected: Increment in_degree of the dependency, not the current node
-                    in_degree[dep_idx_usize] = in_degree[dep_idx_usize].saturating_add(1);
-                    // Corrected: Add current node 'i' to the reverse adjacency list of its dependency 'dep_idx_usize'
+                    in_degree[i] = in_degree[i].saturating_add(1);
                     rev_adj_offsets[dep_idx_usize] =
                         rev_adj_offsets[dep_idx_usize].saturating_add(1);
                 }
@@ -216,6 +213,11 @@ impl<const INIT_SEQUENCE_LEN: usize, const CMD_BUFFER_SIZE: usize>
     {
         let mut last_error = None;
         for _attempt in 0..2 {
+            writeln!(writer, "I2C WRITE @{addr:02X}:").ok();
+            for b in bytes.iter() {
+                write!(writer, "{b:02X} ").ok();
+            }
+            writeln!(writer).ok();
             match i2c.write(addr, bytes) {
                 Ok(_) => {
                     Self::short_delay();
