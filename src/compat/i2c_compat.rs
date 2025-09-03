@@ -48,7 +48,7 @@ where
         // A successful 0-byte write implies the device is present.
         match embedded_hal_0_2::blocking::i2c::Write::write(self, addr, &[]) {
             Ok(_) => Ok(true),
-            Err(e) => Err(e), // Cannot distinguish NACK from other errors without `e.kind()`
+            Err(_) => Ok(false), // Assume any error means the device is not present.
         }
     }
 
