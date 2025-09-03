@@ -283,7 +283,7 @@ where
         if !self
             .initialized_addrs
             .get(addr_idx)
-            .map_err(ExecutorError::BitFlagsError)?
+            .map_err(ExecutorError::BitFlags)?
             && self.init_sequence_len > 0
         {
             if (self.init_sequence_len * 2) > CMD_BUFFER_SIZE {
@@ -321,7 +321,7 @@ where
 
                 self.initialized_addrs
                     .set(addr_idx)
-                    .map_err(ExecutorError::BitFlagsError)?;
+                    .map_err(ExecutorError::BitFlags)?;
 
                 core::fmt::Write::write_str(writer, "[Info] I2C initialized for ").ok();
                 crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
