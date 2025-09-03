@@ -61,6 +61,9 @@ cargo add dvcdbg --no-default-features --features "ehal_0_2"
     - [`embedded_io::Write`]  
     - [`nb::serial::Write<u8>`]  
 
+- **Explore**
+  - See [docs/USAGE_EXPLORE.md](docs/USAGE_EXPLORE.md) for more details.
+
 ---
 
 ## 📚 Documentation
@@ -80,8 +83,10 @@ Add the following settings to your application's `Cargo.toml`.
 ```toml
 # Cargo.toml (application)
 [profile.release]
+panic = "abort"
+codegen-units = 1
 lto = true
-strip = true
+opt-level = "z"
 ```
 
 ---
