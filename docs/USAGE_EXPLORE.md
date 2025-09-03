@@ -104,7 +104,11 @@ pub fn one_topological_explorer<I2C, S, const N: usize, const INIT_SEQUENCE_LEN:
 * **Usage**: Wraps `pruning_explorer` for convenience.
 
 ```rust,no_run
-pruning_sort!(explorer_instance, &mut i2c, &mut serial, PREFIX, 23, 256, 22);
+// Assuming `explorer` is a reference to an Explorer instance
+const N: usize = 23;
+const CMD_BUFFER_SIZE: usize = 256;
+const MAX_DEPS: usize = 22;
+pruning_sort!(explorer, &mut i2c, &mut serial, PREFIX, N, CMD_BUFFER_SIZE, MAX_DEPS);
 ```
 
 ### `get_one_sort!`
@@ -112,7 +116,11 @@ pruning_sort!(explorer_instance, &mut i2c, &mut serial, PREFIX, 23, 256, 22);
 * **Usage**: Wraps `one_topological_explorer` for convenience.
 
 ```rust,no_run
-get_one_sort!(explorer_instance, &mut i2c, &mut serial, PREFIX, 23, 13, 256, 22);
+// Assuming `explorer` is a reference to an Explorer instance
+const N: usize = 23;
+const CMD_BUFFER_SIZE: usize = 256;
+const MAX_DEPS: usize = 22;
+get_one_sort!(explorer, &mut i2c, &mut serial, PREFIX, N, CMD_BUFFER_SIZE, MAX_DEPS);
 ```
 
 ---
