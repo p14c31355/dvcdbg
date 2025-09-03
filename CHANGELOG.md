@@ -1,4 +1,50 @@
 ## [0.3.0] - 2025-09-03
+
+### Added
+
+- Implementing a HAL error-compatible general trait
+- Serial error handling
+- Scanner.rs error handling
+- Change error definition to nested enum
+- Delete logger
+- Implement display trait for ErrorKind
+- I2C scan error DRY handling
+- Support #88 #72 #69
+- Implementation UART marker trait
+- Integrated uart backend to embedded-io
+- Separate backend embedded-io and nb
+- Implement explorer.rs
+- Logging Sequence discovery progress
+- Implementation gluing explorer to scanner.rs
+- Add compat/ascii.rs
+- Completely abandons linear search and adopts topological sorting by in-degree
+- Delete dupulication function
+- Separate logger
+- Change API name & add wrapper macros
+
+### Chores
+
+- *(release)* Update changelog and version to 0.3.0
+
+### Fix
+
+- #94 handle staging method
+- #94 Fixed an issue where the search tree could not be reverted
+- #94 Implement traits that can flexibly accommodate protocol-specific knowledge
+
+### Fixed
+
+- Up LOG_BUFFER_CAPACITY
+- Eliminate the causes of garbled text and panic
+
+### Docs
+
+- Edit README.md & USAGE.md
+
+### Explorer.rs
+
+- Fix lifetime
+
 ## [0.2.1] - 2025-08-20
 
 ### Added
