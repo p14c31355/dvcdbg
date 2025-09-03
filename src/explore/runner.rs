@@ -9,10 +9,7 @@ use crate::scanner::I2C_MAX_DEVICES;
 macro_rules! pruning_sort {
     ($explorer:expr, $i2c:expr, $serial:expr, $prefix:expr, $n:expr, $cmd_buf:expr, $max_deps:expr) => {
         $crate::explore::runner::pruning_explorer::<_, _, $n, $cmd_buf, $max_deps>(
-            $explorer,
-            $i2c,
-            $serial,
-            $prefix,
+            $explorer, $i2c, $serial, $prefix,
         )
     };
 }
@@ -55,7 +52,7 @@ where
             crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
             write!(serial, "\r\n").ok();
 
-            let mut failed_nodes = global_failed_nodes.clone();
+            let mut failed_nodes = global_failed_nodes;
             let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
                 Ok(iter) => iter,
                 Err(e) => {
@@ -66,7 +63,9 @@ where
             };
 
             let mut batched: heapless::Vec<u8, CMD_BUFFER_SIZE> = heapless::Vec::new();
-            batched.push(prefix).map_err(|_| ExplorerError::BufferOverflow)?;
+            batched
+                .push(prefix)
+                .map_err(|_| ExplorerError::BufferOverflow)?;
 
             for cmd_idx in sort_iter.by_ref() {
                 if failed_nodes.get(cmd_idx).unwrap_or(false) {
@@ -83,7 +82,9 @@ where
                     .ok();
                     return Err(ExplorerError::BufferOverflow);
                 }
-                batched.extend_from_slice(cmd_bytes).map_err(|_| ExplorerError::BufferOverflow)?;
+                batched
+                    .extend_from_slice(cmd_bytes)
+                    .map_err(|_| ExplorerError::BufferOverflow)?;
             }
 
             if sort_iter.is_cycle_detected() {
@@ -93,7 +94,12 @@ where
 
             match i2c.write(addr, &batched) {
                 Ok(_) => {
-                    write!(serial, "[I] OK batched @ {addr:02X} ({} bytes)\r\n", batched.len()).ok();
+                    write!(
+                        serial,
+                        "[I] OK batched @ {addr:02X} ({} bytes)\r\n",
+                        batched.len()
+                    )
+                    .ok();
                 }
                 Err(_) => {
                     write!(serial, "[W] Failed batched @ {addr:02X}, pruning nodes\r\n").ok();
