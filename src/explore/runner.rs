@@ -44,7 +44,8 @@ where
         return Err(ExplorerError::NoValidAddressesFound);
     }
 
-    let mut failed_nodes = util::BitFlags::new();
+    let mut global_failed_nodes = util::BitFlags::new();
+
     loop {
         if target_addrs.is_empty() {
             write!(serial, "[I] All valid addresses explored. Done.\r\n").ok();
@@ -54,11 +55,14 @@ where
         let mut addrs_to_remove = heapless::Vec::<usize, { I2C_MAX_DEVICES }>::new();
 
         for (addr_idx, &addr) in target_addrs.iter().enumerate() {
-            core::fmt::Write::write_str(serial, "[I] RUN ON ").ok();
+            write!(serial, "[I] RUN ON ").ok();
             crate::compat::util::write_bytes_hex_fmt(serial, &[addr]).ok();
-            core::fmt::Write::write_str(serial, "\r\n").ok();
+            write!(serial, "\r\n").ok();
 
-            let mut sort_iter = match explorer.topological_iter(&failed_nodes) {
+            let mut failed_nodes = global_failed_nodes.clone();
+            let failed_nodes_for_iter = failed_nodes.clone(); // 一時的な値を長く存続させる
+
+            let mut sort_iter = match explorer.topological_iter(&failed_nodes_for_iter) {
                 Ok(iter) => iter,
                 Err(e) => {
                     write!(serial, "[E] Failed GEN topological sort: {e}\r\n").ok();
@@ -67,27 +71,23 @@ where
                 }
             };
 
-            let command_to_fail = None;
-
-            let mut batched: heapless::Vec<u8, { CMD_BUFFER_SIZE }> = heapless::Vec::new();
-            batched
-                .push(prefix)
-                .map_err(|_| ExplorerError::BufferOverflow)?;
-
             for cmd_idx in sort_iter.by_ref() {
-                let cmd_bytes = explorer.nodes[cmd_idx].bytes;
-                if batched.len() + cmd_bytes.len() > CMD_BUFFER_SIZE {
-                    write!(
-                        serial,
-                        "[E] Batch buffer overflow (need {} bytes)\r\n",
-                        batched.len() + cmd_bytes.len()
-                    )
-                    .ok();
-                    return Err(ExplorerError::BufferOverflow);
+                if failed_nodes.get(cmd_idx).unwrap_or(false) {
+                    continue;
                 }
-                batched
-                    .extend_from_slice(cmd_bytes)
-                    .map_err(|_| ExplorerError::BufferOverflow)?;
+
+                let cmd_bytes = explorer.nodes[cmd_idx].bytes;
+                match i2c.write(addr, cmd_bytes) {
+                    Ok(_) => {
+                        write!(serial, "[I] OK single cmd @ {addr:02X}: ").ok();
+                        for b in cmd_bytes { write!(serial, "{b:02X} ").ok(); }
+                        write!(serial, "\r\n").ok();
+                    }
+                    Err(_) => {
+                        failed_nodes.set(cmd_idx).unwrap();
+                        write!(serial, "[W] Failed cmd @ {addr:02X}\r\n").ok();
+                    }
+                }
             }
 
             if sort_iter.is_cycle_detected() {
@@ -95,38 +95,41 @@ where
                 return Err(ExplorerError::DependencyCycle);
             }
 
-            writeln!(serial, "I2C WRITE @ {addr:02X}:").ok();
-            for b in batched.iter() {
-                write!(serial, "{b:02X} ").ok();
+            let mut batched: heapless::Vec<u8, CMD_BUFFER_SIZE> = heapless::Vec::new();
+            batched.push(prefix).map_err(|_| ExplorerError::BufferOverflow)?;
+            for cmd_idx in 0..explorer.nodes.len() {
+                if !failed_nodes.get(cmd_idx).unwrap_or(false) {
+                    let cmd_bytes = explorer.nodes[cmd_idx].bytes;
+                    if batched.len() + cmd_bytes.len() > CMD_BUFFER_SIZE {
+                        write!(
+                            serial,
+                            "[E] Batch buffer overflow (need {} bytes)\r\n",
+                            batched.len() + cmd_bytes.len()
+                        )
+                        .ok();
+                        return Err(ExplorerError::BufferOverflow);
+                    }
+                    batched.extend_from_slice(cmd_bytes).map_err(|_| ExplorerError::BufferOverflow)?;
+                }
             }
-            writeln!(serial).ok();
 
             match i2c.write(addr, &batched) {
                 Ok(_) => {
-                    write!(serial, "[E] OK batched ({} bytes)\r\n", batched.len()).ok();
+                    write!(serial, "[I] OK batched @ {addr:02X} ({} bytes)\r\n", batched.len()).ok();
                 }
                 Err(e) => {
                     write!(
                         serial,
-                        "[E] FAIL batched: {}\r\n",
+                        "[E] FAIL batched @ {addr:02X}: {}\r\n",
                         crate::compat::HalErrorExt::to_compat(&e, Some(addr))
                     )
                     .ok();
                 }
             }
 
-            let is_cycle_detected = sort_iter.is_cycle_detected();
+            global_failed_nodes |= failed_nodes;
 
-            if is_cycle_detected {
-                write!(serial, "[E] Dependency cycle detected. Aborting.\r\n").ok();
-                return Err(ExplorerError::DependencyCycle);
-            }
-
-            if let Some(cmd_idx) = command_to_fail {
-                failed_nodes.set(cmd_idx).unwrap();
-            } else {
-                addrs_to_remove.push(addr_idx).ok();
-            }
+            addrs_to_remove.push(addr_idx).ok();
         }
 
         for &idx in addrs_to_remove.iter().rev() {

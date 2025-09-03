@@ -3,6 +3,7 @@
 use crate::error::BitFlagsError;
 
 /// A bitflag structure optimized for 128 bits, used for tracking I2C addresses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BitFlags {
     bytes: [u8; 16],
 }
@@ -60,6 +61,14 @@ impl BitFlags {
 
     pub fn clear_all(&mut self) {
         self.bytes.fill(0);
+    }
+}
+
+impl core::ops::BitOrAssign for BitFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        for i in 0..self.bytes.len() {
+            self.bytes[i] |= rhs.bytes[i];
+        }
     }
 }
 
