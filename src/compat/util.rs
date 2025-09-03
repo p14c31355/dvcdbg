@@ -1,7 +1,6 @@
 // src/compat/util.rs
 
 use crate::error::BitFlagsError;
-use embedded_io::Write;
 
 /// A bitflag structure optimized for 128 bits, used for tracking I2C addresses.
 pub struct BitFlags {
