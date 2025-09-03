@@ -300,7 +300,6 @@ where
                 core::fmt::Write::write_str(writer, "[Info] Device found at ").ok();
                 crate::compat::util::write_bytes_hex_fmt(writer, &[addr]).ok();
                 core::fmt::Write::write_str(writer, ", sending init sequence...\r\n").ok();
-                let _ = self.initialized_addrs.set(addr_idx);
                 for (i, &c) in self.init_sequence[..self.init_sequence_len]
                     .iter()
                     .enumerate()

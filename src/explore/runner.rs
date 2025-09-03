@@ -45,9 +45,7 @@ where
     }
 
     let mut failed_nodes = util::BitFlags::new();
-    let mut executor =
-        PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, init_sequence);
-
+    let mut executor = PrefixExecutor::<INIT_SEQUENCE_LEN, CMD_BUFFER_SIZE>::new(prefix, &[]);
     loop {
         if target_addrs.is_empty() {
             write!(serial, "[I] All valid addresses explored. Done.\r\n").ok();

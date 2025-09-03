@@ -122,12 +122,18 @@ struct AsciiSafeWriter<'a, W: 'a + core::fmt::Write>(&'a mut W);
 
 impl<'a, W: core::fmt::Write> core::fmt::Write for AsciiSafeWriter<'a, W> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for c in s.chars() {
-            if c.is_ascii() {
-                write!(self.0, "{c}")?;
-            } else {
+        let mut last = 0;
+        for (idx, c) in s.char_indices() {
+            if !c.is_ascii() {
+                if last < idx {
+                    self.0.write_str(&s[last..idx])?;
+                }
                 write!(self.0, "\\u{{{:X}}}", c as u32)?;
+                last = idx + c.len_utf8();
             }
+        }
+        if last < s.len() {
+            self.0.write_str(&s[last..])?;
         }
         Ok(())
     }
