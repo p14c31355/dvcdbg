@@ -150,11 +150,3 @@ pub fn write_formatted_ascii_safe<S: core::fmt::Write>(
     let mut writer = AsciiSafeWriter(serial);
     core::fmt::Write::write_fmt(&mut writer, args)
 }
-
-//---
-// ## Deprecated Utilities
-// These functions are similar to the new ones and have been made redundant.
-
-pub const fn calculate_cmd_buffer_size(num_commands: usize, max_cmd_len: usize) -> usize {
-    num_commands * (max_cmd_len + 1) + num_commands * 2
-}

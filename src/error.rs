@@ -1,7 +1,7 @@
 use core::fmt;
 
 /// Defines the category of an error.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     /// Errors related to the UART peripheral.
     Uart(UartError),
@@ -191,7 +191,7 @@ impl fmt::Display for BitFlagsError {
 }
 
 /// Errors that can occur during the exploration of command sequences.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub enum ExplorerError {
     /// The provided sequence contained more commands than supported by the capacity.
     TooManyCommands,
@@ -227,7 +227,7 @@ impl fmt::Display for ExplorerError {
 }
 
 /// Errors that can occur during command execution.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub enum ExecutorError {
     /// A command failed to execute due to an I2C error.
     I2cError(ErrorKind),
